@@ -1,1 +1,7 @@
+# هسته سیستم
 requests>=2.28
+# رابط وب
+fastapi>=0.110
+uvicorn>=0.29
+# کپی متن پیام در کلیپ‌بورد (اختیاری، برای فرمان draft)
+pyperclip>=1.8 ; sys_platform != "linux"

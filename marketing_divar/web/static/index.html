@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دیوار لید — سیستم جمع‌آوری سرنخ</title>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --line:#e3e8f0; --txt:#1e2a3a; --mut:#6b7a90;
+    --pri:#1976d2; --pri-d:#1257a0; --ok:#2e9e5b; --warn:#e8a13c; --err:#d9534f;
+    --chat:#8e5bd9; --radius:14px; --shadow:0 2px 10px rgba(30,42,58,.07);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; font-family:Vazirmatn,Tahoma,'Segoe UI',sans-serif}
+  body{background:var(--bg); color:var(--txt); min-height:100vh}
+  header{background:linear-gradient(135deg,#12325e,#1976d2); color:#fff; padding:18px 28px;
+         display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  header .logo{font-size:26px; font-weight:800}
+  header .sub{opacity:.85; font-size:13px}
+  header .spacer{flex:1}
+  #run-badge{background:rgba(255,255,255,.15); padding:6px 14px; border-radius:99px; font-size:13px}
+  #run-badge.on{background:#2e9e5b}
+  nav{display:flex; gap:6px; background:var(--card); border-bottom:1px solid var(--line);
+      padding:0 18px; overflow-x:auto; position:sticky; top:0; z-index:10}
+  nav button{border:none; background:none; padding:14px 18px; font-size:14.5px; cursor:pointer;
+             color:var(--mut); border-bottom:3px solid transparent; white-space:nowrap}
+  nav button.active{color:var(--pri); border-color:var(--pri); font-weight:700}
+  main{max-width:1180px; margin:22px auto; padding:0 18px}
+  .tab{display:none} .tab.active{display:block}
+  .grid{display:grid; gap:14px}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+        padding:18px; box-shadow:var(--shadow)}
+  .card h3{font-size:15px; margin-bottom:12px; color:var(--txt)}
+  .kpi{font-size:30px; font-weight:800; margin-top:4px}
+  .kpi small{font-size:12px; color:var(--mut); font-weight:400; display:block}
+  .lbl{font-size:12.5px; color:var(--mut); margin:10px 0 4px}
+  input,select,textarea{width:100%; border:1px solid var(--line); border-radius:10px;
+       padding:10px 12px; font-size:14px; background:#fbfcfe; font-family:inherit}
+  textarea{min-height:110px; resize:vertical; line-height:1.9}
+  .btn{display:inline-flex; align-items:center; gap:8px; border:none; cursor:pointer;
+       background:var(--pri); color:#fff; padding:11px 20px; border-radius:10px;
+       font-size:14px; font-family:inherit; transition:.15s}
+  .btn:hover{background:var(--pri-d)}
+  .btn.gray{background:#eef1f6; color:var(--txt)}
+  .btn.gray:hover{background:#e0e6ee}
+  .btn.ok{background:var(--ok)} .btn.err{background:var(--err)}
+  .btn.warn{background:var(--warn)}
+  .btn.sm{padding:6px 12px; font-size:12.5px; border-radius:8px}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .tag{display:inline-block; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:600}
+  .tag.ok{background:#e3f5ea; color:var(--ok)} .tag.err{background:#fdeaea; color:var(--err)}
+  .tag.warn{background:#fdf3e3; color:#a06f14} .tag.chat{background:#f0e8fc; color:var(--chat)}
+  .tag.gray{background:#eef1f6; color:var(--mut)}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap}
+  th{color:var(--mut); font-size:12px; background:#fafbfd}
+  tr:hover td{background:#f7f9fd}
+  .feed{max-height:340px; overflow-y:auto; font-size:12.5px; font-family:inherit; direction:rtl}
+  .feed div{padding:6px 8px; border-bottom:1px dashed var(--line)}
+  .feed time{color:var(--mut); font-size:11px; margin-left:8px}
+  .feed .SUCCESS{color:var(--ok)} .feed .ERROR{color:var(--err)} .feed .WARNING{color:#a06f14}
+  .checkline{display:flex; gap:8px; align-items:flex-start; font-size:13.5px; margin:8px 0}
+  .checkline input{width:auto; margin-top:3px}
+  .hint{font-size:12px; color:var(--mut); line-height:1.9}
+  .warn-box{background:#fff8ea; border:1px solid #f2dfb6; color:#7a5a12;
+            padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.9; margin:10px 0}
+  .empty{color:var(--mut); font-size:13px; text-align:center; padding:26px}
+  .acc{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+       padding:12px 0; border-bottom:1px solid var(--line)}
+  .acc:last-child{border:none}
+  dialog{border:none; border-radius:14px; padding:22px; width:min(430px,92vw);
+         box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  dialog::backdrop{background:rgba(15,25,40,.45)}
+  .toast{position:fixed; bottom:20px; right:20px; background:#1e2a3a; color:#fff;
+         padding:12px 18px; border-radius:10px; font-size:13.5px; opacity:0;
+         transition:.3s; z-index:99; max-width:340px}
+  .toast.show{opacity:1}
+  @media(max-width:640px){ header{padding:14px} main{margin:12px auto} }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">🏷️ دیوار لید</div>
+    <div class="sub">سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار</div>
+  </div>
+  <div class="spacer"></div>
+  <div id="run-badge">⏸ متوقف</div>
+</header>
+
+<nav>
+  <button data-tab="dash" class="active">📊 داشبورد</button>
+  <button data-tab="accounts">👤 اکانت‌ها</button>
+  <button data-tab="keywords">🔑 کلمات کلیدی</button>
+  <button data-tab="messages">✉️ پیام‌ها</button>
+  <button data-tab="leads">📋 سرنخ‌ها</button>
+  <button data-tab="settings">⚙️ تنظیمات</button>
+  <button data-tab="logs">📝 لاگ‌ها</button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════ داشبورد ═══════════════════════ -->
+<section id="tab-dash" class="tab active">
+  <div class="grid g4">
+    <div class="card"><h3>وضعیت مانیتور</h3><div class="kpi" id="k-run">خاموش</div><small class="hint" id="k-run-sub">—</small></div>
+    <div class="card"><h3>در صف شماره‌گیری</h3><div class="kpi" id="k-queue">0</div><small class="hint">سرنخ‌های منتظر شماره</small></div>
+    <div class="card"><h3>لیست چت (فقط چت)</h3><div class="kpi" id="k-chat" style="color:var(--chat)">0</div><small class="hint">آگهی‌های بدون شماره → پیام چت</small></div>
+    <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف روزانه</small></div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>کنترل اسکن</h3>
+    <div class="checkline">
+      <input type="checkbox" id="include-existing">
+      <label for="include-existing"><b>موارد فعلی هم گرفته شوند؟</b> —
+        اگر فعال باشد، آگهی‌های موجودِ الان هم شماره‌گیری می‌شوند؛
+        اگر خاموش باشد، <b>فقط آگهی‌های جدید</b> از این لحظه به بعد گرفته می‌شوند.</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn ok" onclick="monitorStart()">▶️ شروع اسکن</button>
+      <button class="btn gray" id="btn-pause" onclick="monitorPause()" disabled>⏸ مکث</button>
+      <button class="btn err" onclick="monitorStop()">⏹ توقف</button>
+    </div>
+    <div class="warn-box">💡 <b>نکته ضد بلاک:</b> سیستم خودش تاخیرها و سهمیه‌ها را رعایت می‌کند
+      (پیش‌فرض: هر ۱۰ ثانیه یک شماره، سقف هر اکانت ۶۰ در روز، سقف کل ۲۴۰).
+      اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛
+      در تب اکانت‌ها دکمه «آزادسازی» را بزنید.</div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>اکانت‌ها</h3><div id="dash-accounts"></div></div>
+    <div class="card"><h3>رخدادهای زنده</h3><div class="feed" id="feed"></div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ اکانت‌ها ═══════════════════════ -->
+<section id="tab-accounts" class="tab">
+  <div class="card">
+    <h3>افزودن اکانت جدید (لاگین با کد پیامکی)</h3>
+    <div class="warn-box">📱 برای هر اکانت یک <b>شماره موبایل واقعی</b> لازم است
+      (دیوار شماره مجازی نمی‌پذیرد). نام اکانت دلخواه است مثل ac1.</div>
+    <div class="grid g2">
+      <div>
+        <div class="lbl">نام اکانت (انگلیسی)</div>
+        <input id="acc-name" placeholder="مثلاً ac1" dir="ltr">
+        <div class="lbl">شماره موبایل</div>
+        <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11">
+        <div class="row" style="margin-top:12px">
+          <button class="btn" onclick="sendOtp()">۱) ارسال کد تایید</button>
+        </div>
+      </div>
+      <div>
+        <div class="lbl">کد ۶ رقمی پیامک‌شده</div>
+        <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6">
+        <div class="row" style="margin-top:12px">
+          <button class="btn ok" onclick="confirmOtp()">۲) تأیید و لاگین</button>
+        </div>
+        <div class="hint" id="otp-hint" style="margin-top:10px">اول گام ۱ را بزنید…</div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>اکانت‌های ثبت‌شده</h3>
+    <div id="accounts-list"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ کلمات کلیدی ═══════════════════════ -->
+<section id="tab-keywords" class="tab">
+  <div class="card">
+    <h3>کلمات کلیدی پایش</h3>
+    <div class="lbl">کلمات کلیدی — با کاما (، یا ,) از هم جدا کنید</div>
+    <input id="kw-input" placeholder="مثلاً: آپارتمان اجاره، تدریس خصوصی، پرده شاسی">
+    <div class="lbl">محدوده جستجو</div>
+    <div class="row">
+      <label class="checkline"><input type="radio" name="kw-city" value="" checked> همه کشور</label>
+      <input id="kw-cities" style="max-width:220px" placeholder="کد شهرها مثل 1,3" dir="ltr">
+      <span class="hint">تهران=۱، کرج=۲، مشهد=۳، اصفهان=۴</span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" onclick="kwAdd()">➕ افزودن</button>
+    </div>
+    <div class="hint" style="margin-top:8px">هر کلمه کلیدی فعال، به‌صورت دوره‌ای (پیش‌فرض هر ۵ دقیقه)
+      پایش می‌شود و آگهی جدید همان کلمه وارد صف شماره‌گیری می‌شود.</div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>فهرست کلمات</h3>
+    <div id="kw-list"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ پیام‌ها ═══════════════════════ -->
+<section id="tab-messages" class="tab">
+  <div class="grid g2">
+    <div class="card">
+      <h3>قالب پیام چت (نیمه‌خودکار)</h3>
+      <div class="lbl">متغیرها: <code dir="ltr">{title}</code> عنوان آگهی،
+        <code dir="ltr">{subtitle}</code> توضیح میانی</div>
+      <textarea id="tpl-chat"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="tplSave('chat')">💾 ذخیره قالب چت</button>
+      </div>
+      <div class="hint" style="margin-top:8px">ارسال چت از طریق فرمان
+        <code dir="ltr">python -m marketing_divar draft --chat-only</code>
+        انجام می‌شود؛ متن آماده + باز شدن چت + ارسال با یک کلیک توسط شما (ضد بن).</div>
+    </div>
+    <div class="card">
+      <h3>قالب پیامک (برای آینده)</h3>
+      <textarea id="tpl-sms" placeholder="متن پیامک برای شماره‌های استخراج‌شده…"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="tplSave('sms')">💾 ذخیره قالب پیامک</button>
+      </div>
+      <div class="hint" style="margin-top:8px">🔗 اتصال به سرویس‌های پیامکی
+        (مثل <b>ملی‌پیامک</b>) در نسخه بعدی فعال می‌شود؛ کلید و شماره خط را از الان
+        می‌توانید در تب تنظیمات وارد کنید تا آماده باشد.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ سرنخ‌ها ═══════════════════════ -->
+<section id="tab-leads" class="tab">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <h3>لیست سرنخ‌ها</h3>
+      <div class="row">
+        <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
+        <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
+        <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
+        <a class="btn sm gray" href="/api/export?filter=phone" style="text-decoration:none">⬇️ خروجی اکسل (شماره‌ها)</a>
+        <a class="btn sm gray" href="/api/export?filter=chat" style="text-decoration:none">⬇️ خروجی (چت‌ها)</a>
+      </div>
+    </div>
+    <div style="overflow-x:auto; margin-top:10px">
+      <table id="leads-table">
+        <thead><tr>
+          <th>عنوان</th><th>شماره</th><th>وضعیت</th><th>کلمه</th><th>شهر</th><th>زمان</th><th>لینک</th>
+        </tr></thead>
+        <tbody id="leads-body"></tbody>
+      </table>
+      <div class="empty" id="leads-empty">هنوز سرنخی ثبت نشده — مانیتور را شروع کنید</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ تنظیمات ═══════════════════════ -->
+<section id="tab-settings" class="tab">
+  <div class="grid g2">
+    <div class="card">
+      <h3>📢 اتصال تلگرام (اعلان‌ها)</h3>
+      <div class="lbl">توکن ربات — از <b>@BotFather</b> بگیرید</div>
+      <input id="set-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
+      <div class="lbl">شناسه گفتگو (Chat ID)</div>
+      <input id="set-tg-chat" dir="ltr" placeholder="مثلاً 123456789">
+      <div class="hint">وقتی کپچا بیاید یا اکانتی محدود شود، همان لحظه به تلگرام اعلان می‌گیرید.</div>
+    </div>
+    <div class="card">
+      <h3>🛡️ پارامترهای ضد بلاک</h3>
+      <div class="grid g2">
+        <div><div class="lbl">فاصله دورهای اسکن (ثانیه)</div><input id="set-watch" type="number" dir="ltr"></div>
+        <div><div class="lbl">فاصله شماره‌گیری (ثانیه)</div><input id="set-delay" type="number" dir="ltr"></div>
+        <div><div class="lbl">سقف روزانه هر اکانت</div><input id="set-peracc" type="number" dir="ltr"></div>
+        <div><div class="lbl">سقف روزانه کل (IP)</div><input id="set-iplimit" type="number" dir="ltr"></div>
+        <div><div class="lbl">سرد شدن بعد از بلاک (دقیقه)</div><input id="set-cooldown" type="number" dir="ltr"></div>
+      </div>
+      <div class="hint">⚠️ مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.</div>
+    </div>
+    <div class="card">
+      <h3>📱 سرویس پیامک (به‌زودی)</h3>
+      <div class="lbl">سرویس‌دهنده</div>
+      <select id="set-sms-provider">
+        <option value="none">غیرفعال (فعلاً)</option>
+        <option value="melipayamak">ملی‌پیامک</option>
+      </select>
+      <div class="lbl">کلید API</div>
+      <input id="set-sms-key" dir="ltr">
+      <div class="lbl">شماره خط ارسال</div>
+      <input id="set-sms-line" dir="ltr">
+      <div class="hint">ارسال خودکار پیامک در نسخه بعدی با همین اطلاعات فعال می‌شود.</div>
+    </div>
+    <div class="card" style="display:flex; align-items:flex-end">
+      <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ لاگ‌ها ═══════════════════════ -->
+<section id="tab-logs" class="tab">
+  <div class="card">
+    <h3>گزارش رخدادها (همچنین در فایل logs/divar_app.log)</h3>
+    <div class="feed" id="logs-feed" style="max-height:560px"></div>
+  </div>
+</section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ───────────────────────── ابزارهای عمومی ───────────────────────── */
+const $ = id => document.getElementById(id);
+const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(path, opt = {}) {
+  const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opt});
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m } catch(e){}
+               throw new Error(m); }
+  return r.json();
+}
+function toast(msg, ok=true){ const t=$('toast'); t.textContent=msg;
+  t.style.background = ok ? '#2e9e5b' : '#d9534f'; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3500); }
+async function act(p, body){ try{ const r = await api(p,{method:'POST',body:JSON.stringify(body||{})});
+  toast(r.message||'انجام شد'); return true; }catch(e){ toast('❌ '+e.message, false); return false; } }
+
+/* ───────────────────────── تب‌ها ───────────────────────── */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button, .tab').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); $('tab-'+b.dataset.tab).classList.add('active');
+  if (b.dataset.tab==='leads') leadsLoad('all');
+  if (b.dataset.tab==='settings') settingsLoad();
+  if (b.dataset.tab==='keywords') kwLoad();
+  if (b.dataset.tab==='messages') tplLoad();
+});
+
+/* ───────────────────────── داشبورد ───────────────────────── */
+async function refreshStatus(){
+  try{
+    const s = await api('/api/status');
+    $('run-badge').textContent = s.running ? (s.paused?'⏸ مکث':'🟢 در حال اجرا') : '⏸ متوقف';
+    $('run-badge').className = 'on';
+    $('k-run').textContent = s.running ? `دور ${s.tick}` : 'خاموش';
+    $('k-run').textContent = s.running ? (s.paused?'مکث':`دور ${s.tick}`) : 'خاموش';
+    $('k-run-sub').textContent = s.started_at ? 'شروع: '+s.started_at : '—';
+    $('k-queue').textContent = s.queue;
+    $('k-chat').textContent = s.chat_queue;
+    $('k-today').innerHTML = s.phones_today + '<small>شماره گرفته‌شده امروز</small>';
+    $('btn-pause').disabled = !s.running;
+    $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
+    // اکانت‌ها در داشبورد
+    $('dash-accounts').innerHTML = s.accounts.length ? s.accounts.map(a=>{
+      const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
+      const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line)">
+        <span>${ic}</span><b>${esc(a.name)}</b>
+        <span class="tag ${m}">${esc(a.status)}</span>
+        <span class="hint">امروز: ${a.phones_today}</span>
+        ${a.status!=='active'?`<button class="btn sm" onclick="accAction('${a.name}','release')">آزادسازی</button>`:''}
+      </div>`;}).join('') : '<div class="empty">اکانتی ثبت نشده — تب اکانت‌ها</div>';
+    // رخدادها
+    $('feed').innerHTML = s.logs.slice().reverse().map(l =>
+      `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
+      || '<div class="empty">رخدادی نیست</div>';
+  }catch(e){ console.error(e); }
+}
+async function monitorStart(){
+  if (!await act('/api/monitor/start', {include_existing: $('include-existing').checked})) return;
+  setTimeout(refreshStatus, 500);
+}
+async function monitorStop(){ if (await act('/api/monitor/stop',{})) setTimeout(refreshStatus,500); }
+async function monitorPause(){ if (await act('/api/monitor/pause',{})) setTimeout(refreshStatus,300); }
+
+/* ───────────────────────── اکانت‌ها ───────────────────────── */
+async function accRefresh(){
+  try{ const s = await api('/api/accounts');
+    $('accounts-list').innerHTML = s.accounts.length ? s.accounts.map(a=>{
+      const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
+      const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
+      return `<div class="acc"><div class="row">
+          <span>${ic}</span><b style="font-size:15px">${esc(a.name)}</b>
+          <span class="tag ${m}">${esc(a.status)}</span>
+          <span class="hint">شماره‌های امروز: ${a.phones_today}</span>
+          ${a.note?`<span class="hint">${esc(a.note).slice(0,50)}</span>`:''}
+        </div><div class="row">
+          ${a.status!=='active'?`<button class="btn sm ok" onclick="accAction('${a.name}','release')">🔄 آزادسازی</button>`:''}
+          ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
+          ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
+        </div></div>`;}).join('') : '<div class="empty">هنوز اکانتی لاگین نشده</div>';
+  }catch(e){}
+}
+async function accAction(name, action){ if (await act('/api/accounts/action',{name, action})) accRefresh(); }
+async function sendOtp(){
+  const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
+  if(!name){ toast('نام اکانت را وارد کنید',false); return; }
+  try{ const r = await api('/api/accounts/otp',{method:'POST',body:JSON.stringify({name,phone})});
+    toast(r.message); $('otp-hint').textContent='کد پیامک شد ✓ — کد را وارد و تأیید کنید'; }
+  catch(e){ toast('❌ '+e.message,false); }
+}
+async function confirmOtp(){
+  const name=$('acc-name').value.trim(), code=$('acc-code').value.trim();
+  try{ const r = await api('/api/accounts/confirm',{method:'POST',body:JSON.stringify({name,code})});
+    toast(r.message); $('otp-hint').textContent='لاگین کامل شد ✓'; accRefresh(); }
+  catch(e){ toast('❌ '+e.message,false); }
+}
+
+/* ───────────────────────── کلمات کلیدی ───────────────────────── */
+async function kwLoad(){
+  try{ const s = await api('/api/keywords');
+    $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
+      <div class="acc"><div class="row">
+        <b>${esc(k.keyword)}</b>
+        <span class="tag ${k.active?'ok':'gray'}">${k.active?'فعال':'غیرفعال'}</span>
+        <span class="hint">${k.cities?('شهرهای '+k.cities.join('،')):'همه کشور'}</span>
+      </div><div class="row">
+        <button class="btn sm gray" onclick="kwToggle(${k.id},${!k.active})">${k.active?'غیرفعال‌کردن':'فعال‌کردن'}</button>
+        <button class="btn sm err" onclick="kwDel(${k.id})">حذف</button>
+      </div></div>`).join('') : '<div class="empty">کلمه‌ای اضافه نشده</div>';
+  }catch(e){}
+}
+async function kwAdd(){
+  const kw=$('kw-input').value.trim(); if(!kw){toast('کلمه کلیدی بنویسید',false);return;}
+  let cities=null;
+  const codes=$('kw-cities').value.trim();
+  if(codes){ cities=codes.split(',').map(x=>parseInt(x.trim())).filter(x=>!isNaN(x)); if(!cities.length)cities=null; }
+  if (await act('/api/keywords',{keyword:kw, cities})) { $('kw-input').value=''; kwLoad(); }
+}
+async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
+async function kwDel(id){ if(await act(`/api/keywords/${id}`,{method:'DELETE'})) kwLoad(); }
+
+/* ───────────────────────── پیام‌ها ───────────────────────── */
+async function tplLoad(){ try{ const s=await api('/api/templates');
+  $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms; }catch(e){} }
+async function tplSave(ch){ const text = ch==='chat'?$('tpl-chat').value:$('tpl-sms').value;
+  await act('/api/templates',{channel:ch, text}); }
+
+/* ───────────────────────── سرنخ‌ها ───────────────────────── */
+let leadsFilter='all';
+async function leadsLoad(filter){
+  leadsFilter=filter||leadsFilter;
+  try{ const s=await api('/api/leads?filter='+leadsFilter);
+    const rows=s.leads;
+    $('leads-empty').style.display = rows.length?'none':'block';
+    $('leads-body').innerHTML = rows.map(l=>{
+      const st = {found:'<span class="tag ok">شماره دارد</span>',
+                  hidden:'<span class="tag chat">فقط چت</span>',
+                  pending:'<span class="tag warn">در صف</span>',
+                  legacy:'<span class="tag gray">قدیمی</span>',
+                  removed:'<span class="tag gray">حذف‌شده</span>',
+                  error:'<span class="tag err">خطا</span>'}[l.phone_status]||l.phone_status;
+      return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
+        <td>${st}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
+        <td>${esc(l.first_seen_at)}</td>
+        <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
+    }).join('');
+  }catch(e){}
+}
+
+/* ───────────────────────── تنظیمات ───────────────────────── */
+async function settingsLoad(){
+  try{ const s=await api('/api/settings');
+    $('set-tg-token').value=s.telegram_bot_token||'';
+    $('set-tg-chat').value=s.telegram_chat_id||'';
+    $('set-watch').value=s.watch_interval_sec; $('set-delay').value=s.phone_delay_sec;
+    $('set-peracc').value=s.per_account_daily_limit; $('set-iplimit').value=s.ip_daily_limit;
+    $('set-cooldown').value=s.cooldown_on_block_min;
+    $('set-sms-provider').value=s.sms_provider||'none';
+    $('set-sms-key').value=s.sms_api_key||''; $('set-sms-line').value=s.sms_line_number||'';
+  }catch(e){}
+}
+async function settingsSave(){
+  const values={
+    telegram_bot_token:$('set-tg-token').value.trim(),
+    telegram_chat_id:$('set-tg-chat').value.trim(),
+    watch_interval_sec:parseInt($('set-watch').value)||300,
+    phone_delay_sec:parseFloat($('set-delay').value)||10,
+    per_account_daily_limit:parseInt($('set-peracc').value)||60,
+    ip_daily_limit:parseInt($('set-iplimit').value)||240,
+    cooldown_on_block_min:parseInt($('set-cooldown').value)||30,
+    sms_provider:$('set-sms-provider').value,
+    sms_api_key:$('set-sms-key').value.trim(),
+    sms_line_number:$('set-sms-line').value.trim(),
+  };
+  if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
+}
+
+/* ───────────────────────── حلقه تازه‌سازی ───────────────────────── */
+refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();
+setInterval(()=>{ refreshStatus();
+  if(document.querySelector('#tab-leads.active')) leadsLoad();
+  if(document.querySelector('#tab-accounts.active')) accRefresh();
+}, 4000);
+</script>
+</body>
+</html>

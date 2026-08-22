@@ -65,10 +65,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            body = {}
         if u.path == "/v5/auth/authenticate":
             self._json(200, {})
         elif u.path == "/v5/auth/confirm":
-            self._json(200, {"token": "tok-ok"})
+            # کد «000000» به‌عنوان کد اشتباه شبیه‌سازی می‌شود (برای تست خطا)
+            if body.get("code") == "000000":
+                self._json(401, {"error": "invalid code"})
+            else:
+                self._json(200, {"token": "tok-ok"})
         else:
             self._json(404, {})
 

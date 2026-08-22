@@ -19,8 +19,10 @@ import requests
 
 from .rate import RateLimiter
 
-import os as _os
-BASE = _os.environ.get("DIVAR_BASE_URL", "https://api.divar.ir")
+def default_base() -> str:
+    """آدرس پایه API — با متغیر DIVAR_BASE_URL قابل تغییر (برای تست با شبیه‌ساز)."""
+    import os
+    return os.environ.get("DIVAR_BASE_URL", "https://api.divar.ir")
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
@@ -57,7 +59,7 @@ class DivarClient:
                  limiter: Optional[RateLimiter] = None,
                  base_url: Optional[str] = None):
         self.session_path = Path(session_path)
-        self.base = base_url or BASE
+        self.base = base_url or default_base()
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": UA, "Accept": "application/json"})
         self.token: Optional[str] = None
