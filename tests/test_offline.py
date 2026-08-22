@@ -49,6 +49,7 @@ def make_client(responses):
     cl = DivarClient.__new__(DivarClient)  # بدون خواندن سشن
     cl.session_path = "data/test_session.json"
     cl.token = "fake-jwt-token"
+    cl.limiter = MagicMock()  # بدون تاخیر واقعی در تست
     cl.http = MagicMock()
     def get(url, **kw):
         r = MagicMock()

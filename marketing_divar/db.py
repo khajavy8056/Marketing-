@@ -40,7 +40,31 @@ CREATE TABLE IF NOT EXISTS runs (
     phones_found INTEGER, phones_hidden INTEGER, errors INTEGER,
     started_at TEXT, finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS quota (
+    day TEXT PRIMARY KEY,
+    phones INTEGER DEFAULT 0,
+    searches INTEGER DEFAULT 0
+);
 """
+
+
+def quota_today(con: sqlite3.Connection) -> Dict[str, int]:
+    row = con.execute("SELECT phones, searches FROM quota WHERE day=?",
+                      (time.strftime("%Y-%m-%d"),)).fetchone()
+    return {"phones": row["phones"] if row else 0,
+            "searches": row["searches"] if row else 0}
+
+
+def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
+    """افزایش شمارنده روزانه؛ مقدار جدید را برمی‌گرداند."""
+    assert field in ("phones", "searches")
+    day = time.strftime("%Y-%m-%d")
+    con.execute("INSERT INTO quota (day) VALUES (?) "
+                "ON CONFLICT(day) DO NOTHING", (day,))
+    cur = con.execute(f"UPDATE quota SET {field} = {field} + ? WHERE day=?",
+                      (by, day))
+    con.commit()
+    return quota_today(con)[field]
 
 
 def connect(db_path: str = "data/divar_leads.db") -> sqlite3.Connection:

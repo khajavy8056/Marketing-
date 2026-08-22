@@ -1,0 +1,17 @@
+{
+  "phone_delay_sec": 10,
+  "jitter_sec": 4,
+  "search_delay_sec": 5,
+  "search_page_delay_sec": 8,
+  "phone_daily_limit": 80,
+  "search_daily_limit": 300,
+  "cooldown_on_block_min": 30,
+  "backoff_multiplier": 1.5,
+  "max_consecutive_blocks": 3,
+  "interactive": true,
+  "notify": {
+    "telegram_bot_token": "",
+    "telegram_chat_id": ""
+  },
+  "chat_template": "سلام، وقتتون بخیر 🌹\nآگهی «{title}» رو دیدم. اگر هنوز به نتیجه نرسیدید، خوشحال می‌شوم چند دقیقه صحبت کنیم.\nممنون از وقتی که می‌گذارید 🙏"
+}
