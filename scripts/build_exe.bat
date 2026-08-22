@@ -1,11 +1,10 @@
 @echo off
-REM ساخت نسخه نصبی ویندوز (این فایل را روی ویندوز اجرا کنید)
-REM پیش‌نیاز: پایتون 3.10+ نصب باشد
-REM خروجی: dist\DivarLead.exe (تک‌فایل، قابل اجرا بدون نصب پایتون)
+REM ساخت نسخه نصبی ویندوز (روی ویندوز خودتان - بدون نیاز به GitHub)
 pip install -r requirements.txt pyinstaller
-pyinstaller --name DivarLead --onefile ^
+pyinstaller --name DivarLead --onefile --noconfirm ^
+  --collect-submodules uvicorn ^
   --add-data "marketing_divar/web/static;marketing_divar/web/static" ^
-  marketing_divar/web/__main__.py
+  main.py
 echo.
 echo تمام! فایل اجرایی: dist\DivarLead.exe
 pause
