@@ -19,7 +19,8 @@ import requests
 
 from .rate import RateLimiter
 
-BASE = "https://api.divar.ir"
+import os as _os
+BASE = _os.environ.get("DIVAR_BASE_URL", "https://api.divar.ir")
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
@@ -53,8 +54,10 @@ class DivarClient:
     """کلاینت سشن‌دار دیوار با ذخیره‌سازی توکن لاگین."""
 
     def __init__(self, session_path: str = "data/session.json",
-                 limiter: Optional[RateLimiter] = None):
+                 limiter: Optional[RateLimiter] = None,
+                 base_url: Optional[str] = None):
         self.session_path = Path(session_path)
+        self.base = base_url or BASE
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": UA, "Accept": "application/json"})
         self.token: Optional[str] = None
@@ -85,10 +88,14 @@ class DivarClient:
     def is_logged_in(self) -> bool:
         return bool(self.token)
 
+    def reload_session(self) -> None:
+        """خواندن مجدد توکن از دیسک (مثلاً بعد از لاگین مجدد از ترمینال دیگر)."""
+        self._load_session()
+
     # --------------------------------------------------------------- login --
     def request_otp(self, phone: str) -> bool:
         """گام ۱: درخواست کد تایید پیامکی (فرمت 09xxxxxxxxx)."""
-        r = self.http.post(f"{BASE}/v5/auth/authenticate",
+        r = self.http.post(f"{self.base}/v5/auth/authenticate",
                            json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
             return True
@@ -99,7 +106,7 @@ class DivarClient:
 
     def confirm_otp(self, phone: str, code: str) -> str:
         """گام ۲: تأیید کد و دریافت توکن JWT."""
-        r = self.http.post(f"{BASE}/v5/auth/confirm",
+        r = self.http.post(f"{self.base}/v5/auth/confirm",
                            json={"phone": str(phone), "code": str(code)},
                            timeout=25)
         if r.status_code in (200, 201):
@@ -148,7 +155,7 @@ class DivarClient:
             params["cities"] = ",".join(str(c) for c in cities)
         if page and page > 1:
             params["page"] = page
-        r = self.http.get(f"{BASE}/v8/web-search/iran", params=params, timeout=25)
+        r = self.http.get(f"{self.base}/v8/web-search/iran", params=params, timeout=25)
         self._check_block(r)
         r.raise_for_status()
         return self._extract_post_list(r.json())
@@ -177,7 +184,7 @@ class DivarClient:
     def get_post(self, token: str) -> Dict[str, Any]:
         """جزئیات کامل آگهی."""
         self.limiter.wait("search")
-        r = self.http.get(f"{BASE}/v8/posts-v2/web/{token}", timeout=25)
+        r = self.http.get(f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
         self._check_block(r)
         r.raise_for_status()
         return r.json()
@@ -190,7 +197,7 @@ class DivarClient:
         خطاها: DivarAuthError (لاگین) / DivarBlockedError (کپچا/بلاک/429)
         """
         self.limiter.wait("phone")
-        r = self.http.get(f"{BASE}/v8/postcontact/web/contact_info/{token}",
+        r = self.http.get(f"{self.base}/v8/postcontact/web/contact_info/{token}",
                           headers=self._auth_headers(), timeout=25)
         if r.status_code == 401:
             raise DivarAuthError("توکن منقضی/رد شد — دوباره لاگین کنید")

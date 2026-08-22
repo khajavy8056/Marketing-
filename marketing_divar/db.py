@@ -45,7 +45,42 @@ CREATE TABLE IF NOT EXISTS quota (
     phones INTEGER DEFAULT 0,
     searches INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS quota_accounts (
+    day TEXT,
+    account TEXT,
+    phones INTEGER DEFAULT 0,
+    PRIMARY KEY (day, account)
+);
 """
+
+
+def account_quota_today(con: sqlite3.Connection, account: str) -> int:
+    row = con.execute("SELECT phones FROM quota_accounts WHERE day=? AND account=?",
+                      (time.strftime("%Y-%m-%d"), account)).fetchone()
+    return row["phones"] if row else 0
+
+
+def bump_account_quota(con: sqlite3.Connection, account: str) -> int:
+    day = time.strftime("%Y-%m-%d")
+    con.execute("INSERT INTO quota_accounts (day, account, phones) VALUES (?,?,0) "
+                "ON CONFLICT(day, account) DO NOTHING", (day, account))
+    con.execute("UPDATE quota_accounts SET phones = phones + 1 "
+                "WHERE day=? AND account=?", (day, account))
+    con.commit()
+    return account_quota_today(con, account)
+
+
+def chat_queue(con: sqlite3.Connection, keyword: Optional[str] = None,
+               limit: int = 0) -> List[sqlite3.Row]:
+    """سرنخ‌های «فقط چت» که هنوز پیام نگرفته‌اند — لیست کار بخش پیام."""
+    q = ("SELECT * FROM leads WHERE phone_status='hidden' AND lead_status='new' "
+         "ORDER BY id DESC")
+    args: List[Any] = []
+    if keyword:
+        q = q.replace("ORDER BY", "AND keyword=? ORDER BY")
+        args.append(keyword)
+    rows = con.execute(q, args).fetchall()
+    return rows[:limit] if limit > 0 else rows
 
 
 def quota_today(con: sqlite3.Connection) -> Dict[str, int]:
@@ -91,13 +126,19 @@ def upsert_lead(con: sqlite3.Connection, post: Dict[str, Any],
     return cur.rowcount > 0
 
 
-def pending_phone(con: sqlite3.Connection, keyword: Optional[str] = None) -> List[sqlite3.Row]:
+def pending_phone(con: sqlite3.Connection, keyword: Optional[str] = None,
+                  limit: int = 0, newest_first: bool = False) -> List[sqlite3.Row]:
+    """صف سرنخ‌های بدون شماره؛ پیش‌فرض قدیمی‌ترین اول (مانیتور: جدیدترین اول)."""
     q = "SELECT * FROM leads WHERE phone_status='pending'"
     args: List[Any] = []
     if keyword:
         q += " AND keyword=?"
         args.append(keyword)
-    return con.execute(q + " ORDER BY id", args).fetchall()
+    q += " ORDER BY id DESC" if newest_first else " ORDER BY id"
+    if limit > 0:
+        q += " LIMIT ?"
+        args.append(limit)
+    return con.execute(q, args).fetchall()
 
 
 def set_phone(con: sqlite3.Connection, token: str, result: Dict[str, Any]) -> None:

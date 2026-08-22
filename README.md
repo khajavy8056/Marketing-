@@ -34,3 +34,13 @@ python -m marketing_divar stats && python -m marketing_divar export --csv leads.
 - [ ] فاز ۴ — تست زنده روی IP ایران + تنظیم دقیق آستانه‌ها
 
 ⚠️ داده‌های شخصی و سشن در `data/` می‌مانند و به گیت راه ندارند.
+
+## چند اکانت + مانیتور لحظه‌ای (فاز ۴)
+```bash
+python -m marketing_divar accounts login ac1   # ×۴ با سیم‌کارت واقعی
+python -m marketing_divar monitor -k "آپارتمان" -k "رهن" --city 1
+python -m marketing_divar draft --chat-only     # پیام چت نیمه‌خودکار
+```
+داخل مانیتور: `status | release ac1 | pause | resume | quit` — هنگام کپچای یک اکانت بقیه بدون توقف کار می‌کنند.
+
+- [x] فاز ۴ — چند اکانت چرخشی، مانیتور لحظه‌ای، کپچای بدون توقف (۲۰ تست، شامل شبیه‌ساز E2E)

@@ -27,6 +27,7 @@ class TestCaptchaDetection(unittest.TestCase):
         cl.session_path = "data/x.json"
         cl.token = "t"
         cl.limiter = MagicMock()
+        cl.base = "https://api.divar.ir"
         r = MagicMock()
         r.status_code = status
         r.text = body
@@ -57,6 +58,7 @@ class TestCaptchaDetection(unittest.TestCase):
         cl.session_path = "data/x.json"
         cl.token = "t"
         cl.limiter = MagicMock()
+        cl.base = "https://api.divar.ir"
         cl.http = MagicMock()
         cl.http.get.return_value = r
         with self.assertRaises(DivarBlockedError):

@@ -121,6 +121,45 @@ def cmd_draft(args: argparse.Namespace) -> None:
     con.close()
 
 
+def cmd_accounts(args: argparse.Namespace) -> None:
+    from .config import load_config
+    cfg = load_config()
+    from .accounts import AccountManager
+    mgr = AccountManager(cfg)
+    if args.action == "login":
+        mgr.login_account(args.name)
+    elif args.action == "list":
+        rows = mgr.snapshot(args.db)
+        if not rows:
+            print("هیچ اکانتی ثبت نشده. اضافه کردن: accounts login <name>")
+        for a in rows:
+            mark = {"active": "✅", "captcha": "🧩", "cooldown": "⏳",
+                    "relogin": "🔑", "disabled": "⛔"}.get(a["status"], "?")
+            print(f" {mark} {a['name']:<12} وضعیت={a['status']:<9} "
+                  f"امروز={a['phones_today']} شماره سشن={'دارد' if a['has_token'] else 'ندارد'}")
+    elif args.action == "release":
+        mgr.release(args.name)
+        print(f"✓ اکانت {args.name} آزاد شد")
+    elif args.action == "disable":
+        mgr.set_status(args.name, "disabled")
+        print(f"⛔ اکانت {args.name} غیرفعال شد")
+
+
+def cmd_monitor(args: argparse.Namespace) -> None:
+    from .config import load_config
+    cfg = load_config()
+    from .monitor import Monitor
+    keywords = []
+    for k in args.keyword:
+        keywords.append({"keyword": k, "cities": args.city, "pages": args.pages})
+    mon = Monitor(cfg, keywords, db_path=args.db,
+                  interactive=not args.non_interactive)
+    try:
+        mon.run()
+    finally:
+        mon.stop()
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="marketing_divar",
@@ -156,6 +195,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--chat-only", action="store_true",
                    help="فقط آگهی‌های بدون شماره (فقط چت)")
     p.set_defaults(func=cmd_draft)
+
+    p = sub.add_parser("accounts", help="مدیریت اکانت‌های چندگانه")
+    p.add_argument("action", choices=["login", "list", "release", "disable"])
+    p.add_argument("name", nargs="?", help="نام اکانت (حروف کوچک)")
+    p.set_defaults(func=cmd_accounts)
+
+    p = sub.add_parser("monitor", help="مانیتور لحظه‌ای: آگهی جدید → شماره (چند اکانت)")
+    p.add_argument("-k", "--keyword", action="append", required=True,
+                   help="کلمه‌کلیدی (تکرارپذیر)")
+    p.add_argument("--city", action="append", type=int)
+    p.add_argument("--pages", type=int, default=1)
+    p.add_argument("--non-interactive", action="store_true",
+                   help="بدون شنیدن فرمان‌های ترمینال (برای سرور)")
+    p.set_defaults(func=cmd_monitor)
 
     p = sub.add_parser("stats", help="آمار دیتابیس و سهمیه امروز")
     p.set_defaults(func=cmd_stats)

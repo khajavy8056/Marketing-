@@ -17,6 +17,10 @@ DEFAULTS: Dict[str, Any] = {
     # --- سهمیه روزانه ---
     "phone_daily_limit": 80,      # سقف گزارش‌شده ۱۵۰؛ محافظه‌کارانه
     "search_daily_limit": 300,
+    # --- چند اکانت و مانیتور لحظه‌ای ---
+    "watch_interval_sec": 300,    # هر ۵ دقیقه جستجوی آگهی‌های جدید
+    "per_account_daily_limit": 60,  # سهمیه شماره هر اکانت در روز
+    "ip_daily_limit": 240,        # سقف کلی همه اکانت‌ها از یک IP (محافظ اکانت‌ها)
     # --- قطع‌کننده مدار (Circuit Breaker) ---
     "cooldown_on_block_min": 30,  # توقف بعد از اولین 429/کپچا
     "backoff_multiplier": 1.5,    # هر توقف، سرعت را کمتر می‌کند
