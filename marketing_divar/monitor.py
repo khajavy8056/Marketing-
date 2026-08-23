@@ -98,6 +98,25 @@ class Monitor:
             except Exception:
                 pass
 
+    def _refresh_notify(self) -> None:
+        try:
+            from . import store
+            s = store.settings_all(self.db_path)
+            self.cfg["notify"] = {
+                "telegram_bot_token": s.get("telegram_bot_token") or "",
+                "telegram_chat_id": s.get("telegram_chat_id") or "",
+            }
+        except Exception:
+            pass
+
+    def _tg(self, message: str) -> None:
+        """اعلان تلگرام برای سرنخ/پیامک جدید — توکن جعلی را نمی‌زند."""
+        try:
+            self._refresh_notify()
+            notify(self.cfg, message, important=False)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------ کلاینت‌ها --
     def client_for(self, name: str) -> DivarClient:
         if name not in self._clients:
@@ -207,8 +226,22 @@ class Monitor:
                     pass
             if r.get("ok"):
                 bump_quota(con, "sms")
+                if token:
+                    try:
+                        from .db import now as _now
+                        con.execute(
+                            "UPDATE leads SET sms_status='sent', sms_sent_at=? WHERE token=?",
+                            (_now(), token))
+                        con.commit()
+                    except Exception:
+                        pass
                 self._ev("success", f"پیامک خودکار ارسال شد → {phone}")
                 print(f"  📩 پیامک خودکار: {phone}")
+                qn = quota_today(con)
+                self._tg(f"پیامک ارسال شد\nشماره: {phone}\n"
+                         f"آگهی: {(row['title'] or '')[:60]}\n"
+                         f"زمان ارسال: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                         f"پیامک امروز: {qn.get('sms', 0)}")
             else:
                 self._ev("warning", f"پیامک خودکار ناموفق: {r.get('message')}")
         except Exception as e:
@@ -317,6 +350,11 @@ class Monitor:
             st = res.get("status")
             if st == "found":
                 print(f"  📞 ✓ {name}: {row['title'][:32]} → {res['phone']}")
+                qn = quota_today(con)
+                extracted = time.strftime("%Y-%m-%d %H:%M:%S")
+                from .telegram_bot import found_alert_text
+                self._tg(found_alert_text(row["title"] or "", res.get("phone") or "",
+                                          extracted, int(qn.get("phones") or 0)))
                 self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")

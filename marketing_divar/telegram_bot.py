@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""ربات تلگرام ادمین — گزارش امروز، صف، آزادسازی اکانت.
+"""ربات تلگرام ادمین — گزارش، سرنخ، خروجی اکسل، دکمه‌های پایین.
 
 فقط chat_id تنظیم‌شده جواب می‌گیرد. بدون توکن، هیچ درخواستی نمی‌زند.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 try:
     import requests
@@ -17,6 +19,32 @@ except ImportError:  # pragma: no cover
 
 _stop = threading.Event()
 _thread: Optional[threading.Thread] = None
+
+REPLY_KEYBOARD = {
+    "keyboard": [
+        [{"text": "📊 گزارش امروز"}, {"text": "📞 سرنخ‌های امروز"}],
+        [{"text": "⬇️ خروجی اکسل"}, {"text": "ℹ️ راهنما"}],
+    ],
+    "resize_keyboard": True,
+}
+
+_ALIASES = {
+    "/start": "help", "/help": "help", "راهنما": "help",
+    "ℹ️ راهنما": "help",
+    "/status": "status", "/today": "status",
+    "گزارش": "status", "گزارش امروز": "status", "📊 گزارش امروز": "status",
+    "/leads": "leads", "سرنخ‌ها": "leads", "سرنخ‌های امروز": "leads",
+    "📞 سرنخ‌های امروز": "leads",
+    "/export": "export", "اکسل": "export", "خروجی اکسل": "export",
+    "⬇️ خروجی اکسل": "export",
+}
+
+
+def _norm_cmd(text: str) -> Tuple[str, str]:
+    raw = (text or "").strip()
+    key = raw.split()[0] if raw else ""
+    mapped = _ALIASES.get(raw) or _ALIASES.get(key.lower() if key.startswith("/") else key)
+    return mapped or "", raw
 
 
 def build_status_text(db_path: str, cfg: Dict[str, Any],
@@ -58,34 +86,74 @@ def build_status_text(db_path: str, cfg: Dict[str, Any],
     return "\n".join(lines)
 
 
+def build_leads_text(db_path: str) -> str:
+    from .db import connect
+    con = connect(db_path)
+    try:
+        rows = con.execute(
+            "SELECT title, phone, first_seen_at, phone_checked_at FROM leads "
+            "WHERE phone_status='found' AND date(first_seen_at)=date('now','localtime') "
+            "ORDER BY id DESC LIMIT 8").fetchall()
+        n = con.execute(
+            "SELECT COUNT(*) c FROM leads WHERE phone_status='found' "
+            "AND date(first_seen_at)=date('now','localtime')").fetchone()["c"]
+    finally:
+        con.close()
+    if not rows:
+        return "امروز سرنخ شماره‌دار جدید نیست"
+    lines = [f"سرنخ‌های امروز ({n} مورد):"]
+    for r in rows:
+        when = r["phone_checked_at"] or r["first_seen_at"] or "—"
+        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]}\n  استخراج: {when}")
+    return "\n".join(lines)
+
+
+def export_excel_bytes(db_path: str, only_phone: bool = True) -> Tuple[bytes, str, int]:
+    """CSV سازگار با اکسل — با تاریخ/ساعت کشف و استخراج."""
+    from .db import connect
+    con = connect(db_path)
+    try:
+        q = ("SELECT title, phone, keyword, city, phone_status, sms_status, "
+             "first_seen_at, phone_checked_at, published_at, sms_sent_at, url "
+             "FROM leads")
+        if only_phone:
+            q += " WHERE phone_status='found'"
+        q += " ORDER BY id DESC"
+        rows = con.execute(q).fetchall()
+    finally:
+        con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["عنوان", "شماره", "کلمه کلیدی", "شهر", "وضعیت شماره", "وضعیت پیامک",
+                "تاریخ‌ساعت کشف", "تاریخ‌ساعت استخراج شماره", "زمان انتشار آگهی",
+                "تاریخ‌ساعت ارسال پیامک", "لینک"])
+    for r in rows:
+        w.writerow(list(r))
+    data = buf.getvalue().encode("utf-8-sig")
+    name = f"khajavy_leads_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+    return data, name, len(rows)
+
+
 def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
                    running: bool = False, tick: int = 0) -> str:
     """پاسخ متنی یک فرمان ادمین (بدون شبکه)."""
-    raw = (text or "").strip()
-    cmd = raw.split()[0].lower() if raw else ""
-    if cmd in ("/start", "/help"):
+    mapped, raw = _norm_cmd(text)
+    if mapped == "help" or raw in ("/start",):
         return ("خواجوی لید\n"
+                "دکمه‌های پایین ربات را بزنید.\n"
                 "/status گزارش امروز\n"
-                "/today همان گزارش کوتاه\n"
+                "/today همان گزارش\n"
                 "/leads سرنخ‌های شماره‌دار امروز\n"
+                "/export خروجی اکسل با تاریخ و ساعت استخراج\n"
                 "/release نام‌اکانت  آزادسازی بعد از حل کپچا")
-    if cmd in ("/status", "/today"):
+    if mapped == "status":
         return build_status_text(db_path, cfg, running=running, tick=tick)
-    if cmd == "/leads":
-        from .db import connect
-        con = connect(db_path)
-        try:
-            rows = con.execute(
-                "SELECT title, phone FROM leads WHERE phone_status='found' "
-                "AND date(first_seen_at)=date('now','localtime') "
-                "ORDER BY id DESC LIMIT 8").fetchall()
-        finally:
-            con.close()
-        if not rows:
-            return "امروز سرنخ شماره‌دار جدید نیست"
-        return "سرنخ‌های امروز:\n" + "\n".join(
-            f"{r['phone']} — {(r['title'] or '')[:40]}" for r in rows)
-    if cmd == "/release" and len(raw.split()) > 1:
+    if mapped == "leads":
+        return build_leads_text(db_path)
+    if mapped == "export":
+        _data, name, n = export_excel_bytes(db_path)
+        return f"خروجی اکسل آماده است ({n} ردیف) — {name}"
+    if (raw.split()[0].lower() if raw else "") == "/release" and len(raw.split()) > 1:
         name = raw.split()[1]
         from .accounts import AccountManager
         mgr = AccountManager(cfg)
@@ -93,7 +161,53 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
             return f"اکانت «{name}» پیدا نشد"
         mgr.release(name)
         return f"اکانت {name} آزاد شد"
-    return "فرمان ناشناخته. /help"
+    return "فرمان ناشناخته. دکمهٔ راهنما را بزنید."
+
+
+def handle_update(text: str, db_path: str, cfg: Dict[str, Any],
+                  running: bool = False, tick: int = 0) -> Dict[str, Any]:
+    """پاسخ ربات: متن یا فایل اکسل."""
+    mapped, _raw = _norm_cmd(text)
+    if mapped == "export":
+        data, name, n = export_excel_bytes(db_path)
+        return {"text": f"خروجی اکسل — {n} سرنخ\nستون‌ها شامل تاریخ و ساعت کشف و استخراج شماره است.",
+                "document": data, "filename": name}
+    return {"text": handle_command(text, db_path, cfg, running=running, tick=tick),
+            "document": None, "filename": ""}
+
+
+def found_alert_text(title: str, phone: str, extracted_at: str,
+                     phones_today: int, sms_note: str = "") -> str:
+    lines = [
+        "سرنخ جدید پیدا شد",
+        f"شماره: {phone}",
+        f"آگهی: {(title or '')[:80]}",
+        f"استخراج: {extracted_at}",
+        f"شماره امروز تا الان: {phones_today}",
+    ]
+    if sms_note:
+        lines.append(sms_note)
+    return "\n".join(lines)
+
+
+def _send_text(token: str, chat_id: str, text: str) -> None:
+    if requests is None or not token or ":" not in token:
+        return
+    requests.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        json={"chat_id": chat_id, "text": text,
+              "reply_markup": REPLY_KEYBOARD},
+        timeout=10)
+
+
+def _send_doc(token: str, chat_id: str, data: bytes, filename: str, caption: str) -> None:
+    if requests is None or not token or ":" not in token:
+        return
+    requests.post(
+        f"https://api.telegram.org/bot{token}/sendDocument",
+        data={"chat_id": chat_id, "caption": caption},
+        files={"document": (filename, data, "text/csv")},
+        timeout=30)
 
 
 def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
@@ -122,13 +236,15 @@ def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
             if chat != allow:
                 continue
             st = state_fn() if state_fn else {}
-            reply = handle_command(msg.get("text") or "", db_path, cfg,
-                                   running=bool(st.get("running")),
-                                   tick=int(st.get("tick") or 0))
+            out = handle_update(msg.get("text") or "", db_path, cfg,
+                                running=bool(st.get("running")),
+                                tick=int(st.get("tick") or 0))
             try:
-                requests.post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": allow, "text": reply}, timeout=10)
+                if out.get("document"):
+                    _send_doc(token, allow, out["document"], out["filename"],
+                              out.get("text") or "خروجی اکسل")
+                else:
+                    _send_text(token, allow, out.get("text") or "")
             except Exception:
                 pass
 

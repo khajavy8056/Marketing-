@@ -13,7 +13,8 @@ sys.path.insert(0, ROOT)
 from marketing_divar.sms import (  # noqa: E402
     interpret_meli, maybe_send_for_lead, normalize_ir_phone,
     send_for_lead, send_melipayamak)
-from marketing_divar.telegram_bot import handle_command  # noqa: E402
+from marketing_divar.telegram_bot import (  # noqa: E402
+    found_alert_text, handle_command, handle_update)
 from marketing_divar.db import connect, upsert_lead  # noqa: E402
 
 
@@ -120,6 +121,20 @@ class TestTelegramCommands(unittest.TestCase):
 
     def test_unknown(self):
         self.assertIn("ناشناخته", handle_command("/nope", self.db, self.cfg))
+
+    def test_bottom_buttons(self):
+        self.assertIn("سقف IP", handle_command("📊 گزارش امروز", self.db, self.cfg))
+        self.assertIn("09145822150", handle_command("سرنخ‌های امروز", self.db, self.cfg))
+        out = handle_update("⬇️ خروجی اکسل", self.db, self.cfg)
+        self.assertTrue(out["document"])
+        self.assertIn("تاریخ‌ساعت استخراج شماره", out["document"].decode("utf-8-sig"))
+        self.assertIn("09145822150", out["document"].decode("utf-8-sig"))
+
+    def test_found_alert_counts(self):
+        t = found_alert_text("ویلا", "09145822150", "2026-08-23 18:00:00", 4)
+        self.assertIn("سرنخ جدید پیدا شد", t)
+        self.assertIn("شماره امروز تا الان: 4", t)
+        self.assertIn("2026-08-23 18:00:00", t)
 
 
 if __name__ == "__main__":

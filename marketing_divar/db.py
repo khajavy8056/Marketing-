@@ -139,6 +139,7 @@ _LEAD_MIGRATIONS = (
     ("retry_count", "INTEGER DEFAULT 0"),
     ("last_error", "TEXT"),
     ("sms_status", "TEXT DEFAULT ''"),
+    ("sms_sent_at", "TEXT"),
 )
 
 
@@ -263,8 +264,8 @@ def stats(con: sqlite3.Connection) -> List[sqlite3.Row]:
 def export_csv(con: sqlite3.Connection, path: str,
                only_with_phone: bool = False) -> int:
     q = ("SELECT token, title, subtitle, description, phone, phone_status, keyword, "
-         "matched_keywords, city, lead_status, chat_status, url, first_seen_at, "
-         "phone_checked_at, published_at FROM leads")
+         "matched_keywords, city, lead_status, chat_status, sms_status, url, "
+         "first_seen_at, phone_checked_at, published_at, sms_sent_at FROM leads")
     if only_with_phone:
         q += " WHERE phone_status='found'"
     q += " ORDER BY id DESC"
@@ -274,8 +275,9 @@ def export_csv(con: sqlite3.Connection, path: str,
         w = csv.writer(f)
         w.writerow(["token", "title", "subtitle", "description", "phone",
                     "phone_status", "keyword", "matched_keywords", "city",
-                    "lead_status", "chat_status", "url", "first_seen_at",
-                    "phone_checked_at", "published_at"])
+                    "lead_status", "chat_status", "sms_status", "url",
+                    "first_seen_at", "phone_checked_at", "published_at",
+                    "sms_sent_at"])
         for r in rows:
             w.writerow(list(r))
     return len(rows)

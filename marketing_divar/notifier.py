@@ -38,7 +38,7 @@ def notify(cfg: Dict[str, Any], message: str, important: bool = True,
     print(f"{prefix} {text}")
     t = (cfg or {}).get("notify") or {}
     token, chat_id = t.get("telegram_bot_token"), t.get("telegram_chat_id")
-    if token and chat_id and requests is not None:
+    if token and chat_id and ":" in str(token) and requests is not None:
         try:  # اعلان هرگز نباید برنامه را متوقف کند
             requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",

@@ -366,8 +366,7 @@ def status():
         "sms_today": q.get("sms", 0),
         "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
         "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
-        "sms_ready": __import__("marketing_divar.sms", fromlist=["sms_ready"]).sms_ready(
-            store.settings_all(DB_PATH))[0],
+        "sms_ready": sms_ready(store.settings_all(DB_PATH))[0],
         "breakdown": breakdown, "accounts_breakdown": acc_break,
         "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),
@@ -420,8 +419,9 @@ def export(filter: str = "phone"):
             where = "1=1"
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
-            f"matched_keywords,city,lead_status,chat_status,url,first_seen_at,"
-            f"phone_checked_at FROM leads WHERE {where} "
+            f"matched_keywords,city,lead_status,chat_status,sms_status,url,"
+            f"first_seen_at,phone_checked_at,published_at,sms_sent_at "
+            f"FROM leads WHERE {where} "
             f"ORDER BY id DESC").fetchall()
     finally:
         con.close()
@@ -429,7 +429,8 @@ def export(filter: str = "phone"):
     w = csv.writer(buf)
     w.writerow(["توکن", "عنوان", "توضیح میانی", "متن", "شماره تماس", "وضعیت شماره",
                 "کلمه کلیدی", "کلمات منطبق", "شهر", "وضعیت پیگیری", "وضعیت چت",
-                "لینک", "زمان کشف", "زمان دریافت تماس"])
+                "وضعیت پیامک", "لینک", "تاریخ‌ساعت کشف", "تاریخ‌ساعت استخراج شماره",
+                "زمان انتشار آگهی", "تاریخ‌ساعت ارسال پیامک"])
     for r in rows:
         w.writerow(list(r))
     buf.seek(0)
@@ -476,6 +477,43 @@ def lead_status_update(token: str, req: LeadStatusUpdate):
         con.close()
     log("info", f"وضعیت سرنخ {token} → {req.status}")
     return {"ok": True}
+
+
+@app.post("/api/leads/{token}/sms")
+def lead_send_sms(token: str):
+    """ارسال دستی همان قالب آماده‌شده به شمارهٔ این سرنخ."""
+    from ..db import bump_quota, now as _now
+    from ..sms import live_sms_cfg, send_for_lead
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "سرنخ پیدا نشد")
+        if row["phone_status"] != "found" or not row["phone"]:
+            raise HTTPException(400, "این سرنخ شماره ندارد")
+        cfg = live_sms_cfg(DB_PATH)
+        tpl = (store.template_get(DB_PATH, "sms") or {}).get("text") or ""
+        r = send_for_lead(cfg, dict(row), tpl)
+        if r.get("ok"):
+            try:
+                con.execute(
+                    "UPDATE leads SET sms_status='sent', sms_sent_at=? WHERE token=?",
+                    (_now(), token))
+                bump_quota(con, "sms")
+                con.commit()
+            except Exception:
+                pass
+            log("success", f"پیامک دستی ارسال شد → {row['phone']}")
+        else:
+            try:
+                con.execute("UPDATE leads SET sms_status='failed' WHERE token=?", (token,))
+                con.commit()
+            except Exception:
+                pass
+            log("error", f"پیامک دستی ناموفق: {r.get('message')}")
+        return r
+    finally:
+        con.close()
 
 
 # ------------------------------------------------------------ صفحه اصلی --
