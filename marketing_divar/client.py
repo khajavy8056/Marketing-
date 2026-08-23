@@ -198,8 +198,9 @@ def normalize_phone(raw: Any) -> Optional[str]:
     if not t.startswith("0"):
         t = "0" + t
     return t if t.isdigit() and len(t) == 11 else t
-# نشانه‌های احتمالی چالش کپچا در بدنه پاسخ
-CAPTCHA_MARKERS = ("captcha", "challenge", "arkose", "rcsc", "puzzle")
+# نشانه‌های واقعی کپچا — «challenge» به‌تنهایی در HTML عادی دیوار هم هست
+CAPTCHA_MARKERS = ("captcha_required", "captcha-required", "arkose",
+                   "hcaptcha", "recaptcha", "کپچا")
 
 
 class DivarAuthError(Exception):
@@ -219,8 +220,13 @@ class DivarBlockedError(Exception):
 
 
 def looks_like_captcha(text: str) -> bool:
+    """فقط پاسخ‌های کوتاه/API؛ صفحهٔ HTML عادی دیوار پر از JS است."""
     t = (text or "").lower()
-    return any(m in t for m in CAPTCHA_MARKERS)
+    if any(m in t for m in CAPTCHA_MARKERS):
+        return True
+    if len(t) < 2500 and any(m in t for m in ("captcha", "puzzle")):
+        return True
+    return False
 
 
 def is_blocking_view(data: Any) -> bool:
@@ -491,8 +497,10 @@ class DivarClient:
                 if posts:
                     return posts
                 _log("warning", "API جستجو ۰ آگهی داد — مسیرهای بعدی")
-        except DivarBlockedError:
-            raise  # بلاک واقعی: فشار نیاوریم
+        except DivarBlockedError as e:
+            if e.status == 429:
+                raise
+            _log("warning", f"API جستجو محدود شد ({e}) — مسیرهای بعدی")
         except Exception as e:
             _log("warning", f"API جستجو ناموفق ({type(e).__name__}: {str(e)[:100]}) "
                             "— مسیرهای بعدی")
@@ -500,32 +508,51 @@ class DivarClient:
             posts = self._search_post_v8(query, cities, page)
             if posts:
                 return posts
-        except DivarBlockedError:
-            raise
+        except DivarBlockedError as e:
+            if e.status == 429:
+                raise
+            _log("warning", f"POST /v8/search محدود شد ({e}) — HTML سایت")
         except Exception as e:
             _log("warning", f"POST /v8/search ناموفق ({type(e).__name__}: {str(e)[:80]})")
         return self._search_html(query, cities, page)
 
-    # href نسبی + URL کامل + لینک مارک‌داون — تأییدشده روی HTML زنده ۱۴۰۵/۰۶
+    # href نسبی + URL کامل + لینک مارک‌داون + توکن تکی /v/TOKEN
     _HTML_URL = re.compile(
-        r'(?:https?://(?:www\.)?divar\.ir)?/v/([^"\'/\s?]+)/([A-Za-z0-9_-]{5,16})'
+        r"(?:https?://(?:www\.)?divar\.ir)?/v/([^\"'/\s?]+)/([A-Za-z0-9_-]{5,16})"
     )
-    _HTML_SKIP = frozenset({"chat", "rules", "about", "download", "help", "new"})
+    _HTML_TOKEN_ONLY = re.compile(
+        r"(?:https?://(?:www\.)?divar\.ir)?/v/([A-Za-z][A-Za-z0-9_-]{4,15})(?=[\"'\s?#]|$)"
+    )
+    _HTML_JSON_TOKEN = re.compile(
+        r'"token"\s*:\s*"([A-Za-z][A-Za-z0-9_-]{4,15})"'
+    )
+    _HTML_SKIP = frozenset({"chat", "rules", "about", "download", "help", "new",
+                            "s", "entity", "assets"})
 
     @staticmethod
     def _parse_search_html(html: str) -> List[Dict[str, Any]]:
-        """استخراج توکن + عنوان از HTML/مارک‌داون صفحهٔ جستجوی دیوار."""
+        """استخراج توکن + عنوان از HTML/مارک‌داون/JSON توکار صفحهٔ جستجو."""
         import urllib.parse as _up
         posts, seen = [], set()
-        for slug, token in DivarClient._HTML_URL.findall(html or ""):
-            if token in seen or token.lower() in DivarClient._HTML_SKIP:
-                continue
-            if slug.startswith("s/") or slug in ("s", "entity"):
-                continue
+
+        def _keep(token: str, title: str, slug: str = "") -> None:
+            if not token or token in seen or token.lower() in DivarClient._HTML_SKIP:
+                return
+            if slug.startswith("s/") or slug in DivarClient._HTML_SKIP:
+                return
             seen.add(token)
-            title = _up.unquote(slug).replace("-", " ").strip()
             posts.append({"token": token, "title": title or "—",
-                          "subtitle": "", "url": f"https://divar.ir/v/{slug}/{token}"})
+                          "subtitle": "",
+                          "url": (f"https://divar.ir/v/{slug}/{token}" if slug
+                                  else f"https://divar.ir/v/{token}")})
+
+        for slug, token in DivarClient._HTML_URL.findall(html or ""):
+            title = _up.unquote(slug).replace("-", " ").strip()
+            _keep(token, title, slug)
+        for token in DivarClient._HTML_TOKEN_ONLY.findall(html or ""):
+            _keep(token, "")
+        for token in DivarClient._HTML_JSON_TOKEN.findall(html or ""):
+            _keep(token, "")
         return posts[:24]
 
     def _search_html(self, query: str, cities=None, page: int = 1):
@@ -541,9 +568,10 @@ class DivarClient:
         r = self._fetch("GET", url, params=params, timeout=25,
                         headers={"Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
                                  "Accept-Language": "fa-IR,fa;q=0.9"})
-        if r.status_code in (403, 429) or looks_like_captcha(r.text):
+        if r.status_code in (403, 429):
             raise DivarBlockedError(
-                f"HTML جستجو هم HTTP {r.status_code} داد", r.status_code, r.text[:200])
+                f"HTML جستجو HTTP {r.status_code} داد — اگر VPN/پروکسی روشن است خاموش کنید؛ "
+                "دیوار فقط با IP ایران جواب می‌دهد", r.status_code, r.text[:200])
         if r.status_code != 200:
             _log("warning", f"HTML جستجو HTTP {r.status_code} داد — بدون آگهی")
             return []

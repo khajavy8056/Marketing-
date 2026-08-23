@@ -175,6 +175,8 @@ def run_diag(base_url: Optional[str] = None, keyword: str = "آپارتمان",
             pass
         if not cl.token:
             raise RuntimeError("توکن اکانت پیدا نشد — دوباره لاگین کنید")
+        if not holder.get("token"):
+            raise RuntimeError("به‌خاطر شکست جستجو/جزئیات قابل آزمایش نیست")
         res = cl.get_phone(holder["token"])
         st = res.get("status")
         if st == "found":

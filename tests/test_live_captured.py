@@ -77,6 +77,18 @@ class TestLiveCaptured(unittest.TestCase):
         self.assertIn("باطری", desc)
         self.assertTrue(keyword_hits(desc + " ایفون 13 پرومکس", "ایفون"))
 
+    def test_live_mobile_html_tokens(self):
+        html = """
+        ](https://divar.ir/v/%DA%AF%D9%88%D8%B4%DB%8C-poco-x7-pro/gaLSzmq_)
+        ](https://divar.ir/v/s-21-22-23-24-25-ultra/QacnRuCM)
+        <script>challenge; captcha loader</script>
+        """
+        toks = {p["token"] for p in DivarClient._parse_search_html(html)}
+        self.assertIn("gaLSzmq_", toks)
+        self.assertIn("QacnRuCM", toks)
+        from marketing_divar.client import looks_like_captcha
+        self.assertFalse(looks_like_captcha(html + ("x" * 3000)))
+
 
 if __name__ == "__main__":
     unittest.main()

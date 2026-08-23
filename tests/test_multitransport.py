@@ -177,6 +177,45 @@ class TestTransportChain(unittest.TestCase):
         posts = c.search("تدریس")
         self.assertEqual(posts[0]["token"], "ga84Em-u")
 
+    def test_html_200_with_js_challenge_is_not_block(self):
+        """باگ زنده: HTML ۲۰۰ با کلمه challenge نباید DivarBlockedError شود."""
+        c = self._client()
+        blocking = _Resp(200, payload={
+            "widget_list": [{"widget_type": "BLOCKING_VIEW"}]})
+        html = _Resp(200, text=(
+            '<script>window.challenge=1; recaptcha stub</script>'
+            '<a href="/v/%DA%AF%D9%88%D8%B4%DB%8C/gaLSzmq_">poco</a>'))
+
+        class _T:
+            name = "requests"
+
+            def request(self, method, url, **kw):
+                if "web-search" in url:
+                    return blocking
+                if "/v8/search/" in url:
+                    return _Resp(403, payload={"error": "forbidden"})
+                return html
+
+        c._custom_transports = [_T()]
+        posts = c.search("موبایل")
+        self.assertEqual(posts[0]["token"], "gaLSzmq_")
+
+    def test_post_403_falls_through_to_html(self):
+        c = self._client()
+        html = _Resp(200, text='{"token":"QacnRuCM"}')
+
+        class _T:
+            name = "requests"
+
+            def request(self, method, url, **kw):
+                if "web-search" in url or "/v8/search/" in url:
+                    return _Resp(403, text="forbidden")
+                return html
+
+        c._custom_transports = [_T()]
+        posts = c.search("موبایل")
+        self.assertEqual(posts[0]["token"], "QacnRuCM")
+
     def test_post_v8_search_used_when_get_empty(self):
         c = self._client()
         empty = _Resp(200, payload={"web_widgets": {"post_list": []}})
