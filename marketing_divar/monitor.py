@@ -22,8 +22,9 @@ from typing import Any, Dict, List, Optional
 
 from .accounts import AccountManager
 from .client import DivarAuthError, DivarBlockedError, DivarClient
-from .db import (bump_quota, chat_queue, connect, pending_phone, quota_today,
-                 set_phone, upsert_lead)
+from .db import (bump_quota, chat_queue, connect, log_operation, mark_processing,
+                 pending_phone, quota_today, reclaim_stuck_processing, set_phone)
+from .matching import consider_new_lead
 from .notifier import notify
 from .rate import RateLimiter
 
@@ -130,7 +131,9 @@ class Monitor:
                         bump_quota(con, "searches", len(posts))
                     except DivarBlockedError as e:
                         notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "
-                                         "watch_interval را در config.json بزرگ کنید")
+                                         "watch_interval را در config.json بزرگ کنید",
+                               problem="rate_limit/captcha", operation="search",
+                               action="فاصله اسکن را زیاد کنید و وضعیت شبکه را بررسی کنید")
                         self._ev("error", f"جستجو متوقف شد: {e}")
                         return new_total
                     except Exception as e:
@@ -142,14 +145,13 @@ class Monitor:
                         self._ev("error", f"خطای جستجوی «{kw}»: {e}{hint}")
                         break
                     new_here = 0
+                    city = ",".join(str(c) for c in cities) if cities else "iran"
                     for p in posts:
-                        city = ",".join(str(c) for c in cities) if cities else "iran"
-                        if upsert_lead(con, p, kw, city):
+                        if consider_new_lead(con, self.anon, p, kw, city):
                             new_total += 1
                             new_here += 1
                             t = str(p.get("title") or "")
-                            where = ("عنوان" if kw in t else
-                                     ("متن/جستجوی دیوار" if kw not in t and t else "—"))
+                            where = ("عنوان" if kw in t else "متن")
                             self._ev("info", f"🆕 سرنخ جدید: «{t[:40]}» "
                                              f"(کلمه در: {where})")
                     con.commit()
@@ -186,22 +188,37 @@ class Monitor:
                     self._ev("error", f"هیچ اکانت آماده نیست: {stuck} — "
                                       "اگر کپچاست از بخش اکانت‌ها حل و آزاد کنید")
                     notify(self.cfg, f"هیچ اکانت آماده نیست: {stuck}. "
-                                     "اگر کپچاست: در مرورگر حل کنید و بنویسید: release <نام>")
+                                     "اگر کپچاست: در مرورگر حل کنید و بنویسید: release <نام>",
+                           problem="no_account", operation="contact",
+                           action="اکانت کپچا/خطا را آزاد یا لاگین کنید")
                     self._notified_all_stuck = True
                 return "wait"
             self._notified_all_stuck = False
             row = rows[0]
             cl = self.client_for(name)
+            started = time.strftime("%Y-%m-%d %H:%M:%S")
+            mark_processing(con, row["token"])
             try:
                 res = cl.get_phone(row["token"])
             except DivarAuthError as e:
+                con.execute("UPDATE leads SET phone_status='pending' WHERE token=?",
+                            (row["token"],))
+                con.commit()
                 self.mgr.set_status(name, "relogin", note=str(e))
                 self._ev("error", f"اکانت {name} نیاز به لاگین مجدد دارد")
                 notify(self.cfg, f"اکانت {name} نیاز به لاگین مجدد دارد — "
-                                 f"در ترمینال دیگر: accounts login {name}")
+                                 f"در ترمینال دیگر: accounts login {name}",
+                       account=name, problem="authentication",
+                       operation="contact", action=f"accounts login {name}")
+                log_operation(con, token=row["token"], account=name,
+                              operation="contact", result="auth_error",
+                              error=str(e), started_at=started)
                 return "wait"
             except DivarBlockedError as e:
-                # این اکانت می‌ایستد؛ بقیه در فراخوانی بعدی ادامه می‌دهند ✅
+                # این اکانت می‌ایستد؛ سرنخ به صف برمی‌گردد؛ بقیه ادامه می‌دهند
+                con.execute("UPDATE leads SET phone_status='pending' WHERE token=?",
+                            (row["token"],))
+                con.commit()
                 status = "captcha" if "کپچا" in str(e) or "captcha" in str(e).lower() \
                     else "cooldown"
                 self.mgr.set_status(
@@ -210,10 +227,33 @@ class Monitor:
                     note=f"{e} (status={e.status})")
                 self._ev("warning" if status == "captcha" else "error",
                          f"اکانت {name} → {status} ({e}). بقیه اکانت‌ها ادامه می‌دهند")
+                action = (f"در مرورگر divar.ir با همین اکانت کپچا را حل کنید "
+                          f"سپس در پنل «آزادسازی {name}» را بزنید") if status == "captcha" \
+                    else "صبر کنید تا سرد شدن تمام شود؛ اکانت‌های دیگر ادامه می‌دهند"
                 notify(self.cfg, f"اکانت {name} → {status} ({e}). "
-                                 f"بقیه اکانت‌ها ادامه می‌دهند. بعد از حل: release {name}")
+                                 f"بقیه اکانت‌ها ادامه می‌دهند. بعد از حل: release {name}",
+                       account=name, problem=status, operation="contact",
+                       action=action)
+                log_operation(con, token=row["token"], account=name,
+                              operation="contact", result=status,
+                              error=str(e), started_at=started)
                 return "wait"
+            except Exception as e:
+                con.execute(
+                    "UPDATE leads SET phone_status='pending', last_error=?, "
+                    "retry_count=retry_count+1 WHERE token=?",
+                    (str(e)[:200], row["token"]))
+                con.commit()
+                log_operation(con, token=row["token"], account=name,
+                              operation="contact", result="error",
+                              error=str(e), started_at=started)
+                self._ev("error", f"خطای شماره‌گیری {row['token']}: {e}")
+                return "done"
             set_phone(con, row["token"], res)
+            log_operation(con, token=row["token"], account=name,
+                          operation="contact", result=res.get("status"),
+                          phone=res.get("phone"), error=res.get("message"),
+                          started_at=started)
             bump_quota(con, "phones")
             st0 = res.get("status")
             if st0 == "found":

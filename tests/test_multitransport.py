@@ -105,6 +105,36 @@ class TestTransportChain(unittest.TestCase):
         self.assertEqual(posts[0]["token"], "QY8b9X")
         self.assertIn("آپارتمان", posts[0]["title"])
 
+    def test_httpx_merges_authorization_header(self):
+        """اگر مسیر httpx برنده شود، هدر Authorization نباید حذف شود."""
+        import marketing_divar.client as clmod
+        seen = {}
+
+        class _FakeHttpxClient:
+            def __init__(self, **kw): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def post(self, url, headers=None, json=None, timeout=None):
+                seen["headers"] = dict(headers or {})
+                return _Resp(200, {"ok": 1})
+            def get(self, url, headers=None, params=None, timeout=None):
+                seen["headers"] = dict(headers or {})
+                return _Resp(200, {"ok": 1})
+
+        c = self._client()
+        tr = clmod._HttpxDirectTransport(c)
+        real_httpx = __import__("httpx")
+        orig = real_httpx.Client
+        real_httpx.Client = _FakeHttpxClient
+        try:
+            r = tr.request("POST", "http://mock/x",
+                           headers={"Authorization": "Bearer tok-test"},
+                           json={"a": 1})
+        finally:
+            real_httpx.Client = orig
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(seen["headers"].get("Authorization"), "Bearer tok-test")
+
     def test_search_falls_back_to_html(self):
         c = self._client()
         good_html = _Resp(200, text='<a href="/v/apartman-80/QY8b9X">x</a>')

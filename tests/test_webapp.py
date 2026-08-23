@@ -72,8 +72,10 @@ class TestUIBasics(unittest.TestCase):
     def test_status_shape(self):
         r = client.get("/api/status")
         self.assertEqual(r.status_code, 200)
-        for key in ("running", "queue", "chat_queue", "accounts", "keywords", "logs"):
+        for key in ("running", "queue", "chat_queue", "accounts", "keywords", "logs",
+                    "breakdown", "accounts_breakdown"):
             self.assertIn(key, r.json())
+        self.assertIn("contact_found", r.json()["breakdown"])
 
 
 class TestAccountFlow(unittest.TestCase):
@@ -145,6 +147,28 @@ class TestTemplatesAndSettings(unittest.TestCase):
         self.assertEqual(r["sms"], "پیامک برای {title}")
         r = client.post("/api/templates", json={"channel": "bad", "text": "x"})
         self.assertEqual(r.status_code, 400)
+
+    def test_lead_draft_and_status(self):
+        from marketing_divar.db import connect as db_connect
+        con = db_connect(os.environ["DIVAR_DB_PATH"])
+        with con:
+            con.execute(
+                "INSERT OR IGNORE INTO leads (token,title,url,keyword,city,"
+                "phone_status,lead_status,first_seen_at) "
+                "VALUES ('draft1','ویلا تست','https://divar.ir/v/draft1','ویلا',"
+                "'iran','hidden','new',?)",
+                (time.strftime("%Y-%m-%d %H:%M:%S"),))
+        con.close()
+        r = client.get("/api/leads/draft1/draft")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIn("ویلا تست", r.json()["message"])
+        r = client.post("/api/leads/draft1/status",
+                        json={"status": "contacted", "chat_status": "sent"})
+        self.assertEqual(r.status_code, 200)
+        leads = client.get("/api/leads?filter=all").json()["leads"]
+        row = next(l for l in leads if l["token"] == "draft1")
+        self.assertEqual(row["lead_status"], "contacted")
+        self.assertEqual(row["chat_status"], "sent")
 
     def test_settings_roundtrip_and_effect(self):
         r = client.post("/api/settings", json={"values": {

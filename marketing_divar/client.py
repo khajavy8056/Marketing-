@@ -100,15 +100,19 @@ class _HttpxDirectTransport(_Transport):
         except ImportError:
             raise RuntimeError("httpx نصب نیست")
         headers = dict(self.c.http.headers)
+        headers.update(kw.get("headers") or {})
+        cookie_bits = [headers["Cookie"]] if headers.get("Cookie") else []
         for ck in self.c.http.cookies:
-            headers["Cookie"] = headers.get("Cookie", "") + f"; {ck.name}={ck.value}"
-        with httpx.Client(verify=True, trust_env=False, timeout=kw.get("timeout", 25)) as hc:
+            cookie_bits.append(f"{ck.name}={ck.value}")
+        if cookie_bits:
+            headers["Cookie"] = "; ".join(cookie_bits)
+        timeout = kw.get("timeout", 25)
+        with httpx.Client(verify=True, trust_env=False, timeout=timeout) as hc:
             if method.upper() == "GET":
-                kw.pop("json", None)
                 return hc.get(url, headers=headers,
-                              params=kw.get("params"), timeout=kw.get("timeout", 25))
+                              params=kw.get("params"), timeout=timeout)
             return hc.post(url, headers=headers,
-                           json=kw.get("json"), timeout=kw.get("timeout", 25))
+                           json=kw.get("json"), timeout=timeout)
 
 
 class _UrllibDirectTransport(_Transport):
@@ -126,12 +130,13 @@ class _UrllibDirectTransport(_Transport):
         data = None
         headers = {"User-Agent": str(self.c.http.headers.get("User-Agent", "")),
                    "Accept": "application/json"}
+        headers.update(kw.get("headers") or {})
         if kw.get("json") is not None:
             data = json.dumps(kw["json"]).encode()
-            headers["Content-Type"] = "application/json"
+            headers.setdefault("Content-Type", "application/json")
         for ck in self.c.http.cookies:
             headers["Cookie"] = headers.get("Cookie", "") + f"; {ck.name}={ck.value}"
-        if self.c.token:
+        if self.c.token and "Authorization" not in headers:
             headers["Authorization"] = f"Bearer {self.c.token}"
         req = urllib.request.Request(url, data=data, headers=headers,
                                      method=method.upper())
@@ -150,6 +155,26 @@ def default_base() -> str:
     return os.environ.get("DIVAR_BASE_URL", "https://api.divar.ir")
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+CITY_SLUGS = {
+    1: "tehran", 2: "karaj", 3: "mashhad", 4: "isfahan",
+    5: "shiraz", 6: "ahvaz", 7: "tabriz", 8: "qom",
+    "1": "tehran", "2": "karaj", "3": "mashhad", "4": "isfahan",
+    "5": "shiraz", "6": "ahvaz", "7": "tabriz", "8": "qom",
+}
+
+
+def city_slug(cities: Optional[List[Any]]) -> str:
+    """اسلاگ شهر برای HTML سایت؛ بدون شهر = iran."""
+    if not cities:
+        return "iran"
+    c = cities[0]
+    mapped = CITY_SLUGS.get(c) or CITY_SLUGS.get(str(c))
+    if mapped:
+        return mapped
+    s = str(c).strip().lower()
+    return s if s and not s.isdigit() else "iran"
+
 
 HIDDEN_MARKER = "شماره مخفی شده است"
 MOBILE_MARKER = "موبایل"          # عنوان ویجت شماره در پاسخ v2
@@ -425,7 +450,7 @@ class DivarClient:
         host = "https://divar.ir"
         if self.base.startswith("http") and "divar.ir" not in self.base:
             host = self.base  # شبیه‌ساز تست
-        city = str(cities[0]) if cities else "iran"
+        city = city_slug(cities)
         url = f"{host}/s/{city}"
         params = {"q": query}
         if page and page > 1:
@@ -493,6 +518,8 @@ class DivarClient:
         خروجی: {"status": "found"|"hidden"|"removed"|"error", ...}
         """
         auth = self._auth_headers()  # DivarAuthError اگر لاگین نیست
+        if self.limiter:
+            self.limiter.wait("phone")
         uuid = self.get_contact_uuid(token)
         if uuid is None:
             # آگهی حذف شده یا پاسخ نامعتبر — با v1 هم امتحان می‌کنیم

@@ -10,7 +10,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .client import DivarAuthError, DivarBlockedError, DivarClient
 from .db import (bump_quota, connect, log_run, pending_phone, quota_today,
-                 set_phone, upsert_lead)
+                 reclaim_stuck_processing, set_phone)
+from .matching import consider_new_lead
 from .notifier import notify
 from .rate import CircuitBreaker, RateLimiter
 
@@ -72,6 +73,7 @@ def run_collection(keyword: str, cities: Optional[List[int]] = None,
     started = time.strftime("%Y-%m-%d %H:%M:%S")
     counters = {"posts_seen": 0, "new_posts": 0, "phones_found": 0,
                 "phones_hidden": 0, "errors": 0}
+    reclaim_stuck_processing(con)
 
     def ensure_login() -> bool:
         if cl.is_logged_in():
@@ -100,10 +102,10 @@ def run_collection(keyword: str, cities: Optional[List[int]] = None,
             print(f"[*] صفحه {page}: نتیجه‌ای نبود — پایان نتایج")
             break
         new_in_page = 0
+        city = ",".join(_pretty(c) for c in cities) if cities else "iran"
         for p in posts:
             counters["posts_seen"] += 1
-            if upsert_lead(con, p, keyword,
-                           ",".join(_pretty(c) for c in cities) if cities else "iran"):
+            if consider_new_lead(con, cl, p, keyword, city):
                 counters["new_posts"] += 1
                 new_in_page += 1
         con.commit()

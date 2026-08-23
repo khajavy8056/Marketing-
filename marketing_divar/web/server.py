@@ -28,7 +28,9 @@ from .. import logging_util, store
 from ..accounts import AccountManager
 from ..client import DivarAuthError, DivarBlockedError, DivarClient
 from ..config import DEFAULTS, load_config
-from ..db import chat_queue, connect, pending_phone, quota_today, stats
+from ..db import (chat_queue, connect, pending_phone, quota_today,
+                  reclaim_stuck_processing, set_lead_status, stats)
+from ..messaging import build_message
 from ..monitor import Monitor
 
 DB_PATH = os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db")
@@ -88,6 +90,12 @@ class MonitorStart(BaseModel):
 class AccountAction(BaseModel):
     name: str
     action: str             # release | disable | enable
+
+
+class LeadStatusUpdate(BaseModel):
+    status: str             # new|contacted|replied|converted|ignored
+    notes: str = ""
+    chat_status: Optional[str] = None  # sent|failed|requires_operator|available
 
 
 # ------------------------------------------------------------ API اکانت‌ها --
@@ -220,15 +228,18 @@ def monitor_start(req: MonitorStart):
 
     cfg = store.effective_config(DB_PATH, load_config())
     # گزینه «موارد موجود هم گرفته شوند؟»
-    if not req.include_existing:
-        con = connect(DB_PATH)
-        with con:
+    con = connect(DB_PATH)
+    try:
+        reclaim_stuck_processing(con)
+        if not req.include_existing:
             con.execute("UPDATE leads SET phone_status='legacy' "
                         "WHERE phone_status='pending'")
+            con.commit()
+            log("info", "حالت «فقط آگهی‌های جدید» — سرنخ‌های قدیمی نادیده گرفته شدند")
+        else:
+            log("info", "حالت «موارد موجود هم گرفته شوند» فعال شد")
+    finally:
         con.close()
-        log("info", "حالت «فقط آگهی‌های جدید» — سرنخ‌های قدیمی نادیده گرفته شدند")
-    else:
-        log("info", "حالت «موارد موجود هم گرفته شوند» فعال شد")
 
     mon = Monitor(cfg, specs, db_path=DB_PATH, accounts_dir=ACCOUNTS_DIR,
                   interactive=False, base_url=_base_url(),
@@ -276,9 +287,34 @@ def status():
         st = [dict(r) for r in stats(con)]
         queue_len = len(pending_phone(con))
         chat_len = len(chat_queue(con))
+        def _cnt(where: str) -> int:
+            return con.execute(f"SELECT COUNT(*) c FROM leads WHERE {where}").fetchone()["c"]
         total_leads = con.execute("SELECT COUNT(*) c FROM leads").fetchone()["c"]
-        found = con.execute(
-            "SELECT COUNT(*) c FROM leads WHERE phone_status='found'").fetchone()["c"]
+        found = _cnt("phone_status='found'")
+        breakdown = {
+            "total": total_leads,
+            "new": _cnt("phone_status='pending'"),
+            "matched": total_leads,
+            "processing": _cnt("phone_status='processing'"),
+            "contact_found": found,
+            "no_contact": _cnt("phone_status='hidden'"),
+            "failed": _cnt("phone_status='error'"),
+        }
+        acc_snap = mgr().snapshot(DB_PATH)
+        acc_break = {"active": 0, "busy": 0, "rate_limited": 0,
+                     "captcha": 0, "error": 0, "disabled": 0}
+        for a in acc_snap:
+            stt = a.get("status") or "active"
+            if stt == "active":
+                acc_break["active"] += 1
+            elif stt == "captcha":
+                acc_break["captcha"] += 1
+            elif stt == "cooldown":
+                acc_break["rate_limited"] += 1
+            elif stt == "relogin":
+                acc_break["error"] += 1
+            elif stt == "disabled":
+                acc_break["disabled"] += 1
     finally:
         con.close()
     return {
@@ -287,7 +323,8 @@ def status():
         "queue": queue_len, "chat_queue": chat_len, "total_leads": total_leads,
         "phones_found": found, "phones_today": q["phones"],
         "searches_today": q["searches"],
-        "accounts": mgr().snapshot(DB_PATH),
+        "breakdown": breakdown, "accounts_breakdown": acc_break,
+        "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),
         "logs": logging_util.recent(50),
         "stats_by_keyword": st,
@@ -316,8 +353,9 @@ def leads(filter: str = "all", limit: int = 100):
         else:
             where, args = "1=1", ()
         rows = con.execute(
-            f"SELECT token,title,subtitle,phone,phone_status,keyword,city,"
-            f"lead_status,url,first_seen_at FROM leads WHERE {where} "
+            f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
+            f"matched_keywords,city,lead_status,chat_status,url,first_seen_at,"
+            f"phone_checked_at FROM leads WHERE {where} "
             f"ORDER BY id DESC LIMIT ?", (*args, min(limit, 500))).fetchall()
         return {"leads": [dict(r) for r in rows]}
     finally:
@@ -336,15 +374,17 @@ def export(filter: str = "phone"):
         else:
             where = "1=1"
         rows = con.execute(
-            f"SELECT token,title,subtitle,phone,phone_status,keyword,city,"
-            f"lead_status,url,first_seen_at FROM leads WHERE {where} "
+            f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
+            f"matched_keywords,city,lead_status,chat_status,url,first_seen_at,"
+            f"phone_checked_at FROM leads WHERE {where} "
             f"ORDER BY id DESC").fetchall()
     finally:
         con.close()
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["توکن", "عنوان", "توضیح", "شماره تماس", "وضعیت شماره",
-                "کلمه کلیدی", "شهر", "وضعیت پیگیری", "لینک", "زمان"])
+    w.writerow(["توکن", "عنوان", "توضیح میانی", "متن", "شماره تماس", "وضعیت شماره",
+                "کلمه کلیدی", "کلمات منطبق", "شهر", "وضعیت پیگیری", "وضعیت چت",
+                "لینک", "زمان کشف", "زمان دریافت تماس"])
     for r in rows:
         w.writerow(list(r))
     buf.seek(0)
@@ -352,6 +392,45 @@ def export(filter: str = "phone"):
         iter([buf.getvalue()]), media_type="text/csv",
         headers={"Content-Disposition":
                  f"attachment; filename=leads_{filter}_{time.strftime('%Y%m%d')}.csv"})
+
+
+@app.get("/api/leads/{token}/draft")
+def lead_draft(token: str):
+    """متن شخصی‌سازی‌شده + لینک چت برای ارسال نیمه‌خودکار."""
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "سرنخ پیدا نشد")
+        tpl = (store.template_get(DB_PATH, "chat") or {}).get("text") \
+            or DEFAULTS["chat_template"]
+        return {"token": token, "url": row["url"], "title": row["title"],
+                "message": build_message(tpl, row),
+                "chat_status": row["chat_status"] if "chat_status" in row.keys() else "",
+                "phone_status": row["phone_status"]}
+    finally:
+        con.close()
+
+
+@app.post("/api/leads/{token}/status")
+def lead_status_update(token: str, req: LeadStatusUpdate):
+    allowed = {"new", "contacted", "replied", "converted", "ignored", "removed"}
+    if req.status not in allowed:
+        raise HTTPException(400, "وضعیت نامعتبر")
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT token FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "سرنخ پیدا نشد")
+        set_lead_status(con, token, req.status, req.notes)
+        if req.chat_status:
+            con.execute("UPDATE leads SET chat_status=? WHERE token=?",
+                        (req.chat_status, token))
+        con.commit()
+    finally:
+        con.close()
+    log("info", f"وضعیت سرنخ {token} → {req.status}")
+    return {"ok": True}
 
 
 # ------------------------------------------------------------ صفحه اصلی --

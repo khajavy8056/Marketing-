@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .venv/
 logs/
+.env
+config.json
+installer/install-log.txt

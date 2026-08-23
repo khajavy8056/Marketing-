@@ -114,6 +114,10 @@
     <div class="card"><h3>در صف شماره‌گیری</h3><div class="kpi" id="k-queue">0</div><small class="hint">سرنخ‌های منتظر شماره</small></div>
     <div class="card"><h3>لیست چت (فقط چت)</h3><div class="kpi" id="k-chat" style="color:var(--chat)">0</div><small class="hint">آگهی‌های بدون شماره → پیام چت</small></div>
     <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف روزانه</small></div></div>
+    <div class="card"><h3>کل سرنخ‌ها</h3><div class="kpi" id="k-total">0</div><small class="hint">همه آگهی‌های منطبق</small></div>
+    <div class="card"><h3>شماره پیدا شده</h3><div class="kpi" id="k-found" style="color:var(--ok)">0</div><small class="hint">Contact Found</small></div>
+    <div class="card"><h3>بدون شماره</h3><div class="kpi" id="k-hidden" style="color:var(--chat)">0</div><small class="hint">فقط چت</small></div>
+    <div class="card"><h3>خطا</h3><div class="kpi" id="k-failed" style="color:var(--err)">0</div><small class="hint">Failed</small></div>
   </div>
 
   <div class="card" style="margin-top:14px">
@@ -241,7 +245,7 @@
     <div style="overflow-x:auto; margin-top:10px">
       <table id="leads-table">
         <thead><tr>
-          <th>عنوان</th><th>شماره</th><th>وضعیت</th><th>کلمه</th><th>شهر</th><th>زمان</th><th>لینک</th>
+          <th>عنوان</th><th>شماره</th><th>وضعیت</th><th>چت</th><th>کلمه</th><th>شهر</th><th>زمان</th><th>لینک</th>
         </tr></thead>
         <tbody id="leads-body"></tbody>
       </table>
@@ -320,7 +324,8 @@ async function api(path, opt = {}) {
 function toast(msg, ok=true){ const t=$('toast'); t.textContent=msg;
   t.style.background = ok ? '#2e9e5b' : '#d9534f'; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 3500); }
-async function act(p, body){ try{ const r = await api(p,{method:'POST',body:JSON.stringify(body||{})});
+async function act(p, body, method){ try{
+  const r = await api(p,{method: method||'POST', body: (method==='GET'?undefined:JSON.stringify(body||{}))});
   toast(r.message||'انجام شد'); return true; }catch(e){ toast('❌ '+e.message, false); return false; } }
 
 /* ───────────────────────── تب‌ها ───────────────────────── */
@@ -345,6 +350,11 @@ async function refreshStatus(){
     $('k-queue').textContent = s.queue;
     $('k-chat').textContent = s.chat_queue;
     $('k-today').innerHTML = s.phones_today + `<small>${tt('شماره گرفته‌شده امروز','numbers fetched today')}</small>`;
+    const bd = s.breakdown || {};
+    if ($('k-total')) $('k-total').textContent = bd.total ?? s.total_leads ?? 0;
+    if ($('k-found')) $('k-found').textContent = bd.contact_found ?? s.phones_found ?? 0;
+    if ($('k-hidden')) $('k-hidden').textContent = bd.no_contact ?? s.chat_queue ?? 0;
+    if ($('k-failed')) $('k-failed').textContent = bd.failed ?? 0;
     $('btn-pause').disabled = !s.running;
     $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
     // اکانت‌ها در داشبورد
@@ -425,7 +435,7 @@ async function kwAdd(){
   if (await act('/api/keywords',{keyword:kw, cities})) { $('kw-input').value=''; kwLoad(); }
 }
 async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
-async function kwDel(id){ if(await act(`/api/keywords/${id}`,{method:'DELETE'})) kwLoad(); }
+async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwLoad(); }
 
 /* ───────────────────────── پیام‌ها ───────────────────────── */
 async function tplLoad(){ try{ const s=await api('/api/templates');
@@ -447,8 +457,11 @@ async function leadsLoad(filter){
                   legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
                   removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
+      const chatBtn = l.phone_status==='hidden'
+        ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>`
+        : (l.chat_status||'—');
       return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
-        <td>${st}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
+        <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>
         <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">${tt('مشاهده ↗','view ↗')}</a></td></tr>`;
     }).join('');
@@ -521,6 +534,7 @@ setInterval(()=>{ refreshStatus();
 const FA_EN = {
   "سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار":"Smart system to collect leads & phone numbers from Divar ads",
   "داشبورد":"Dashboard","اکانت‌ها":"Accounts","کلمات کلیدی":"Keywords","پیام‌ها":"Messages",
+  "کل سرنخ‌ها":"Total leads","شماره پیدا شده":"Contact found","بدون شماره":"No contact","خطا":"Failed",
   "سرنخ‌ها":"Leads","تنظیمات":"Settings","بررسی اتصال کامل":"Full connection check","لاگ‌ها":"Logs",
   "وضعیت مانیتور":"Monitor status","در صف شماره‌گیری":"Phone queue",
   "لیست چت (فقط چت)":"Chat list (chat-only)","شماره‌های امروز":"Numbers today",

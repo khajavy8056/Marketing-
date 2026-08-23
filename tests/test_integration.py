@@ -47,11 +47,11 @@ class TestE2E(unittest.TestCase):
         MockDivar.captcha_after = {"a": 1}
         # آگهی‌های اول: ۵ عدد (۲ تای فقط چت)
         MockDivar.add_posts([
-            {"token": "p01", "title": "آگهی ۱", "has_chat": True},
-            {"token": "p02chat", "title": "آگهی ۲ فقط چت", "has_chat": True},
-            {"token": "p03", "title": "آگهی ۳", "has_chat": True},
-            {"token": "p04", "title": "آگهی ۴", "has_chat": True},
-            {"token": "p05chat", "title": "آگهی ۵ فقط چت", "has_chat": True},
+            {"token": "p01", "title": "تست آگهی ۱", "has_chat": True},
+            {"token": "p02chat", "title": "تست آگهی ۲ فقط چت", "has_chat": True},
+            {"token": "p03", "title": "تست آگهی ۳", "has_chat": True},
+            {"token": "p04", "title": "تست آگهی ۴", "has_chat": True},
+            {"token": "p05chat", "title": "تست آگهی ۵ فقط چت", "has_chat": True},
         ])
         self.srv = start_mock()
         port = self.srv.server_address[1]
@@ -107,8 +107,8 @@ class TestE2E(unittest.TestCase):
 
         # ۳) آگهی جدید لحظه‌ای می‌آید → دور بعد می‌گیردش
         MockDivar.add_posts([
-            {"token": "p06", "title": "آگهی جدید ۶", "has_chat": True},
-            {"token": "p07chat", "title": "آگهی جدید ۷ چت", "has_chat": True},
+            {"token": "p06", "title": "تست آگهی جدید ۶", "has_chat": True},
+            {"token": "p07chat", "title": "تست آگهی جدید ۷ چت", "has_chat": True},
         ])
         deadline = time.time() + 15
         while time.time() < deadline:

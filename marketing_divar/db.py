@@ -29,7 +29,25 @@ CREATE TABLE IF NOT EXISTS leads (
     lead_status TEXT DEFAULT 'new',       -- new|contacted|replied|converted|ignored
     notes TEXT,
     first_seen_at TEXT,
-    phone_checked_at TEXT
+    phone_checked_at TEXT,
+    description TEXT,
+    matched_keywords TEXT,
+    published_at TEXT,
+    chat_status TEXT DEFAULT 'not_available',
+    retry_count INTEGER DEFAULT 0,
+    last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS operations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT,
+    account TEXT,
+    operation TEXT,
+    result TEXT,
+    phone TEXT,
+    error TEXT,
+    retry_count INTEGER DEFAULT 0,
+    started_at TEXT,
+    finished_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
 CREATE INDEX IF NOT EXISTS idx_leads_keyword ON leads(keyword);
@@ -102,12 +120,59 @@ def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
     return quota_today(con)[field]
 
 
+_LEAD_MIGRATIONS = (
+    ("description", "TEXT"),
+    ("matched_keywords", "TEXT"),
+    ("published_at", "TEXT"),
+    ("chat_status", "TEXT DEFAULT 'not_available'"),
+    ("retry_count", "INTEGER DEFAULT 0"),
+    ("last_error", "TEXT"),
+)
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """ستون‌های جدید را به دیتابیس‌های قدیمی اضافه می‌کند (بدون دست‌زدن به داده)."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(leads)")}
+    for name, typ in _LEAD_MIGRATIONS:
+        if name not in cols:
+            con.execute(f"ALTER TABLE leads ADD COLUMN {name} {typ}")
+    con.commit()
+
+
 def connect(db_path: str = "data/divar_leads.db") -> sqlite3.Connection:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
+    _migrate(con)
     return con
+
+
+def lead_exists(con: sqlite3.Connection, token: str) -> bool:
+    return con.execute("SELECT 1 FROM leads WHERE token=?", (token,)).fetchone() is not None
+
+
+def reclaim_stuck_processing(con: sqlite3.Connection) -> int:
+    """بعد از Restart، Jobهای رهاشدهٔ processing را به صف برمی‌گرداند."""
+    cur = con.execute(
+        "UPDATE leads SET phone_status='pending' WHERE phone_status='processing'")
+    con.commit()
+    return cur.rowcount
+
+
+def mark_processing(con: sqlite3.Connection, token: str) -> None:
+    con.execute("UPDATE leads SET phone_status='processing' WHERE token=?", (token,))
+    con.commit()
+
+
+def log_operation(con: sqlite3.Connection, **kw: Any) -> None:
+    con.execute(
+        "INSERT INTO operations (token, account, operation, result, phone, error, "
+        "retry_count, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        (kw.get("token"), kw.get("account"), kw.get("operation"), kw.get("result"),
+         kw.get("phone"), kw.get("error"), int(kw.get("retry_count") or 0),
+         kw.get("started_at") or now(), now()))
+    con.commit()
 
 
 def now() -> str:
@@ -117,12 +182,18 @@ def now() -> str:
 def upsert_lead(con: sqlite3.Connection, post: Dict[str, Any],
                 keyword: str, city: str) -> bool:
     """درج سرنخ جدید؛ اگر توکن قبلاً بوده، چیزی تغییر نمی‌کند. True = جدید."""
+    chat_st = "available" if post.get("has_chat") else "not_available"
     cur = con.execute(
         "INSERT OR IGNORE INTO leads "
-        "(token, title, subtitle, url, keyword, city, has_chat, first_seen_at) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(token, title, subtitle, url, keyword, city, has_chat, first_seen_at, "
+        " description, matched_keywords, published_at, chat_status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (post["token"], post.get("title"), post.get("subtitle"),
-         post.get("url"), keyword, str(city), int(bool(post.get("has_chat"))), now()))
+         post.get("url"), keyword, str(city), int(bool(post.get("has_chat"))), now(),
+         post.get("description") or "",
+         post.get("matched_keywords") or keyword,
+         post.get("published_at") or post.get("bottom") or "",
+         chat_st))
     return cur.rowcount > 0
 
 
@@ -179,8 +250,9 @@ def stats(con: sqlite3.Connection) -> List[sqlite3.Row]:
 
 def export_csv(con: sqlite3.Connection, path: str,
                only_with_phone: bool = False) -> int:
-    q = ("SELECT token, title, subtitle, phone, phone_status, keyword, city, "
-         "lead_status, url, first_seen_at FROM leads")
+    q = ("SELECT token, title, subtitle, description, phone, phone_status, keyword, "
+         "matched_keywords, city, lead_status, chat_status, url, first_seen_at, "
+         "phone_checked_at, published_at FROM leads")
     if only_with_phone:
         q += " WHERE phone_status='found'"
     q += " ORDER BY id DESC"
@@ -188,8 +260,10 @@ def export_csv(con: sqlite3.Connection, path: str,
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8-sig") as f:  # utf-8-sig برای اکسل
         w = csv.writer(f)
-        w.writerow(["token", "title", "subtitle", "phone", "phone_status",
-                    "keyword", "city", "lead_status", "url", "first_seen_at"])
+        w.writerow(["token", "title", "subtitle", "description", "phone",
+                    "phone_status", "keyword", "matched_keywords", "city",
+                    "lead_status", "chat_status", "url", "first_seen_at",
+                    "phone_checked_at", "published_at"])
         for r in rows:
             w.writerow(list(r))
     return len(rows)

@@ -32,7 +32,7 @@ python -m marketing_divar.web        # مرورگر باز می‌شود: http:/
 - لینوکس: `scripts/build_exe.sh` → خروجی `dist/DivarLead`
 - برای انتشار در GitHub: فایل خروجی را در بخش **Releases** پروژه ضمیمه کنید.
 
-## 🧪 تست‌ها (۳۰ تست — همه پاس)
+## 🧪 تست‌ها (۵۸+ تست)
 ```bash
 python -m unittest discover tests
 ```
