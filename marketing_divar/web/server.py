@@ -231,7 +231,11 @@ def monitor_start(req: MonitorStart):
         log("info", "حالت «موارد موجود هم گرفته شوند» فعال شد")
 
     mon = Monitor(cfg, specs, db_path=DB_PATH, accounts_dir=ACCOUNTS_DIR,
-                  interactive=False, base_url=_base_url())
+                  interactive=False, base_url=_base_url(),
+                  on_event=lambda level, msg: logging_util.log(
+                      "warning" if level == "warning" else
+                      ("error" if level == "error" else
+                       ("success" if level == "success" else "info")), msg))
     _state.update(monitor=mon, started_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                   include_existing=req.include_existing)
     t = threading.Thread(target=_run_monitor, args=(mon,), daemon=True)

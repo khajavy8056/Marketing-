@@ -83,9 +83,34 @@ class DivarClient:
         self.base = base_url or default_base()
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": UA, "Accept": "application/json"})
+        self._direct_forced = False  # پس از خطای پروکسی، اتصال مستقیم می‌شود
         self.token: Optional[str] = None
         self.limiter = limiter or RateLimiter()
         self._load_session()
+
+    # ------------------------------------------------- درخواست خودترمیم -- 
+    def _fetch(self, method: str, url: str, **kw):
+        """درخواست HTTP با خودترمیمی پروکسی.
+
+        روی ویندوز، requests پروکسی سیستم (VPN/v2ray) را خودکار برمی‌دارد؛
+        اگر آن پروکسی قطع/خارج از ایران باشد همه درخواست‌‌ها به دیوار می‌میرند
+        (دیوار فقط با IP ایران جواب می‌دهد). در صورت خطای پروکسی، یک‌بار بدون
+        پروکسی (اتصال مستقیم) تلاش می‌کنیم و همان حالت را نگه می‌داریم.
+        """
+        fn = self.http.get if method.upper() == "GET" else self.http.post
+        try:
+            return fn(url, **kw)
+        except requests.exceptions.ProxyError:
+            if self._direct_forced:
+                raise
+            self._direct_forced = True
+            self.http.trust_env = False
+            try:
+                self.http.proxies.clear()
+            except Exception:
+                pass
+            print("[i] پروکسی سیستم پاسخ نداد — ادامه با اتصال مستقیم (بدون پروکسی)")
+            return fn(url, **kw)
 
     # ------------------------------------------------------------- session --
     def _load_session(self) -> None:
@@ -125,7 +150,7 @@ class DivarClient:
     # --------------------------------------------------------------- login --
     def request_otp(self, phone: str) -> bool:
         """گام ۱: درخواست کد تایید پیامکی — v5 اصلی، v8 پشتیبان."""
-        r = self.http.post(f"{self.base}/v5/auth/authenticate",
+        r = self._fetch("POST", f"{self.base}/v5/auth/authenticate",
                            json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
             return True
@@ -134,7 +159,7 @@ class DivarClient:
                                     r.status_code, r.text)
         # مسیر جدید v8 (کوکی‌محور) — اگر v5 غیرفعال شده باشد
         try:
-            r2 = self.http.post(
+            r2 = self._fetch("POST", 
                 f"{self.base}/v8/authenticate/signinup/code",
                 json={"phoneNumber": str(phone)},
                 headers={"st-auth-mode": "cookie"}, timeout=25)
@@ -148,7 +173,7 @@ class DivarClient:
 
     def confirm_otp(self, phone: str, code: str) -> str:
         """گام ۲: تأیید کد و دریافت توکن — v5 اصلی، v8 پشتیبان."""
-        r = self.http.post(f"{self.base}/v5/auth/confirm",
+        r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
                            json={"phone": str(phone), "code": str(code)},
                            timeout=25)
         if r.status_code in (200, 201):
@@ -159,7 +184,7 @@ class DivarClient:
                 return tok
         # مسیر جدید v8 — سشن کوکی‌محور (sAccessToken/sFrontToken)
         try:
-            r2 = self.http.post(
+            r2 = self._fetch("POST", 
                 f"{self.base}/v8/authenticate/signinup/code/consume",
                 json={"code": str(code), "phoneNumber": str(phone)},
                 headers={"st-auth-mode": "cookie"}, timeout=25)
@@ -206,8 +231,9 @@ class DivarClient:
         if r.status_code == 403 and looks_like_captcha(r.text):
             raise DivarBlockedError("چالش کپچا فعال شد (403)", 403, r.text)
         if r.status_code == 403:
-            raise DivarBlockedError("دسترسی ممنوع (403) — ممکن است بلاک IP باشد",
-                                    403, r.text)
+            raise DivarBlockedError(
+                "دسترسی ممنوع (403) — اگر VPN/پروکسی روشن است خاموش کنید؛ "
+                "دیوار فقط با IP ایران جواب می‌دهد", 403, r.text)
 
     def search(self, query: str, cities: Optional[List[int]] = None,
                page: int = 1) -> List[Dict[str, Any]]:
@@ -218,8 +244,12 @@ class DivarClient:
             params["cities"] = ",".join(str(c) for c in cities)
         if page and page > 1:
             params["page"] = page
-        r = self.http.get(f"{self.base}/v8/web-search/iran", params=params, timeout=25)
+        r = self._fetch("GET", f"{self.base}/v8/web-search/iran", params=params, timeout=25)
         self._check_block(r)
+        if r.status_code in (401, 403, 451):
+            raise DivarBlockedError(
+                f"دیوار جستجو را رد کرد (HTTP {r.status_code}) — اگر VPN/پروکسی روشن "
+                "است خاموش کنید؛ دیوار فقط با IP ایران جواب می‌دهد", status=r.status_code)
         r.raise_for_status()
         return self._extract_post_list(r.json())
 
@@ -247,7 +277,7 @@ class DivarClient:
     def get_post(self, token: str) -> Dict[str, Any]:
         """جزئیات کامل آگهی."""
         self.limiter.wait("search")
-        r = self.http.get(f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
+        r = self._fetch("GET", f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
         self._check_block(r)
         r.raise_for_status()
         return r.json()
@@ -255,7 +285,7 @@ class DivarClient:
     # ------------------------------------------------------------ phone 🔑 --
     def get_contact_uuid(self, token: str) -> Optional[str]:
         """گام ۱ فلوی v2: شناسه تماس از جزئیات آگهی (بدون لاگین)."""
-        r = self.http.get(f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
+        r = self._fetch("GET", f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
         if r.status_code == 404:
             return None  # آگهی حذف شده
         if r.status_code != 200:
@@ -293,7 +323,7 @@ class DivarClient:
                       auth: Dict[str, str]) -> Dict[str, Any]:
         """فلوی جدید دو مرحله‌ای (contact_info_v2 + Bearer)."""
         try:
-            r = self.http.post(
+            r = self._fetch("POST", 
                 f"{self.base}/v8/postcontact/web/contact_info_v2/{token}",
                 headers={**auth, "Authorization": f"Bearer {self.token}",
                          "Content-Type": "application/json"},
@@ -336,7 +366,7 @@ class DivarClient:
 
     def _get_phone_v1(self, token: str) -> Dict[str, Any]:
         """فلوی قدیمی (پشتیبان): GET contact_info با Basic."""
-        r = self.http.get(f"{self.base}/v8/postcontact/web/contact_info/{token}",
+        r = self._fetch("GET", f"{self.base}/v8/postcontact/web/contact_info/{token}",
                           headers=self._auth_headers(), timeout=25)
         if r.status_code == 401:
             raise DivarAuthError("توکن منقضی/رد شد — دوباره لاگین کنید")

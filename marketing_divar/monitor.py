@@ -67,7 +67,8 @@ class Monitor:
                  db_path: str = "data/divar_leads.db",
                  accounts_dir: str = "data/accounts",
                  interactive: bool = True,
-                 base_url: Optional[str] = None):
+                 base_url: Optional[str] = None,
+                 on_event=None):
         self.cfg = cfg
         self.keywords = keywords  # [{"keyword": "...", "cities": [1], "pages": 1}]
         self.db_path = db_path
@@ -83,9 +84,18 @@ class Monitor:
             search_delay=cfg.get("search_delay_sec", 5),
             page_delay=cfg.get("search_page_delay_sec", 8),
             jitter=cfg.get("jitter_sec", 4))
+        self.on_event = on_event  # (level, message) — مثلاً برای رخدادنمای وب
         self._clients: Dict[str, DivarClient] = {}
         self._anon: Optional[DivarClient] = None
         self._notified_all_stuck = False
+
+    def _ev(self, level: str, message: str) -> None:
+        """رخداد را به رابط وب (در صورت وجود) می‌فرستد؛ خطای خودش بی‌اثر است."""
+        if self.on_event:
+            try:
+                self.on_event(level, message)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------ کلاینت‌ها --
     def client_for(self, name: str) -> DivarClient:
@@ -121,9 +131,15 @@ class Monitor:
                     except DivarBlockedError as e:
                         notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "
                                          "watch_interval را در config.json بزرگ کنید")
+                        self._ev("error", f"جستجو متوقف شد: {e}")
                         return new_total
                     except Exception as e:
-                        print(f"[!] جستجو «{kw}» صفحه {page}: {e}")
+                        hint = ""
+                        if any(k in type(e).__name__ for k in ("Proxy", "Connect", "Timeout", "SSLError")) \
+                                or "proxy" in str(e).lower():
+                            hint = " — اتصال برقرار نشد؛ VPN/پروکسی و اینترنت را بررسی کنید"
+                        print(f"[!] جستجو «{kw}» صفحه {page}: {e}{hint}")
+                        self._ev("error", f"خطای جستجوی «{kw}»: {e}{hint}")
                         break
                     new_here = 0
                     for p in posts:
@@ -149,6 +165,7 @@ class Monitor:
         con = connect(self.db_path)
         try:
             if self._global_quota_left(con) <= 0:
+                self._ev("warning", f"سهمیه شماره‌گیری امروز ({self.cfg.get('ip_daily_limit', 240)}) پر شد")
                 notify(self.cfg, f"سهمیه کلی امروز ({self.cfg.get('ip_daily_limit', 240)}) "
                                  "پر شد — فردا ادامه می‌دهیم.")
                 return "quota_done"
@@ -161,6 +178,8 @@ class Monitor:
                     snap = self.mgr.snapshot(self.db_path)
                     stuck = ", ".join(f"{a['name']}({a['status']})"
                                       for a in snap if a["status"] != "active") or "سهمیه پر"
+                    self._ev("error", f"هیچ اکانت آماده نیست: {stuck} — "
+                                      "اگر کپچاست از بخش اکانت‌ها حل و آزاد کنید")
                     notify(self.cfg, f"هیچ اکانت آماده نیست: {stuck}. "
                                      "اگر کپچاست: در مرورگر حل کنید و بنویسید: release <نام>")
                     self._notified_all_stuck = True
@@ -172,6 +191,7 @@ class Monitor:
                 res = cl.get_phone(row["token"])
             except DivarAuthError as e:
                 self.mgr.set_status(name, "relogin", note=str(e))
+                self._ev("error", f"اکانت {name} نیاز به لاگین مجدد دارد")
                 notify(self.cfg, f"اکانت {name} نیاز به لاگین مجدد دارد — "
                                  f"در ترمینال دیگر: accounts login {name}")
                 return "wait"
@@ -183,11 +203,18 @@ class Monitor:
                     name, status,
                     cooldown_sec=self.cfg.get("cooldown_on_block_min", 30) * 60,
                     note=f"{e} (status={e.status})")
+                self._ev("warning" if status == "captcha" else "error",
+                         f"اکانت {name} → {status} ({e}). بقیه اکانت‌ها ادامه می‌دهند")
                 notify(self.cfg, f"اکانت {name} → {status} ({e}). "
                                  f"بقیه اکانت‌ها ادامه می‌دهند. بعد از حل: release {name}")
                 return "wait"
             set_phone(con, row["token"], res)
             bump_quota(con, "phones")
+            st0 = res.get("status")
+            if st0 == "found":
+                self._ev("success", f"📞 شماره پیدا شد: {row['title'][:40]} → {res['phone']}")
+            elif st0 == "hidden":
+                self._ev("info", f"💬 فقط چت: {row['title'][:40]} (به لیست چت رفت)")
             self.mgr.record_use(self.db_path, name)
             con.commit()
             st = res.get("status")
@@ -238,6 +265,9 @@ class Monitor:
 
     def run(self) -> None:
         interval = self.cfg.get("watch_interval_sec", 300)
+        self._ev("success", f"مانیتور شروع شد — {len(self.keywords)} کلمه‌کلیدی، "
+                            f"هر {interval} ثانیه یک دور؛ اکانت‌ها: "
+                            f"{', '.join(self.mgr.list_accounts()) or 'هیچ!'}")
         print(f"🚀 مانیتور شروع شد — {len(self.keywords)} کلمه‌کلیدی، هر {interval}s؛ "
               f"اکانت‌ها: {', '.join(self.mgr.list_accounts()) or 'هیچ! (accounts login)'}")
         if self.interactive:
@@ -254,6 +284,18 @@ class Monitor:
                     print(f"  🆕 {new} سرنخ جدید وارد صف شد")
                 self.drain()
                 self.print_status()
+                q = None
+                try:
+                    _c = connect(self.db_path)
+                    try:
+                        q = quota_today(_c)
+                    finally:
+                        _c.close()
+                except Exception:
+                    pass
+                if q:
+                    self._ev("success", f"دور {self.tick} تمام شد — امروز: "
+                                        f"{q['searches']} جستجو، {q['phones']} شماره")
             except KeyboardInterrupt:
                 break
             except Exception as e:
