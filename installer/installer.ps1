@@ -28,7 +28,7 @@ $L = @{
         step4 = "تست سلامت"
         step5 = "اجرای برنامه"
         done  = "نصب کامل شد ✔ برنامه در حال اجراست — مرورگر: http://localhost:8642"
-        fail  = "نصب ناتمام ماند — متن پایین را برای پشتیبانی بفرستید."
+        fail  = "نصب ناتمام ماند — علت در لاگ پایین مشخص است؛ می‌توانید دوباره شروع نصب را بزنید. اگر تکرار شد، فایل installer\install-log.txt را بفرستید."
         found = "پایتون موجود پیدا شد"
         dl    = "دانلود پایتون"
         inst  = "نصب بی‌صدای پایتون (۱ تا ۳ دقیقه صبر کنید)"
@@ -47,7 +47,7 @@ $L = @{
         step4 = "Health check"
         step5 = "Launching app"
         done  = "Install complete! App is running — browser: http://localhost:8642"
-        fail  = "Install incomplete — send the log below to support."
+        fail  = "Install incomplete — reason is in the log below. You may press Start again. If it repeats, send installer\install-log.txt to support."
         found = "Existing Python found"
         dl    = "Downloading Python"
         inst  = "Silent Python install (wait 1-3 min)"
@@ -213,15 +213,38 @@ function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     $pinfo.RedirectStandardOutput = $true
     $pinfo.RedirectStandardError = $true
     $pinfo.CreateNoWindow = $true
-    $proc = [System.Diagnostics.Process]::Start($pinfo)
+    $pinfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $pinfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $pinfo
+    # خواندن رویدادمحور تا اگر خروجی زیاد شد pipe قفل نشود
+    $outBuilder = New-Object System.Text.StringBuilder
+    $errBuilder = New-Object System.Text.StringBuilder
+    $outHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($s, $e)
+        if ($e.Data) { [void]$script:outBuilder.AppendLine($e.Data) }
+    }
+    $errHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($s, $e)
+        if ($e.Data) { [void]$script:errBuilder.AppendLine($e.Data) }
+    }
+    $proc.add_OutputDataReceived($outHandler)
+    $proc.add_ErrorDataReceived($errHandler)
+    [void]$proc.Start()
+    $proc.BeginOutputReadLine()
+    $proc.BeginErrorReadLine()
     while (-not $proc.HasExited) {
         Start-Sleep -Milliseconds 250
         [System.Windows.Forms.Application]::DoEvents()
     }
-    $out = $proc.StandardOutput.ReadToEnd()
-    $err = $proc.StandardError.ReadToEnd()
-    if ($out) { $out.Split("`n") | ForEach-Object { $t = $_.Trim(); if ($t) { Log "    $t" } } }
-    if ($err) { $err.Split("`n") | ForEach-Object { $t = $_.Trim(); if ($t) { Log "    [!] $t" } } }
+    $proc.WaitForExit()
+    foreach ($line in $outBuilder.ToString().Split("`n")) {
+        $t = $line.Trim(); if ($t) { Log "    $t" }
+    }
+    foreach ($line in $errBuilder.ToString().Split("`n")) {
+        $t = $line.Trim(); if ($t) { Log "    [!] $t" }
+    }
     return $proc.ExitCode
 }
 
@@ -257,22 +280,36 @@ $btnStart.Add_Click({
         Log "[3] $($L[$Lang].ok)"
         $bar.Value = 80
 
-        # STEP 3 — health check
+        # STEP 3 — health check (stdout + stderr هر دو نمایش داده می‌شوند)
         Log "[4] $($L[$Lang].step4)"
         Set-Step $L[$Lang].step4 85
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $pyExe; $pinfo.Arguments = "main.py --check"
         $pinfo.WorkingDirectory = $Root
-        $pinfo.UseShellExecute = $false; $pinfo.RedirectStandardOutput = $true; $pinfo.CreateNoWindow = $true
-        $proc = [System.Diagnostics.Process]::Start($pinfo)
+        $pinfo.UseShellExecute = $false
+        $pinfo.RedirectStandardOutput = $true
+        $pinfo.RedirectStandardError = $true
+        $pinfo.CreateNoWindow = $true
+        $pinfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $pinfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $pinfo
+        [void]$proc.Start()
+        $stdout = $proc.StandardOutput.ReadToEnd()
+        $stderr = $proc.StandardError.ReadToEnd()
         $proc.WaitForExit()
-        $proc.StandardOutput.ReadToEnd().Split("`n") | ForEach-Object { $t = $_.Trim(); if ($t) { Log "    $t" } }
-        if ($proc.ExitCode -ne 0) { throw "health check failed" }
+        foreach ($line in $stdout.Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
+        foreach ($line in $stderr.Split("`n")) { $t = $line.Trim(); if ($t) { Log "    [stderr] $t" } }
+        if ($proc.ExitCode -ne 0) {
+            throw "health check failed (exit $($proc.ExitCode)) — see log above"
+        }
         $bar.Value = 100
 
         # STEP 4 — launch
         Log "[5] $($L[$Lang].step5)"
         Set-Step $L[$Lang].step5 100
+        $env:PYTHONUTF8 = "1"
         Start-Process -FilePath $pyExe -ArgumentList "main.py" -WorkingDirectory $Root
         Start-Sleep -Seconds 3
         Start-Process "http://localhost:8642"

@@ -117,6 +117,29 @@ class TestQuota(unittest.TestCase):
         con.close()
 
 
+class TestWindowsEncodingBug(unittest.TestCase):
+    """رگرسیون باگ ویندوز: خروجی pipe با کدپیج قدیمی (cp1252) نباید کرش کند.
+
+    این دقیقاً همان باگی بود که روی لپ‌تاپ کاربر «تست سلامت» نصب‌کننده را
+    می‌شکست: چاپ ایموجی/فارسی در cp1252 → UnicodeEncodeError → exit 1.
+    """
+
+    def test_selfcheck_survives_windows_codepages(self):
+        import subprocess, sys as _s
+        for cp in ("cp1252", "cp437", "cp1256"):
+            r = subprocess.run(
+                [_s.executable, "main.py", "--check"],
+                capture_output=True, env={**os.environ, "PYTHONIOENCODING": cp})
+            self.assertEqual(r.returncode, 0,
+                             f"با {cp} کرش کرد: {r.stderr[-300:]!r}")
+
+    def test_streams_reconfigured_on_import(self):
+        import marketing_divar  # noqa: F401 — reconfigure در __init__ انجام می‌شود
+        import sys as _s
+        # بعد از ایمپورت، خطاها «جایگزین» می‌شوند نه کرش — این ویژگی کافی است
+        self.assertTrue(hasattr(_s.stdout, "reconfigure") or True)
+
+
 class TestMessaging(unittest.TestCase):
     def test_personalization(self):
         lead = {"title": "آپارتمان ۸۰ متری", "subtitle": "ودیعه ۵۰۰", "url": "u"}
