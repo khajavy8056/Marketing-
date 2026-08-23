@@ -143,7 +143,7 @@ class TestTransportChain(unittest.TestCase):
             name = "requests"
 
             def request(self, method, url, **kw):
-                if "web-search" in url:
+                if "web-search" in url or "/v8/search/" in url:
                     raise requests.exceptions.ConnectionError("api dead")
                 return good_html
 
@@ -151,6 +151,51 @@ class TestTransportChain(unittest.TestCase):
         posts = c.search("آپارتمان")
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0]["token"], "QY8b9X")
+
+    def test_blocking_view_then_html(self):
+        from marketing_divar.client import is_blocking_view
+        blocking = _Resp(200, payload={
+            "widget_list": [{"widget_type": "BLOCKING_VIEW",
+                             "data": {"title": "نیاز به بروزرسانی"}}],
+            "last_post_date": -1,
+        })
+        self.assertTrue(is_blocking_view(blocking.json()))
+        c = self._client()
+        html = _Resp(200, text='](https://divar.ir/v/%D8%AA%D8%AF%D8%B1%DB%8C%D8%B3/ga84Em-u)')
+
+        class _T:
+            name = "requests"
+
+            def request(self, method, url, **kw):
+                if "web-search" in url:
+                    return blocking
+                if "/v8/search/" in url:
+                    return _Resp(404, payload={})
+                return html
+
+        c._custom_transports = [_T()]
+        posts = c.search("تدریس")
+        self.assertEqual(posts[0]["token"], "ga84Em-u")
+
+    def test_post_v8_search_used_when_get_empty(self):
+        c = self._client()
+        empty = _Resp(200, payload={"web_widgets": {"post_list": []}})
+        posted = _Resp(200, payload={"web_widgets": {"post_list": [
+            {"data": {"token": "gaLuC0dU", "title": "ایفون"}}]}})
+
+        class _T:
+            name = "requests"
+
+            def request(self, method, url, **kw):
+                if "web-search" in url:
+                    return empty
+                if "/v8/search/" in url:
+                    return posted
+                return _Resp(404)
+
+        c._custom_transports = [_T()]
+        posts = c.search("ایفون")
+        self.assertEqual(posts[0]["token"], "gaLuC0dU")
 
 
 if __name__ == "__main__":

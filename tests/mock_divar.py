@@ -115,6 +115,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"widget_list": [
                 {"data": {"title": "شمارهٔ موبایل",
                           "value": MockDivar.to_persian_digits(phone_ascii)}}]})
+        elif u.path.startswith("/v8/search/"):
+            # مسیر جایگزین جامعه: همان لیست آگهی‌های شبیه‌ساز
+            with MockDivar.lock:
+                items = list(reversed(MockDivar.posts))
+            post_list = [{"data": {"token": p["token"], "title": p["title"],
+                                   "has_chat": p["has_chat"]}} for p in items]
+            self._json(200, {"web_widgets": {"post_list": post_list}})
         elif u.path == "/v8/authenticate/signinup/code/consume":
             if body.get("code") == "000000":
                 self._json(401, {"error": "invalid code"})
@@ -155,8 +162,23 @@ class Handler(BaseHTTPRequestHandler):
             if "gone" in token:
                 self._json(404, {})
             else:
-                # فلوی v2: uuid تماس از جزئیات آگهی (بدون لاگین)
-                self._json(200, {"contact": {"contact_uuid": "uuid-" + token}})
+                # فلوی v2: uuid تماس — هم شکل قدیمی هم شکل زندهٔ تو‌در‌تو
+                self._json(200, {"contact": {
+                    "contact_uuid": "uuid-" + token,
+                    "action_log": {"server_side_info": {"info": {
+                        "post_token": token,
+                        "contact_uuid": "uuid-" + token}}}}})
+        elif u.path.startswith("/s/"):
+            with MockDivar.lock:
+                items = list(reversed(MockDivar.posts))
+            bits = [f'<a href="/v/{p["token"]}/{p["token"]}">{p["title"]}</a>'
+                    for p in items]
+            body = ("<html><body>" + "".join(bits) + "</body></html>").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif u.path.startswith("/v8/postcontact/web/contact_info_v2/"):
             pass  # در do_POST مدیریت می‌شود (متد POST است)
         elif u.path.startswith("/v8/postcontact/web/contact_info/"):

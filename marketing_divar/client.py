@@ -223,6 +223,66 @@ def looks_like_captcha(text: str) -> bool:
     return any(m in t for m in CAPTCHA_MARKERS)
 
 
+def is_blocking_view(data: Any) -> bool:
+    """پاسخ زنده ۱۴۰۵/۰۶: GET /v8/web-search فقط BLOCKING_VIEW می‌دهد (نسخه قدیمی)."""
+    if not isinstance(data, dict):
+        return False
+    widgets = data.get("widget_list") or []
+    if isinstance(widgets, list):
+        for w in widgets:
+            if isinstance(w, dict) and w.get("widget_type") == "BLOCKING_VIEW":
+                return True
+    return False
+
+
+def extract_contact_uuid(data: Any) -> Optional[str]:
+    """uuid تماس از posts-v2.
+
+    شکل زنده ۱۴۰۵/۰۶:
+      contact.action_log.server_side_info.info.contact_uuid
+    شکل قدیمی/شبیه‌ساز:
+      contact.contact_uuid
+    """
+    if not isinstance(data, dict):
+        return None
+    contact = data.get("contact")
+    if isinstance(contact, dict):
+        for key in ("contact_uuid", "contactUuid"):
+            v = contact.get(key)
+            if _looks_like_uuid(v):
+                return str(v)
+        found = _walk_contact_uuid(contact)
+        if found:
+            return found
+    for key in ("contact_uuid", "contactUuid"):
+        v = data.get(key)
+        if _looks_like_uuid(v):
+            return str(v)
+    return _walk_contact_uuid(data)
+
+
+def _looks_like_uuid(v: Any) -> bool:
+    return isinstance(v, str) and len(v) >= 8
+
+
+def _walk_contact_uuid(obj: Any, depth: int = 0) -> Optional[str]:
+    if depth > 8 or obj is None:
+        return None
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in ("contact_uuid", "contactUuid") and _looks_like_uuid(v):
+                return str(v)
+            found = _walk_contact_uuid(v, depth + 1)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _walk_contact_uuid(item, depth + 1)
+            if found:
+                return found
+    return None
+
+
 class DivarClient:
     """کلاینت سشن‌دار دیوار با ذخیره‌سازی توکن لاگین."""
 
@@ -400,7 +460,11 @@ class DivarClient:
 
     def search(self, query: str, cities: Optional[List[int]] = None,
                page: int = 1) -> List[Dict[str, Any]]:
-        """جستجوی کلمه‌کلیدی در آگهی‌ها (بدون لاگین، ارزان)."""
+        """جستجوی کلمه‌کلیدی — چند مسیر تا یکی جواب بدهد.
+
+        ۱) JSON وب‌سرچ (اگر دیوار هنوز post_list بدهد)
+        ۲) HTML عمومی سایت (مسیر زندهٔ تأییدشده ۱۴۰۵/۰۶)
+        """
         self.limiter.wait("search")
         params: Dict[str, Any] = {"q": query}
         if cities:
@@ -409,7 +473,9 @@ class DivarClient:
             params["page"] = page
         try:
             r = self._fetch("GET", f"{self.base}/v8/web-search/iran",
-                            params=params, timeout=25)
+                            params=params, timeout=25,
+                            headers={"Accept-Language": "fa-IR,fa;q=0.9",
+                                     "Referer": "https://divar.ir/"})
             self._check_block(r)
             if r.status_code in (401, 403, 451):
                 raise DivarBlockedError(
@@ -417,27 +483,44 @@ class DivarClient:
                     "روشن است خاموش کنید؛ دیوار فقط با IP ایران جواب می‌دهد",
                     status=r.status_code)
             r.raise_for_status()
-            posts = self._extract_post_list(r.json())
-            if posts:
-                return posts
-            _log("warning", "API جستجو ۰ آگهی داد — امتحان HTML خود سایت دیوار")
+            data = r.json()
+            if is_blocking_view(data):
+                _log("warning", "API جستجو BLOCKING_VIEW داد (نسخه قدیمی) — مسیرهای بعدی")
+            else:
+                posts = self._extract_post_list(data)
+                if posts:
+                    return posts
+                _log("warning", "API جستجو ۰ آگهی داد — مسیرهای بعدی")
         except DivarBlockedError:
             raise  # بلاک واقعی: فشار نیاوریم
         except Exception as e:
             _log("warning", f"API جستجو ناموفق ({type(e).__name__}: {str(e)[:100]}) "
-                            "— امتحان HTML خود سایت دیوار")
-        # ── راه دوم: خواندن HTML صفحهٔ جستجوی خود سایت دیوار ──
+                            "— مسیرهای بعدی")
+        try:
+            posts = self._search_post_v8(query, cities, page)
+            if posts:
+                return posts
+        except DivarBlockedError:
+            raise
+        except Exception as e:
+            _log("warning", f"POST /v8/search ناموفق ({type(e).__name__}: {str(e)[:80]})")
         return self._search_html(query, cities, page)
 
-    _HTML_PAIR = re.compile(r'href="/v/([^"/]+)/([A-Za-z0-9_-]{4,})"')
+    # href نسبی + URL کامل + لینک مارک‌داون — تأییدشده روی HTML زنده ۱۴۰۵/۰۶
+    _HTML_URL = re.compile(
+        r'(?:https?://(?:www\.)?divar\.ir)?/v/([^"\'/\s?]+)/([A-Za-z0-9_-]{5,16})'
+    )
+    _HTML_SKIP = frozenset({"chat", "rules", "about", "download", "help", "new"})
 
     @staticmethod
     def _parse_search_html(html: str) -> List[Dict[str, Any]]:
-        """استخراج توکن + عنوان (از slug) در HTML صفحهٔ جستجوی سایت دیوار."""
+        """استخراج توکن + عنوان از HTML/مارک‌داون صفحهٔ جستجوی دیوار."""
         import urllib.parse as _up
         posts, seen = [], set()
-        for slug, token in DivarClient._HTML_PAIR.findall(html):
-            if token in seen or token in ("chat", "rules", "about"):
+        for slug, token in DivarClient._HTML_URL.findall(html or ""):
+            if token in seen or token.lower() in DivarClient._HTML_SKIP:
+                continue
+            if slug.startswith("s/") or slug in ("s", "entity"):
                 continue
             seen.add(token)
             title = _up.unquote(slug).replace("-", " ").strip()
@@ -455,14 +538,38 @@ class DivarClient:
         params = {"q": query}
         if page and page > 1:
             params["page"] = page
-        r = self._fetch("GET", url, params=params, timeout=25)
-        if r.status_code != 200:
+        r = self._fetch("GET", url, params=params, timeout=25,
+                        headers={"Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                                 "Accept-Language": "fa-IR,fa;q=0.9"})
+        if r.status_code in (403, 429) or looks_like_captcha(r.text):
             raise DivarBlockedError(
                 f"HTML جستجو هم HTTP {r.status_code} داد", r.status_code, r.text[:200])
+        if r.status_code != 200:
+            _log("warning", f"HTML جستجو HTTP {r.status_code} داد — بدون آگهی")
+            return []
         posts = self._parse_search_html(r.text)
         _log("success" if posts else "warning",
              f"جستجوی HTML سایت: {len(posts)} آگهی پیدا شد" if posts
              else "جستجوی HTML سایت هم ۰ آگهی داد")
+        return posts
+
+    def _search_post_v8(self, query: str, cities=None, page: int = 1) -> List[Dict[str, Any]]:
+        """مسیر جایگزین جامعه: POST /v8/search/{شهر}. اگر شکل عوض شود، خالی برمی‌گردد."""
+        city = city_slug(cities)
+        url = f"{self.base}/v8/search/{city}"
+        payload = {"city": city, "q": query, "page": page or 1,
+                   "json_schema": {"query": query}}
+        r = self._fetch("POST", url, json=payload, timeout=25)
+        self._check_block(r)
+        if r.status_code != 200:
+            _log("warning", f"POST /v8/search HTTP {r.status_code}")
+            return []
+        data = r.json()
+        if is_blocking_view(data):
+            return []
+        posts = self._extract_post_list(data)
+        if posts:
+            _log("success", f"جستجوی POST /v8/search: {len(posts)} آگهی")
         return posts
 
     @staticmethod
@@ -470,11 +577,15 @@ class DivarClient:
         web_widgets = data.get("web_widgets") or {}
         raw = web_widgets.get("post_list") if isinstance(web_widgets, dict) else None
         posts: List[Dict[str, Any]] = []
-        for item in raw or []:
-            d = (item or {}).get("data") or {}
+        seen = set()
+
+        def _add(d: Dict[str, Any]) -> None:
             tok = d.get("token")
-            if not tok:
-                continue
+            if not tok and isinstance(d.get("action"), dict):
+                tok = ((d.get("action") or {}).get("payload") or {}).get("token")
+            if not tok or tok in seen:
+                return
+            seen.add(tok)
             posts.append({
                 "token": tok,
                 "title": d.get("title") or "",
@@ -484,6 +595,15 @@ class DivarClient:
                 "has_chat": bool(d.get("has_chat", False)),
                 "url": f"https://divar.ir/v/{tok}",
             })
+
+        for item in raw or []:
+            _add((item or {}).get("data") or {})
+        for item in data.get("widget_list") or []:
+            if not isinstance(item, dict):
+                continue
+            if item.get("widget_type") == "BLOCKING_VIEW":
+                continue
+            _add(item.get("data") or {})
         return posts
 
     def get_post(self, token: str) -> Dict[str, Any]:
@@ -503,7 +623,7 @@ class DivarClient:
         if r.status_code != 200:
             return None
         try:
-            return (r.json().get("contact") or {}).get("contact_uuid")
+            return extract_contact_uuid(r.json())
         except ValueError:
             return None
     def get_phone(self, token: str) -> Dict[str, Any]:
