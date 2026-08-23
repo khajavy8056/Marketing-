@@ -57,6 +57,9 @@ class TestUIBasics(unittest.TestCase):
         r = client.get("/")
         self.assertEqual(r.status_code, 200)
         self.assertIn("دیوار لید", r.text)
+        self.assertIn("خواجوی لید", r.text)
+        self.assertIn('id="dash-sms-auto"', r.text)
+        self.assertIn("smsAutoToggle", r.text)
         self.assertIn('dir="rtl"', r.text)
         self.assertIn("کلمات کلیدی", r.text)
 
@@ -221,6 +224,12 @@ class TestTemplatesAndSettings(unittest.TestCase):
         r = client.post("/api/telegram/test")
         self.assertEqual(r.status_code, 200)
         self.assertIn("preview", r.json())
+        r = client.post("/api/sms/auto", json={"on": True})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["on"])
+        self.assertIn("sms_auto_on_new", client.get("/api/status").json())
+        client.post("/api/sms/auto", json={"on": False})
+        self.assertFalse(client.get("/api/settings").json()["sms_auto_on_new"])
 
 
 class TestMonitorFlow(unittest.TestCase):

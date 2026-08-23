@@ -140,8 +140,11 @@ def settings_all(db_path: str) -> Dict[str, Any]:
         for r in con.execute("SELECT key, value FROM settings").fetchall():
             if r["key"] in out:
                 cur, default = r["value"], out[r["key"]]
-                out[r["key"]] = (json.loads(cur) if isinstance(default, (int, float, bool))
-                                 else cur)
+                try:
+                    out[r["key"]] = (json.loads(cur) if isinstance(default, (int, float, bool))
+                                     else cur)
+                except Exception:
+                    out[r["key"]] = default
     return out
 
 

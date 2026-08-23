@@ -102,16 +102,26 @@ def chat_queue(con: sqlite3.Connection, keyword: Optional[str] = None,
     return rows[:limit] if limit > 0 else rows
 
 
+def _ensure_quota_sms(con: sqlite3.Connection) -> None:
+    cols = {r[1] for r in con.execute("PRAGMA table_info(quota)")}
+    if "sms" not in cols:
+        con.execute("ALTER TABLE quota ADD COLUMN sms INTEGER DEFAULT 0")
+        con.commit()
+
+
 def quota_today(con: sqlite3.Connection) -> Dict[str, int]:
-    row = con.execute("SELECT phones, searches FROM quota WHERE day=?",
+    _ensure_quota_sms(con)
+    row = con.execute("SELECT phones, searches, sms FROM quota WHERE day=?",
                       (time.strftime("%Y-%m-%d"),)).fetchone()
     return {"phones": row["phones"] if row else 0,
-            "searches": row["searches"] if row else 0}
+            "searches": row["searches"] if row else 0,
+            "sms": (row["sms"] if row and "sms" in row.keys() else 0)}
 
 
 def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
     """افزایش شمارنده روزانه؛ مقدار جدید را برمی‌گرداند."""
-    assert field in ("phones", "searches")
+    assert field in ("phones", "searches", "sms")
+    _ensure_quota_sms(con)
     day = time.strftime("%Y-%m-%d")
     con.execute("INSERT INTO quota (day) VALUES (?) "
                 "ON CONFLICT(day) DO NOTHING", (day,))
@@ -128,6 +138,7 @@ _LEAD_MIGRATIONS = (
     ("chat_status", "TEXT DEFAULT 'not_available'"),
     ("retry_count", "INTEGER DEFAULT 0"),
     ("last_error", "TEXT"),
+    ("sms_status", "TEXT DEFAULT ''"),
 )
 
 

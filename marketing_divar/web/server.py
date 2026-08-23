@@ -32,6 +32,7 @@ from ..db import (chat_queue, connect, pending_phone, quota_today,
                   reclaim_stuck_processing, set_lead_status, stats)
 from ..messaging import build_message
 from ..monitor import Monitor
+from ..sms import sms_ready
 
 DB_PATH = os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db")
 ACCOUNTS_DIR = os.environ.get("DIVAR_ACCOUNTS_DIR", "data/accounts")
@@ -212,11 +213,46 @@ def settings_get():
     return store.settings_all(DB_PATH)
 
 
+def _apply_sms_to_monitor() -> None:
+    mon = _state.get("monitor")
+    if not mon:
+        return
+    s = store.settings_all(DB_PATH)
+    for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+        mon.cfg[k] = s[k]
+
+
 @app.post("/api/settings")
 def settings_update(req: SettingsUpdate):
     saved = [k for k, v in req.values.items() if store.settings_set(DB_PATH, k, v)]
+    _apply_sms_to_monitor()
     log("info", f"تنظیمات ذخیره شد: {', '.join(saved)}")
     return {"ok": True, "saved": saved}
+
+
+class SmsAuto(BaseModel):
+    on: bool = True
+
+
+@app.post("/api/sms/auto")
+def sms_auto_toggle(req: SmsAuto):
+    """روشن/خاموش کردن ارسال خودکار — همان لحظه روی مانیتور اعمال می‌شود."""
+    store.settings_set(DB_PATH, "sms_auto_on_new", bool(req.on))
+    if req.on:
+        store.settings_set(DB_PATH, "sms_provider", "melipayamak")
+    _apply_sms_to_monitor()
+    from ..sms import sms_ready
+    ready, why = sms_ready(store.settings_all(DB_PATH))
+    if req.on and not ready:
+        log("warning", f"ارسال خودکار روشن شد ولی هنوز آماده نیست: {why}")
+        return {"ok": True, "on": True, "ready": False,
+                "message": f"خودکار روشن شد — اول {why}"}
+    log("success" if req.on else "info",
+        "ارسال خودکار پیامک " + ("روشن شد" if req.on else "خاموش شد"))
+    return {"ok": True, "on": bool(req.on), "ready": ready,
+            "message": "ارسال خودکار روشن است — به محض پیدا شدن شماره پیامک می‌رود"
+            if req.on else "ارسال خودکار خاموش شد"}
 
 
 # ------------------------------------------------------------ API مانیتور --
@@ -329,6 +365,9 @@ def status():
         "searches_today": q["searches"],
         "sms_today": q.get("sms", 0),
         "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
+        "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
+        "sms_ready": __import__("marketing_divar.sms", fromlist=["sms_ready"]).sms_ready(
+            store.settings_all(DB_PATH))[0],
         "breakdown": breakdown, "accounts_breakdown": acc_break,
         "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),
@@ -360,7 +399,7 @@ def leads(filter: str = "all", limit: int = 100):
             where, args = "1=1", ()
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
-            f"matched_keywords,city,lead_status,chat_status,url,first_seen_at,"
+            f"matched_keywords,city,lead_status,chat_status,sms_status,url,first_seen_at,"
             f"phone_checked_at FROM leads WHERE {where} "
             f"ORDER BY id DESC LIMIT ?", (*args, min(limit, 500))).fetchall()
         return {"leads": [dict(r) for r in rows]}

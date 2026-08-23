@@ -11,7 +11,8 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from marketing_divar.sms import (  # noqa: E402
-    interpret_meli, maybe_send_for_lead, send_melipayamak)
+    interpret_meli, maybe_send_for_lead, normalize_ir_phone,
+    send_for_lead, send_melipayamak)
 from marketing_divar.telegram_bot import handle_command  # noqa: E402
 from marketing_divar.db import connect, upsert_lead  # noqa: E402
 
@@ -49,10 +50,32 @@ class TestMeliPayamak(unittest.TestCase):
         self.assertEqual(seen["data"]["username"], "u")
         self.assertEqual(seen["data"]["to"], "09120000000")
 
+    def test_normalize_phone(self):
+        self.assertEqual(normalize_ir_phone("+989145822150"), "09145822150")
+        self.assertEqual(normalize_ir_phone("9145822150"), "09145822150")
+
     def test_auto_off_by_default(self):
         self.assertIsNone(maybe_send_for_lead(
             {"sms_provider": "melipayamak"},
             {"phone": "09120000000", "title": "x"}, "سلام {title}"))
+
+    def test_manual_send_uses_template(self):
+        seen = {}
+
+        def poster(url, data, timeout=20):
+            seen["text"] = data["text"]
+            seen["to"] = data["to"]
+            return FakeResp({"Value": "9000000003"})
+
+        r = send_for_lead({
+            "sms_provider": "melipayamak",
+            "sms_username": "u", "sms_password": "p",
+            "sms_line_number": "3000",
+        }, {"phone": "+989121112233", "title": "ویلا"}, "سلام {title}",
+            http_post=poster)
+        self.assertTrue(r["ok"])
+        self.assertEqual(seen["to"], "09121112233")
+        self.assertIn("ویلا", seen["text"])
 
     def test_auto_on_sends(self):
         def poster(url, data, timeout=20):

@@ -163,18 +163,33 @@ class Monitor:
 
     # ------------------------------------------------------- شماره‌گیری 📞 --
     def _maybe_sms(self, con, row, phone: str) -> None:
-        """ارسال اختیاری پیامک ملی‌پیامک — پیش‌فرض خاموش."""
+        """اگر گزینهٔ خودکار روشن باشد، همان لحظه از ملی‌پیامک پیامک می‌زند."""
         if not phone:
             return
         try:
             from . import store
-            from .sms import maybe_send_for_lead
-            lim = int(self.cfg.get("sms_daily_limit") or 40)
-            if quota_today(con).get("sms", 0) >= lim:
-                self._ev("warning", "سقف پیامک امروز پر شد")
+            from .sms import live_sms_cfg, maybe_send_for_lead
+            cfg = live_sms_cfg(self.db_path, self.cfg)
+            for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
+                      "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+                self.cfg[k] = cfg.get(k)
+            if not cfg.get("sms_auto_on_new"):
                 return
+            lim = int(cfg.get("sms_daily_limit") or 40)
+            if quota_today(con).get("sms", 0) >= lim:
+                self._ev("warning", "سقف پیامک امروز پر شد — پیامک ارسال نشد")
+                return
+            token = row["token"] if "token" in row.keys() else ""
+            if token:
+                try:
+                    prev = con.execute("SELECT sms_status FROM leads WHERE token=?",
+                                       (token,)).fetchone()
+                    if prev and (prev["sms_status"] or "") == "sent":
+                        return
+                except Exception:
+                    pass
             tpl = (store.template_get(self.db_path, "sms") or {}).get("text") or ""
-            r = maybe_send_for_lead(self.cfg, {
+            r = maybe_send_for_lead(cfg, {
                 "title": row["title"] if "title" in row.keys() else "",
                 "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
                 "url": row["url"] if "url" in row.keys() else "",
@@ -182,11 +197,20 @@ class Monitor:
             }, tpl)
             if not r:
                 return
+            st = "sent" if r.get("ok") else "failed"
+            if token:
+                try:
+                    con.execute("UPDATE leads SET sms_status=? WHERE token=?",
+                                (st, token))
+                    con.commit()
+                except Exception:
+                    pass
             if r.get("ok"):
                 bump_quota(con, "sms")
-                self._ev("success", f"پیامک ارسال شد → {phone}")
+                self._ev("success", f"پیامک خودکار ارسال شد → {phone}")
+                print(f"  📩 پیامک خودکار: {phone}")
             else:
-                self._ev("warning", f"پیامک ناموفق: {r.get('message')}")
+                self._ev("warning", f"پیامک خودکار ناموفق: {r.get('message')}")
         except Exception as e:
             self._ev("warning", f"پیامک: {e}")
 

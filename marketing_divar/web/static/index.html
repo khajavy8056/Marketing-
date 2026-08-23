@@ -150,6 +150,12 @@
         اگر فعال باشد، آگهی‌های موجودِ الان هم شماره‌گیری می‌شوند؛
         اگر خاموش باشد، <b>فقط آگهی‌های جدید</b> از این لحظه به بعد گرفته می‌شوند.</label>
     </div>
+    <div class="checkline">
+      <input type="checkbox" id="dash-sms-auto" onchange="smsAutoToggle(this.checked)">
+      <label for="dash-sms-auto"><b>ارسال خودکار پیامک به محض پیدا شدن شماره</b> —
+        متن قالب تب «پیام‌ها» همان لحظه از اکانت ملی‌پیامک شما به همان شخص می‌رود.</label>
+    </div>
+    <div class="hint" id="dash-sms-hint">برای روشن کردن: در تنظیمات نام کاربری، رمز و خط ملی‌پیامک را ذخیره کنید.</div>
     <div class="row" style="margin-top:10px">
       <button class="btn ok" onclick="monitorStart()">▶️ شروع اسکن</button>
       <button class="btn gray" id="btn-pause" onclick="monitorPause()" disabled>⏸ مکث</button>
@@ -244,9 +250,12 @@
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('sms')">💾 ذخیره قالب پیامک</button>
       </div>
-      <div class="hint" style="margin-top:8px">اگر در تنظیمات «ارسال خودکار» را روشن کنید،
-        بعد از استخراج شمارهٔ آگهی منطبق، همین متن از خط رسمی ملی‌پیامک ارسال می‌شود.
-        پیش‌فرض خاموش است.</div>
+      <div class="checkline">
+        <input type="checkbox" id="msg-sms-auto" onchange="smsAutoToggle(this.checked)">
+        <label for="msg-sms-auto"><b>وقتی شماره پیدا شد همین متن را خودکار بفرست</b></label>
+      </div>
+      <div class="hint" style="margin-top:8px">با روشن بودن این گزینه، به محض استخراج شمارهٔ آگهی منطبق
+        همین قالب از خط رسمی ملی‌پیامک شما ارسال می‌شود. نیازی به ری‌استارت مانیتور نیست.</div>
     </div>
   </div>
 </section>
@@ -322,8 +331,8 @@
       <div class="lbl">سقف پیامک روزانه</div>
       <input id="set-sms-limit" type="number" dir="ltr">
       <div class="checkline">
-        <input type="checkbox" id="set-sms-auto">
-        <label for="set-sms-auto">ارسال خودکار بعد از استخراج شمارهٔ آگهی جدید (پیش‌فرض خاموش)</label>
+        <input type="checkbox" id="set-sms-auto" onchange="smsAutoToggle(this.checked)">
+        <label for="set-sms-auto">ارسال خودکار به محض پیدا شدن شماره — با همین قالب و همین اکانت ملی‌پیامک</label>
       </div>
       <div class="hint">ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.
         اگر خط اختصاصی از ملی‌پیامک بخرید، همان شماره را در «خط ارسال» بگذارید.</div>
@@ -411,6 +420,16 @@ async function refreshStatus(){
     const ipLim = s.ip_daily_limit || 240;
     $('k-today').innerHTML = s.phones_today + `<small>${tt('از سقف IP','of IP quota')} ${ipLim}` +
       (s.sms_today ? ` · ${tt('پیامک','SMS')} ${s.sms_today}` : '') + `</small>`;
+    const autoOn = !!s.sms_auto_on_new;
+    ['dash-sms-auto','msg-sms-auto','set-sms-auto'].forEach(id=>{
+      if ($(id) && document.activeElement !== $(id)) $(id).checked = autoOn;
+    });
+    if ($('dash-sms-hint')) {
+      $('dash-sms-hint').textContent = autoOn
+        ? (s.sms_ready ? tt('ارسال خودکار روشن است — به محض شماره، پیامک می‌رود','Auto SMS is ON')
+                       : tt('خودکار روشن است ولی ملی‌پیامک هنوز کامل نیست (کاربری/رمز/خط)','Auto on, Melipayamak incomplete'))
+        : tt('ارسال خودکار خاموش است — تیک بزنید تا همان لحظه پیامک برود','Auto SMS is off');
+    }
     const bd = s.breakdown || {};
     if ($('k-total')) $('k-total').textContent = bd.total ?? s.total_leads ?? 0;
     if ($('k-found')) $('k-found').textContent = bd.contact_found ?? s.phones_found ?? 0;
@@ -557,7 +576,9 @@ async function leadsLoad(filter){
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
       const chatBtn = l.phone_status==='hidden'
         ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>`
-        : (l.chat_status||'—');
+        : (l.phone_status==='found'
+          ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?tt('ارسال شد','Sent'):tt('پیامک','SMS')}</button>`
+          : (l.chat_status||'—'));
       return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
         <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>

@@ -75,25 +75,67 @@ def credit_melipayamak(username: str, password: str, http_post=None) -> Dict[str
             "raw": body if isinstance(body, dict) else {}}
 
 
-def maybe_send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
-                        template: str, http_post=None) -> Optional[Dict[str, Any]]:
-    """اگر ارسال خودکار روشن باشد، برای سرنخ شماره‌دار پیامک می‌زند."""
-    if not cfg.get("sms_auto_on_new"):
-        return None
-    if (cfg.get("sms_provider") or "none") != "melipayamak":
-        return None
-    phone = (lead.get("phone") or "").strip()
-    if not phone:
-        return None
+def normalize_ir_phone(raw: str) -> str:
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if digits.startswith("98") and len(digits) >= 12:
+        digits = "0" + digits[2:]
+    if len(digits) == 10 and digits.startswith("9"):
+        digits = "0" + digits
+    return digits
+
+
+def compose_sms(template: str, lead: Dict[str, Any]) -> str:
     from .messaging import build_message
     safe = {"title": lead.get("title") or "آگهی شما",
             "subtitle": lead.get("subtitle") or "",
             "url": lead.get("url") or ""}
-    text = build_message(template or "سلام، آگهی «{title}» را دیدم.", safe)
+    return build_message(template or "سلام، آگهی «{title}» را دیدم.", safe)
+
+
+def sms_ready(cfg: Dict[str, Any]) -> Tuple[bool, str]:
+    if (cfg.get("sms_provider") or "none") != "melipayamak":
+        return False, "سرویس‌دهنده ملی‌پیامک نیست"
+    if not (cfg.get("sms_username") and
+            (cfg.get("sms_password") or cfg.get("sms_api_key"))):
+        return False, "نام کاربری و رمز ملی‌پیامک ذخیره نشده"
+    if not (cfg.get("sms_line_number") or "").strip():
+        return False, "شماره خط ارسال خالی است"
+    return True, "آماده"
+
+
+def live_sms_cfg(db_path: str, fallback: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """تنظیمات پیامک را زنده از دیتابیس می‌خواند (بدون نیاز به ری‌استارت مانیتور)."""
+    from . import store
+    cfg = dict(fallback or {})
+    s = store.settings_all(db_path)
+    for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+        cfg[k] = s.get(k, cfg.get(k))
+    return cfg
+
+
+def send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
+                  template: str, http_post=None) -> Dict[str, Any]:
+    """ارسال همان قالب آماده‌شده به شمارهٔ همین سرنخ — بدون شرط خودکار."""
+    ready, why = sms_ready(cfg)
+    if not ready:
+        return {"ok": False, "message": why}
+    phone = normalize_ir_phone(lead.get("phone") or "")
+    if not (phone.startswith("09") and len(phone) == 11):
+        return {"ok": False, "message": f"شماره نامعتبر: {lead.get('phone')}"}
+    text = compose_sms(template, lead)
     return send_melipayamak(
         cfg.get("sms_username") or "",
         cfg.get("sms_password") or cfg.get("sms_api_key") or "",
         phone,
-        cfg.get("sms_line_number") or "",
+        (cfg.get("sms_line_number") or "").strip(),
         text,
         http_post=http_post)
+
+
+def maybe_send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
+                        template: str, http_post=None) -> Optional[Dict[str, Any]]:
+    """اگر ارسال خودکار روشن باشد، همان لحظه پیامک می‌زند."""
+    if not cfg.get("sms_auto_on_new"):
+        return None
+    return send_for_lead(cfg, lead, template, http_post=http_post)
