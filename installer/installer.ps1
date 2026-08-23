@@ -1,4 +1,4 @@
-﻿# ============================================================
+﻿\xef\xbb\xbf# ============================================================
 #  DivarLead Installer — GUI installer with progress bar
 #  Requires: Windows + built-in PowerShell (no prerequisites)
 #  Fixes: SmartScreen (Unblock-File), garbled Persian in cmd,
@@ -56,6 +56,26 @@ $L = @{
     }
 }
 $Lang = "fa"
+
+
+# ─── سپر ضدکرش: هیچ خطایی پنجره را بی‌صدا نبندد ───
+$onCrash = {
+    param($sender, $e)
+    $msg = ""
+    try { $ex = $e.Exception } catch { $ex = $null }
+    if ($ex) { $msg = $ex.ToString() } else { $msg = "unknown crash" }
+    try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value "`r`n[FATAL] $msg" -Encoding UTF8 } catch {}
+    try {
+        [System.Windows.Forms.MessageBox]::Show(
+            "An unexpected error occurred:`r`n`r`n" + $msg.Substring(0, [Math]::Min(600, $msg.Length)) +
+            "`r`n`r`nFull details: installer\install-log.txt",
+            "DivarLead Installer", "OK", "Error") | Out-Null
+    } catch {}
+}
+[System.Windows.Forms.Application]::add_ThreadException($onCrash)
+[System.AppDomain]::CurrentDomain.add_UnhandledException({ param($s, $e)
+    try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value ("`r`n[FATAL-Domain] " + $e.ExceptionObject) -Encoding UTF8 } catch {}
+})
 
 # ---------- GUI ----------
 $form = New-Object System.Windows.Forms.Form
@@ -205,47 +225,50 @@ function Install-Python {
 function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     Log "[3] $label"
     Set-Step $label -1
+    # NOTE: از رویدادهای cross-thread (DataReceivedEventHandler) استفاده نمی‌کنیم —
+    # اسکریپت‌بلاک روی تردهای threadpool اجرا نمی‌شود و کل پروسه را می‌کشد
+    # (علت کرش ناگهانی پنجره در v1.3.1). راه امن: cmd خروجی را به فایل موقت
+    # می‌نویسد و ما همان فایل را به‌صورت زنده و بدون قفل می‌خوانیم.
+    $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarpip-" + [guid]::NewGuid().ToString("N") + ".log")
+    $inner = '"' + $pyExe + '" ' + ($pipArgs -join " ") + ' > "' + $outFile + '" 2>&1'
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-    $pinfo.FileName = $pyExe
-    $pinfo.Arguments = $pipArgs -join " "
+    $pinfo.FileName = "cmd.exe"
+    $pinfo.Arguments = '/c "' + $inner + '"'
     $pinfo.WorkingDirectory = $Root
     $pinfo.UseShellExecute = $false
-    $pinfo.RedirectStandardOutput = $true
-    $pinfo.RedirectStandardError = $true
     $pinfo.CreateNoWindow = $true
-    $pinfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-    $pinfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
     $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+    $pinfo.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $pinfo
-    # خواندن رویدادمحور تا اگر خروجی زیاد شد pipe قفل نشود
-    $outBuilder = New-Object System.Text.StringBuilder
-    $errBuilder = New-Object System.Text.StringBuilder
-    $outHandler = [System.Diagnostics.DataReceivedEventHandler]{
-        param($s, $e)
-        if ($e.Data) { [void]$script:outBuilder.AppendLine($e.Data) }
-    }
-    $errHandler = [System.Diagnostics.DataReceivedEventHandler]{
-        param($s, $e)
-        if ($e.Data) { [void]$script:errBuilder.AppendLine($e.Data) }
-    }
-    $proc.add_OutputDataReceived($outHandler)
-    $proc.add_ErrorDataReceived($errHandler)
     [void]$proc.Start()
-    $proc.BeginOutputReadLine()
-    $proc.BeginErrorReadLine()
+    $logged = 0
     while (-not $proc.HasExited) {
-        Start-Sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 350
         [System.Windows.Forms.Application]::DoEvents()
+        $logged = Stream-File $outFile $logged
     }
     $proc.WaitForExit()
-    foreach ($line in $outBuilder.ToString().Split("`n")) {
-        $t = $line.Trim(); if ($t) { Log "    $t" }
-    }
-    foreach ($line in $errBuilder.ToString().Split("`n")) {
-        $t = $line.Trim(); if ($t) { Log "    [!] $t" }
-    }
+    $logged = Stream-File $outFile $logged
+    Remove-Item $outFile -ErrorAction SilentlyContinue
     return $proc.ExitCode
+}
+
+# خواندن امنِ هم‌زمان فایلِ در حال نوشته‌شدن — فقط خطوط جدید را به لاگ می‌فرستد
+function Stream-File([string]$path, [int]$alreadyLogged) {
+    try {
+        if (-not (Test-Path $path)) { return $alreadyLogged }
+        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+             [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
+        $lines = @($sr.ReadToEnd() -split "`r?`n")
+        $sr.Close()
+        for ($i = $alreadyLogged; $i -lt $lines.Count; $i++) {
+            $t = $lines[$i].Trim()
+            if ($t) { Log "    $t" }
+        }
+        return $lines.Count
+    } catch { return $alreadyLogged }
 }
 
 # ---------- main flow ----------
@@ -271,10 +294,10 @@ $btnStart.Add_Click({
         }
 
         # STEP 2 — deps (pip)
-        $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "requirements.txt") $L[$Lang].deps
+        $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") $L[$Lang].deps
         if ($rc -ne 0) {
             Log "[3] PyPI failed -> trying mirror ..."
-            $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
+            $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
             if ($rc -ne 0) { throw "pip install failed (code $rc)" }
         }
         Log "[3] $($L[$Lang].ok)"

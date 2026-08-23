@@ -8,4 +8,16 @@ if errorlevel 1 (
   exit /b 1
 )
 powershell -NoProfile -STA -ExecutionPolicy Bypass -File "installer\installer.ps1"
-if errorlevel 1 pause
+set EC=%errorlevel%
+if not "%EC%"=="0" (
+  echo.
+  echo ============================================================
+  echo   Installer exited unexpectedly (error code %EC%).
+  echo   The full technical log is saved here:
+  echo   %~dp0installer\install-log.txt
+  echo   Please send that file for support.
+  echo ============================================================
+  echo Press any key to close this window...
+  pause >nul
+)
+exit /b %EC%

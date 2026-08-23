@@ -1,9 +1,14 @@
 @echo off
-REM DivarLead - launcher (calls GUI installer)
+REM DivarLead launcher (Persian name shortcut)
 cd /d "%~dp0"
-where powershell >nul 2>nul
-if errorlevel 1 (
-  echo [ERROR] PowerShell not found. & pause & exit /b 1
-)
 powershell -NoProfile -STA -ExecutionPolicy Bypass -File "installer\installer.ps1"
-if errorlevel 1 pause
+set EC=%errorlevel%
+if not "%EC%"=="0" (
+  echo.
+  echo ============================================================
+  echo   Installer exited unexpectedly (error code %EC%).
+  echo   Log file: %~dp0installer\install-log.txt
+  echo ============================================================
+  pause >nul
+)
+exit /b %EC%
