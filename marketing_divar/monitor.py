@@ -147,6 +147,11 @@ class Monitor:
                         if upsert_lead(con, p, kw, city):
                             new_total += 1
                             new_here += 1
+                            t = str(p.get("title") or "")
+                            where = ("عنوان" if kw in t else
+                                     ("متن/جستجوی دیوار" if kw not in t and t else "—"))
+                            self._ev("info", f"🆕 سرنخ جدید: «{t[:40]}» "
+                                             f"(کلمه در: {where})")
                     con.commit()
                     if new_here == 0:
                         break  # صفحه بعدی تکراری

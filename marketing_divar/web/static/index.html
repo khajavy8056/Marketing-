@@ -287,6 +287,10 @@
     </div>
     <div class="card" style="display:flex; align-items:flex-end">
       <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
+      <div style="margin-top:14px; padding:12px; border:1px dashed var(--border); border-radius:8px">
+        <button class="btn" style="width:100%; justify-content:center" id="diag-btn" onclick="runDiag()">🔌 بررسی اتصال کامل</button>
+        <div id="diag-out" style="margin-top:10px; font-size:12px; line-height:1.9; white-space:pre-wrap"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -451,6 +455,31 @@ async function leadsLoad(filter){
   }catch(e){}
 }
 
+
+/* ───────────── بررسی اتصال کامل ───────────── */
+async function runDiag() {
+  const btn = document.getElementById('diag-btn'), out = document.getElementById('diag-out');
+  btn.disabled = true;
+  out.textContent = LANG==='fa' ? '⏳ در حال بررسی — چند ثانیه صبر کنید…' : '⏳ Checking, please wait…';
+  try {
+    const r = await fetch('/api/diag', {method:'POST'});
+    const d = await r.json();
+    let html = '';
+    for (const st of (d.steps||[])) {
+      const mark = st.ok ? '✅' : '❌';
+      const name = LANG==='fa' ? st.fa : st.en;
+      html += `<div>${mark} <b>${name}</b> <span style="opacity:.6">(${st.ms}ms)</span><br>　${st.detail}</div>`;
+    }
+    if (d.proxy && d.proxy.active) {
+      html += `<div style="color:#e11">⚠️ ${LANG==='fa'?'پروکسی سیستم فعال است':'System proxy is active'}: ${JSON.stringify(d.proxy.system||d.proxy.env)}</div>`;
+    }
+    out.innerHTML = html || '—';
+  } catch (e) {
+    out.textContent = (LANG==='fa' ? 'خطا در بررسی: ' : 'Diag error: ') + e;
+  }
+  btn.disabled = false;
+}
+
 /* ───────────────────────── تنظیمات ───────────────────────── */
 async function settingsLoad(){
   try{ const s=await api('/api/settings');
@@ -492,7 +521,7 @@ setInterval(()=>{ refreshStatus();
 const FA_EN = {
   "سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار":"Smart system to collect leads & phone numbers from Divar ads",
   "داشبورد":"Dashboard","اکانت‌ها":"Accounts","کلمات کلیدی":"Keywords","پیام‌ها":"Messages",
-  "سرنخ‌ها":"Leads","تنظیمات":"Settings","لاگ‌ها":"Logs",
+  "سرنخ‌ها":"Leads","تنظیمات":"Settings","بررسی اتصال کامل":"Full connection check","لاگ‌ها":"Logs",
   "وضعیت مانیتور":"Monitor status","در صف شماره‌گیری":"Phone queue",
   "لیست چت (فقط چت)":"Chat list (chat-only)","شماره‌های امروز":"Numbers today",
   "سرنخ‌های منتظر شماره":"Leads waiting for their number",

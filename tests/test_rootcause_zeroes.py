@@ -59,25 +59,39 @@ class _FakeResp:
 
 
 class TestProxySelfHeal(unittest.TestCase):
-    """۱) خطای پروکسی → تلاش مجدد مستقیم → موفق و ماندگار."""
+    """۱) خطای پروکسی → مسیر بعدی (مستقیم) → موفق و ماندگار (v1.5: زنجیره)."""
 
     def test_proxy_error_falls_back_to_direct(self):
-        c = DivarClient.__new__(DivarClient)  # بدون _load_session
+        import sys as _s
+        _s.path.insert(0, HERE)
+        from test_multitransport import _T, _Resp
+        c = DivarClient.__new__(DivarClient)
         c.http = _FakeSession()
         c.base = "http://x"
-        c._direct_forced = False
+        c.token = None
+        c._winner = None
+        c._custom_transports = [
+            _T("requests", fail=requests.exceptions.ProxyError("vpn down")),
+            _T("requests-direct", resp=_Resp(200, {"ok": 1})),
+        ]
         c.limiter = __import__("marketing_divar.rate", fromlist=["RateLimiter"]).RateLimiter(
             search_delay=0, phone_delay=0, page_delay=0, jitter=0)
         r = c._fetch("GET", "http://x/ok")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(c.http.calls), 2, "باید یک‌بار retry بدون پروکسی زده شود")
-        self.assertFalse(c.http.trust_env, "باید trust_env خاموش بماند")
+        self.assertEqual(c._winner, "requests-direct", "مسیر مستقیم باید برنده شود")
 
-    def test_second_proxy_error_raises(self):
+    def test_all_transports_down_raises(self):
+        import sys as _s
+        _s.path.insert(0, HERE)
+        from test_multitransport import _T
         c = DivarClient.__new__(DivarClient)
         c.http = _FakeSession()
         c.base = "http://x"
-        c._direct_forced = True  # قبلاً مستقیم شده؛ دیگر fallback نیست
+        c.token = None
+        c._winner = None
+        c._custom_transports = [
+            _T("a", fail=requests.exceptions.ProxyError("p")),
+            _T("b", fail=requests.exceptions.ProxyError("p2"))]
         c.limiter = __import__("marketing_divar.rate", fromlist=["RateLimiter"]).RateLimiter(
             search_delay=0, phone_delay=0, page_delay=0, jitter=0)
         with self.assertRaises(requests.exceptions.ProxyError):

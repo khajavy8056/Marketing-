@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,130 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from .rate import RateLimiter
+from .logging_util import log as _log
+
+# ═══════════════════════════ ترابری‌های چند-مسیری ═══════════════════════════
+# هر مسیر در شرایطی جواب می‌دهد؛ _fetch به‌ترتیب امتحان می‌کند و مسیر برنده
+# را به‌خاطر می‌سپارد (sticky). هدف: «حداقل یکی در هر شرایطی کار کند».
+#   requests          → با پروکسی سیستم (اگر VPN درست کار کند)
+#   requests-direct   → requests بدون پروکسی (درست برای IP ایران)
+#   httpx-direct      → موتور دیگر HTTP بدون پروکسی
+#   urllib-direct     → آخرین لایه استاندارد کتابخانه، بدون پروکسی
+
+class _UrllibResp:
+    """پاسخ urllib را شبیه requests.Response می‌کند (status_code/json/text)."""
+
+    def __init__(self, code: int, body: bytes):
+        self.status_code = code
+        self._body = body
+        self.text = body.decode("utf-8", errors="replace")
+
+    def json(self):
+        return json.loads(self._body or b"{}")
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+
+
+class _Transport:
+    name = "?"
+
+    def request(self, method: str, url: str, **kw):  # pragma: no cover
+        raise NotImplementedError
+
+
+class _RequestsEnvTransport(_Transport):
+    """۱) requests با تنظیمات محیط/پروکسی سیستم."""
+    name = "requests"
+
+    def __init__(self, client: "DivarClient"):
+        self.c = client
+
+    def request(self, method, url, **kw):
+        fn = self.c.http.get if method.upper() == "GET" else self.c.http.post
+        return fn(url, **kw)
+
+
+class _RequestsDirectTransport(_Transport):
+    """۲) requests بدون پروکسی — مسیر درست برای کاربر داخل ایران."""
+    name = "requests-direct"
+
+    def __init__(self, client: "DivarClient"):
+        self.c = client
+        self._sess = None
+
+    def _session(self):
+        if self._sess is None:
+            self._sess = requests.Session()
+            self._sess.trust_env = False
+            self._sess.headers.update(self.c.http.headers)
+            for ck in self.c.http.cookies:
+                self._sess.cookies.set(ck.name, ck.value)
+        return self._sess
+
+    def request(self, method, url, **kw):
+        sess = self._session()
+        fn = sess.get if method.upper() == "GET" else sess.post
+        return fn(url, **kw)
+
+
+class _HttpxDirectTransport(_Transport):
+    """۳) موتور httpx بدون پروکسی — موتور TCP/TLS متفاوت."""
+    name = "httpx-direct"
+
+    def __init__(self, client: "DivarClient"):
+        self.c = client
+
+    def request(self, method, url, **kw):
+        try:
+            import httpx
+        except ImportError:
+            raise RuntimeError("httpx نصب نیست")
+        headers = dict(self.c.http.headers)
+        for ck in self.c.http.cookies:
+            headers["Cookie"] = headers.get("Cookie", "") + f"; {ck.name}={ck.value}"
+        with httpx.Client(verify=True, trust_env=False, timeout=kw.get("timeout", 25)) as hc:
+            if method.upper() == "GET":
+                kw.pop("json", None)
+                return hc.get(url, headers=headers,
+                              params=kw.get("params"), timeout=kw.get("timeout", 25))
+            return hc.post(url, headers=headers,
+                           json=kw.get("json"), timeout=kw.get("timeout", 25))
+
+
+class _UrllibDirectTransport(_Transport):
+    """۴) urllib بدون هیچ پروکسی — آخرین لایهٔ نجات."""
+    name = "urllib-direct"
+
+    def __init__(self, client: "DivarClient"):
+        self.c = client
+
+    def request(self, method, url, **kw):
+        import urllib.request
+        import urllib.parse
+        if kw.get("params"):
+            url = url + "?" + urllib.parse.urlencode(kw["params"])
+        data = None
+        headers = {"User-Agent": str(self.c.http.headers.get("User-Agent", "")),
+                   "Accept": "application/json"}
+        if kw.get("json") is not None:
+            data = json.dumps(kw["json"]).encode()
+            headers["Content-Type"] = "application/json"
+        for ck in self.c.http.cookies:
+            headers["Cookie"] = headers.get("Cookie", "") + f"; {ck.name}={ck.value}"
+        if self.c.token:
+            headers["Authorization"] = f"Bearer {self.c.token}"
+        req = urllib.request.Request(url, data=data, headers=headers,
+                                     method=method.upper())
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}))  # بدون پروکسی
+        try:
+            with opener.open(req, timeout=kw.get("timeout", 25)) as resp:
+                return _UrllibResp(resp.status, resp.read())
+        except urllib.error.HTTPError as e:
+            return _UrllibResp(e.code, e.read() or b"")
+
 
 def default_base() -> str:
     """آدرس پایه API — با متغیر DIVAR_BASE_URL قابل تغییر (برای تست با شبیه‌ساز)."""
@@ -83,34 +208,47 @@ class DivarClient:
         self.base = base_url or default_base()
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": UA, "Accept": "application/json"})
-        self._direct_forced = False  # پس از خطای پروکسی، اتصال مستقیم می‌شود
         self.token: Optional[str] = None
         self.limiter = limiter or RateLimiter()
         self._load_session()
 
-    # ------------------------------------------------- درخواست خودترمیم -- 
-    def _fetch(self, method: str, url: str, **kw):
-        """درخواست HTTP با خودترمیمی پروکسی.
+    # ------------------------------------------------ درخواست چند-مسیری --
+    def _transport_chain(self):
+        """زنجیرهٔ مسیرها؛ مسیر برندهٔ قبلی اول می‌آید (sticky)."""
+        if getattr(self, "_custom_transports", None) is not None:
+            chain = list(self._custom_transports)
+        else:
+            chain = [_RequestsEnvTransport(self), _RequestsDirectTransport(self),
+                     _HttpxDirectTransport(self), _UrllibDirectTransport(self)]
+        w = getattr(self, "_winner", None)
+        if w:
+            chain.sort(key=lambda t: 0 if t.name == w else 1)  # برنده اول
+        return chain
 
-        روی ویندوز، requests پروکسی سیستم (VPN/v2ray) را خودکار برمی‌دارد؛
-        اگر آن پروکسی قطع/خارج از ایران باشد همه درخواست‌‌ها به دیوار می‌میرند
-        (دیوار فقط با IP ایران جواب می‌دهد). در صورت خطای پروکسی، یک‌بار بدون
-        پروکسی (اتصال مستقیم) تلاش می‌کنیم و همان حالت را نگه می‌داریم.
+    def _fetch(self, method: str, url: str, **kw):
+        """درخواست HTTP با ۴ مسیر پشت‌سرهم + لاگ دقیق هر تلاش.
+
+        اگر مسیری خطای شبکه داد، مسیر بعدی امتحان می‌شود؛ اولین مسیر
+        موفق به‌خاطر سپرده می‌شود (sticky) تا درخواست‌های بعدی سریع باشند.
         """
-        fn = self.http.get if method.upper() == "GET" else self.http.post
-        try:
-            return fn(url, **kw)
-        except requests.exceptions.ProxyError:
-            if self._direct_forced:
-                raise
-            self._direct_forced = True
-            self.http.trust_env = False
+        last_err: Exception = RuntimeError("هیچ مسیر اتصالی امتحان نشد")
+        for tr in self._transport_chain():
+            t0 = time.time()
             try:
-                self.http.proxies.clear()
-            except Exception:
-                pass
-            print("[i] پروکسی سیستم پاسخ نداد — ادامه با اتصال مستقیم (بدون پروکسی)")
-            return fn(url, **kw)
+                r = tr.request(method, url, **kw)
+                self._winner = tr.name
+                ms = int((time.time() - t0) * 1000)
+                _log("info", f"⇄ {method} {url.split('?')[0][-60:]} → "
+                             f"HTTP {r.status_code} ({ms}ms؛ مسیر: {tr.name})")
+                return r
+            except requests.exceptions.HTTPError:
+                raise
+            except Exception as e:
+                last_err = e
+                ms = int((time.time() - t0) * 1000)
+                _log("warning", f"مسیر «{tr.name}» ناموفق ({ms}ms): "
+                                f"{type(e).__name__}: {str(e)[:120]}")
+        raise last_err
 
     # ------------------------------------------------------------- session --
     def _load_session(self) -> None:
@@ -244,14 +382,63 @@ class DivarClient:
             params["cities"] = ",".join(str(c) for c in cities)
         if page and page > 1:
             params["page"] = page
-        r = self._fetch("GET", f"{self.base}/v8/web-search/iran", params=params, timeout=25)
-        self._check_block(r)
-        if r.status_code in (401, 403, 451):
+        try:
+            r = self._fetch("GET", f"{self.base}/v8/web-search/iran",
+                            params=params, timeout=25)
+            self._check_block(r)
+            if r.status_code in (401, 403, 451):
+                raise DivarBlockedError(
+                    f"دیوار جستجو را رد کرد (HTTP {r.status_code}) — اگر VPN/پروکسی "
+                    "روشن است خاموش کنید؛ دیوار فقط با IP ایران جواب می‌دهد",
+                    status=r.status_code)
+            r.raise_for_status()
+            posts = self._extract_post_list(r.json())
+            if posts:
+                return posts
+            _log("warning", "API جستجو ۰ آگهی داد — امتحان HTML خود سایت دیوار")
+        except DivarBlockedError:
+            raise  # بلاک واقعی: فشار نیاوریم
+        except Exception as e:
+            _log("warning", f"API جستجو ناموفق ({type(e).__name__}: {str(e)[:100]}) "
+                            "— امتحان HTML خود سایت دیوار")
+        # ── راه دوم: خواندن HTML صفحهٔ جستجوی خود سایت دیوار ──
+        return self._search_html(query, cities, page)
+
+    _HTML_PAIR = re.compile(r'href="/v/([^"/]+)/([A-Za-z0-9_-]{4,})"')
+
+    @staticmethod
+    def _parse_search_html(html: str) -> List[Dict[str, Any]]:
+        """استخراج توکن + عنوان (از slug) در HTML صفحهٔ جستجوی سایت دیوار."""
+        import urllib.parse as _up
+        posts, seen = [], set()
+        for slug, token in DivarClient._HTML_PAIR.findall(html):
+            if token in seen or token in ("chat", "rules", "about"):
+                continue
+            seen.add(token)
+            title = _up.unquote(slug).replace("-", " ").strip()
+            posts.append({"token": token, "title": title or "—",
+                          "subtitle": "", "url": f"https://divar.ir/v/{slug}/{token}"})
+        return posts[:24]
+
+    def _search_html(self, query: str, cities=None, page: int = 1):
+        """جستجو از HTML سایت (راه نجات وقتی API خاموش/تغییرشکل‌داده است)."""
+        host = "https://divar.ir"
+        if self.base.startswith("http") and "divar.ir" not in self.base:
+            host = self.base  # شبیه‌ساز تست
+        city = str(cities[0]) if cities else "iran"
+        url = f"{host}/s/{city}"
+        params = {"q": query}
+        if page and page > 1:
+            params["page"] = page
+        r = self._fetch("GET", url, params=params, timeout=25)
+        if r.status_code != 200:
             raise DivarBlockedError(
-                f"دیوار جستجو را رد کرد (HTTP {r.status_code}) — اگر VPN/پروکسی روشن "
-                "است خاموش کنید؛ دیوار فقط با IP ایران جواب می‌دهد", status=r.status_code)
-        r.raise_for_status()
-        return self._extract_post_list(r.json())
+                f"HTML جستجو هم HTTP {r.status_code} داد", r.status_code, r.text[:200])
+        posts = self._parse_search_html(r.text)
+        _log("success" if posts else "warning",
+             f"جستجوی HTML سایت: {len(posts)} آگهی پیدا شد" if posts
+             else "جستجوی HTML سایت هم ۰ آگهی داد")
+        return posts
 
     @staticmethod
     def _extract_post_list(data: Dict[str, Any]) -> List[Dict[str, Any]]:

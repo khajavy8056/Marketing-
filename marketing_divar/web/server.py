@@ -358,6 +358,27 @@ def export(filter: str = "phone"):
 _STATIC = Path(__file__).parent / "static"
 
 
+@app.post("/api/diag")
+def diag_run():
+    """بررسی اتصال کامل — روی سیستم خود کاربر، همهٔ لایه‌ها را تست می‌کند."""
+    from ..diag import run_diag
+    kws = store.keywords_list(DB_PATH)
+    keyword = next((k["keyword"] for k in kws if k.get("active")), None) or "آپارتمان"
+    accs = mgr().list_accounts()
+    sess = str(mgr().session_path(accs[0])) if accs else None
+    log("info", f"بررسی اتصال کامل شروع شد (کلمهٔ آزمایشی: «{keyword}»)")
+    result = run_diag(base_url=_base_url(), keyword=keyword,
+                      account_session=sess)
+    for st in result["steps"]:
+        mark = "✓" if st["ok"] else "✗"
+        log("success" if st["ok"] else "error",
+            f"{mark} {st['fa']} — {st['detail']} ({st['ms']}ms)")
+    good = sum(1 for x in result["steps"] if x["ok"])
+    log("success" if good >= 4 else "error",
+        f"بررسی اتصال تمام شد: {good}/{len(result['steps'])} قدم سالم")
+    return result
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (_STATIC / "index.html").read_text(encoding="utf-8")
