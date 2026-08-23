@@ -19,6 +19,8 @@
   header .sub{opacity:.85; font-size:13px}
   header .spacer{flex:1}
   #run-badge{background:rgba(255,255,255,.15); padding:6px 14px; border-radius:99px; font-size:13px}
+  #lang-btn{background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
+            padding:6px 14px; border-radius:99px; font-size:13px; cursor:pointer; font-family:inherit}
   #run-badge.on{background:#2e9e5b}
   nav{display:flex; gap:6px; background:var(--card); border-bottom:1px solid var(--line);
       padding:0 18px; overflow-x:auto; position:sticky; top:0; z-index:10}
@@ -89,6 +91,7 @@
     <div class="sub">سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار</div>
   </div>
   <div class="spacer"></div>
+  <button id="lang-btn" onclick="toggleLang()" title="فارسی / English">🌐 English</button>
   <div id="run-badge">⏸ متوقف</div>
 </header>
 
@@ -330,14 +333,14 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 async function refreshStatus(){
   try{
     const s = await api('/api/status');
-    $('run-badge').textContent = s.running ? (s.paused?'⏸ مکث':'🟢 در حال اجرا') : '⏸ متوقف';
+    $('run-badge').textContent = s.running ? (s.paused?tt('⏸ مکث','⏸ Paused'):tt('🟢 در حال اجرا','🟢 Running')) : tt('⏸ متوقف','⏸ Stopped');
     $('run-badge').className = 'on';
     $('k-run').textContent = s.running ? `دور ${s.tick}` : 'خاموش';
-    $('k-run').textContent = s.running ? (s.paused?'مکث':`دور ${s.tick}`) : 'خاموش';
+    $('k-run').textContent = s.running ? (s.paused?tt('مکث','Paused'):`${tt('دور','Round')} ${s.tick}`) : tt('خاموش','Off');
     $('k-run-sub').textContent = s.started_at ? 'شروع: '+s.started_at : '—';
     $('k-queue').textContent = s.queue;
     $('k-chat').textContent = s.chat_queue;
-    $('k-today').innerHTML = s.phones_today + '<small>شماره گرفته‌شده امروز</small>';
+    $('k-today').innerHTML = s.phones_today + `<small>${tt('شماره گرفته‌شده امروز','numbers fetched today')}</small>`;
     $('btn-pause').disabled = !s.running;
     $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
     // اکانت‌ها در داشبورد
@@ -353,7 +356,7 @@ async function refreshStatus(){
     // رخدادها
     $('feed').innerHTML = s.logs.slice().reverse().map(l =>
       `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
-      || '<div class="empty">رخدادی نیست</div>';
+      || `<div class="empty">${tt('رخدادی نیست','No events yet')}</div>`;
   }catch(e){ console.error(e); }
 }
 async function monitorStart(){
@@ -402,8 +405,8 @@ async function kwLoad(){
     $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
       <div class="acc"><div class="row">
         <b>${esc(k.keyword)}</b>
-        <span class="tag ${k.active?'ok':'gray'}">${k.active?'فعال':'غیرفعال'}</span>
-        <span class="hint">${k.cities?('شهرهای '+k.cities.join('،')):'همه کشور'}</span>
+        <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
+        <span class="hint">${k.cities?(tt('شهرهای','cities')+' '+k.cities.join('،')):tt('همه کشور','All country')}</span>
       </div><div class="row">
         <button class="btn sm gray" onclick="kwToggle(${k.id},${!k.active})">${k.active?'غیرفعال‌کردن':'فعال‌کردن'}</button>
         <button class="btn sm err" onclick="kwDel(${k.id})">حذف</button>
@@ -434,16 +437,16 @@ async function leadsLoad(filter){
     const rows=s.leads;
     $('leads-empty').style.display = rows.length?'none':'block';
     $('leads-body').innerHTML = rows.map(l=>{
-      const st = {found:'<span class="tag ok">شماره دارد</span>',
-                  hidden:'<span class="tag chat">فقط چت</span>',
-                  pending:'<span class="tag warn">در صف</span>',
-                  legacy:'<span class="tag gray">قدیمی</span>',
-                  removed:'<span class="tag gray">حذف‌شده</span>',
-                  error:'<span class="tag err">خطا</span>'}[l.phone_status]||l.phone_status;
+      const st = {found:`<span class="tag ok">${tt('شماره دارد','Has phone')}</span>`,
+                  hidden:`<span class="tag chat">${tt('فقط چت','Chat only')}</span>`,
+                  pending:`<span class="tag warn">${tt('در صف','Queued')}</span>`,
+                  legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
+                  removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
+                  error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
       return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
         <td>${st}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>
-        <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
+        <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">${tt('مشاهده ↗','view ↗')}</a></td></tr>`;
     }).join('');
   }catch(e){}
 }
@@ -482,6 +485,94 @@ setInterval(()=>{ refreshStatus();
   if(document.querySelector('#tab-leads.active')) leadsLoad();
   if(document.querySelector('#tab-accounts.active')) accRefresh();
 }, 4000);
+</script>
+
+<script>
+/* ─────────── دو زبانه (فارسی/English) — جابه‌جایی کامل رابط ─────────── */
+const FA_EN = {
+  "سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار":"Smart system to collect leads & phone numbers from Divar ads",
+  "داشبورد":"Dashboard","اکانت‌ها":"Accounts","کلمات کلیدی":"Keywords","پیام‌ها":"Messages",
+  "سرنخ‌ها":"Leads","تنظیمات":"Settings","لاگ‌ها":"Logs",
+  "وضعیت مانیتور":"Monitor status","در صف شماره‌گیری":"Phone queue",
+  "لیست چت (فقط چت)":"Chat list (chat-only)","شماره‌های امروز":"Numbers today",
+  "سرنخ‌های منتظر شماره":"Leads waiting for their number",
+  "آگهی‌های بدون شماره → پیام چت":"Ads without number → chat message",
+  "کنترل اسکن":"Scan control","شروع اسکن":"Start scan","مکث":"Pause","توقف":"Stop",
+  "موارد فعلی هم گرفته شوند؟":"Also fetch existing ads?",
+  "اگر فعال باشد، آگهی‌های موجودِ الان هم شماره‌گیری می‌شوند؛":"If checked, current existing ads will also be fetched;",
+  "فقط آگهی‌های جدید":"only new ads","از این لحظه به بعد گرفته می‌شوند.":"will be fetched from now on.",
+  "نکته ضد بلاک:":"Anti-block note:",
+  "سیستم خودش تاخیرها و سهمیه‌ها را رعایت می‌کند":"The system enforces delays and quotas automatically",
+  "اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛":"if one account hits a captcha the rest keep working and you get notified;",
+  "در تب اکانت‌ها دکمه «آزادسازی» را بزنید.":"then press Release in the Accounts tab.",
+  "اکانت‌ها":"Accounts","رخدادهای زنده":"Live events",
+  "افزودن اکانت جدید (لاگین با کد پیامکی)":"Add new account (OTP login)",
+  "برای هر اکانت یک":"Each account needs a","شماره موبایل واقعی":"real mobile number",
+  "لازم است":" ","دیوار شماره مجازی نمی‌پذیرد)":"Divar does not accept virtual numbers).",
+  "نام اکانت (انگلیسی)":"Account name (English)","شماره موبایل":"Mobile number",
+  "۱) ارسال کد تایید":"1) Send code","کد ۶ رقمی پیامک‌شده":"6-digit code from SMS",
+  "۲) تأیید و لاگین":"2) Confirm & login","اول گام ۱ را بزنید…":"Press step 1 first…",
+  "اکانت‌های ثبت‌شده":"Registered accounts","آزادسازی":"Release",
+  "کلمات کلیدی پایش":"Keywords to monitor",
+  "کلمات کلیدی — با کاما (، یا ,) از هم جدا کنید":"Keywords — separate with comma (Persian or English)",
+  "محدوده جستجو":"Search scope","همه کشور":"All country",
+  "کد شهرها مثل 1,3":"city codes e.g. 1,3","تهران=۱، کرج=۲، مشهد=۳، اصفهان=۴":"Tehran=1 Karaj=2 Mashhad=3 Isfahan=4",
+  "افزودن":"Add","فهرست کلمات":"Keyword list","حذف":"Delete",
+  "هر کلمه کلیدی فعال، به‌صورت دوره‌ای (پیش‌فرض هر ۵ دقیقه)":"Each active keyword is scanned periodically (default every 5 min)",
+  "پایش می‌شود و آگهی جدید همان کلمه وارد صف شماره‌گیری می‌شود.":"and its new ads enter the phone queue.",
+  "قالب پیام چت (نیمه‌خودکار)":"Chat message template (semi-auto)",
+  "قالب پیامک (برای آینده)":"SMS template (future)","ذخیره قالب چت":"Save chat template",
+  "ذخیره قالب پیامک":"Save SMS template","عنوان آگهی":"ad title","توضیح میانی":"mid description",
+  "لیست سرنخ‌ها":"Leads list","همه":"All","شماره‌دار":"Has phone","فقط چت":"Chat only",
+  "خروجی اکسل (شماره‌ها)":"Export Excel (numbers)","خروجی (چت‌ها)":"Export (chats)",
+  "عنوان":"Title","شماره":"Phone","وضعیت":"Status","کلمه":"Keyword","شهر":"City","زمان":"Time","لینک":"Link",
+  "هنوز سرنخی ثبت نشده — مانیتور را شروع کنید":"No leads yet — start the monitor",
+  "اتصال تلگرام (اعلان‌ها)":"Telegram connection (notifications)",
+  "توکن ربات — از":"Bot token — from","بگیرید":"get it","شناسه گفتگو (Chat ID)":"Chat ID",
+  "وقتی کپچا بیاید یا اکانتی محدود شود، همان لحظه به تلگرام اعلان می‌گیرید.":"When a captcha appears or an account is limited, you get an instant Telegram alert.",
+  "پارامترهای ضد بلاک":"Anti-block parameters",
+  "فاصله دورهای اسکن (ثانیه)":"Scan interval (sec)","فاصله شماره‌گیری (ثانیه)":"Phone delay (sec)",
+  "سقف روزانه هر اکانت":"Daily limit per account","سقف روزانه کل (IP)":"Daily limit total (IP)",
+  "سرد شدن بعد از بلاک (دقیقه)":"Cooldown after block (min)",
+  "مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.":"Defaults are conservative; increasing them raises block risk.",
+  "سرویس پیامک (به‌زودی)":"SMS service (soon)","سرویس‌دهنده":"Provider","کلید API":"API key",
+  "شماره خط ارسال":"Sender line number","غیرفعال (فعلاً)":"Disabled (for now)",
+  "ارسال خودکار پیامک در نسخه بعدی با همین اطلاعات فعال می‌شود.":"Automatic SMS will use these settings in the next version.",
+  "ذخیره همه تنظیمات":"Save all settings",
+  "گزارش رخدادها (همچنین در فایل logs/divar_app.log)":"Event log (also in logs/divar_app.log)",
+  "فعال":"active","غیرفعال":"inactive","مخفی":"hidden",
+  "active":"active","captcha":"captcha","cooldown":"cooldown","relogin":"relogin","disabled":"disabled",
+  "found":"found","pending":"pending","legacy":"legacy","removed":"removed","error":"error"
+};
+const EN_FA = Object.fromEntries(Object.entries(FA_EN).map(([k,v])=>[v,k]));
+let LANG = localStorage.getItem("lang") || "fa";
+function tt(fa, en){ return (LANG==="en" && en!==undefined) ? en : fa; }
+function swapTexts(){
+  const dict = LANG==="en" ? FA_EN : EN_FA;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())){
+    const raw = n.nodeValue;
+    const key = raw.trim();
+    if (key && dict[key]) n.nodeValue = raw.replace(key, dict[key]);
+  }
+  document.querySelectorAll("[placeholder]").forEach(el=>{
+    const k = el.getAttribute("placeholder").trim();
+    if (dict[k]) el.setAttribute("placeholder", el.getAttribute("placeholder").replace(k, dict[k]));
+  });
+}
+function applyLang(){
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG==="fa" ? "rtl" : "ltr";
+  document.getElementById("lang-btn").textContent = LANG==="fa" ? "🌐 English" : "🌐 فارسی";
+  swapTexts();
+}
+function toggleLang(){
+  LANG = LANG==="fa" ? "en" : "fa";
+  localStorage.setItem("lang", LANG);
+  applyLang();
+}
+applyLang();
 </script>
 </body>
 </html>

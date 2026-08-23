@@ -60,6 +60,15 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('dir="rtl"', r.text)
         self.assertIn("کلمات کلیدی", r.text)
 
+    def test_index_bilingual_toggle(self):
+        """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
+        r = client.get("/")
+        self.assertIn('id="lang-btn"', r.text)
+        self.assertIn("toggleLang", r.text)
+        self.assertIn("FA_EN", r.text)
+        self.assertIn('"Dashboard"', r.text)          # ترجمه انگلیسی داشبورد
+        self.assertIn('dir="rtl"', r.text)            # پیش‌فرض فارسی
+
     def test_status_shape(self):
         r = client.get("/api/status")
         self.assertEqual(r.status_code, 200)
