@@ -130,7 +130,7 @@ class Monitor:
     @property
     def anon(self) -> DivarClient:
         if self._anon is None:
-            self._anon = DivarClient(session_path="data/accounts/_anon/session.json",
+            self._anon = DivarClient(session_path=str(self.mgr.dir / "_anon" / "session.json"),
                                      limiter=self.limiter, base_url=self.base_url)
         return self._anon
 

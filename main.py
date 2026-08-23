@@ -10,14 +10,19 @@
 import os
 import sys
 
-# اگر نسخه exe است، همه داده‌ها کنار خود exe ذخیره شوند (نه در پوشه موقت ویندوز)
+# اگر نسخه exe است، کنار خود exe بایست (نه پوشه موقت ویندوز)
 if getattr(sys, "frozen", False):
     os.chdir(os.path.dirname(sys.executable))
+
+# تنظیمات/اکانت/تلگرام/ملی‌پیامک در پوشه پایدار کاربر می‌مانند
+from marketing_divar.paths import apply_runtime_paths  # noqa: E402
+_data = apply_runtime_paths()
 
 if len(sys.argv) > 1 and sys.argv[1] == "--check":
     from marketing_divar.selfcheck import run
     sys.exit(run())
 
+print(f"📁 داده و تنظیمات: {_data}")
 from marketing_divar.web.__main__ import main  # noqa: E402
 
 if __name__ == "__main__":

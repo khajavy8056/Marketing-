@@ -24,6 +24,7 @@ class TestWindowsInstaller(unittest.TestCase):
             "mirror-pypi",
             "Start Install",
             "شروع نصب",
+            "KhajavyLead",
         ):
             self.assertIn(needle, ps1, f"نصب‌کننده ناقص: {needle}")
 

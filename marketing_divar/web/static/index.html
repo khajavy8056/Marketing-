@@ -362,7 +362,9 @@
 
 </main>
 
-<footer>طراحی و توسعه توسط خواجوی · خواجوی لید</footer>
+<footer>طراحی و توسعه توسط خواجوی · خواجوی لید<br>
+  <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
+</footer>
 
 <dialog id="chat-dlg">
   <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
@@ -435,6 +437,8 @@ async function refreshStatus(){
     if ($('k-found')) $('k-found').textContent = bd.contact_found ?? s.phones_found ?? 0;
     if ($('k-hidden')) $('k-hidden').textContent = bd.no_contact ?? s.chat_queue ?? 0;
     if ($('k-failed')) $('k-failed').textContent = bd.failed ?? 0;
+    if ($('data-dir-hint') && s.data_dir)
+      $('data-dir-hint').textContent = (LANG==='en' ? 'Settings saved in: ' : 'تنظیمات ذخیره می‌شوند در: ') + s.data_dir;
     $('btn-pause').disabled = !s.running;
     $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
     // اکانت‌ها در داشبورد

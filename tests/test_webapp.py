@@ -78,7 +78,7 @@ class TestUIBasics(unittest.TestCase):
         r = client.get("/api/status")
         self.assertEqual(r.status_code, 200)
         for key in ("running", "queue", "chat_queue", "accounts", "keywords", "logs",
-                    "breakdown", "accounts_breakdown"):
+                    "breakdown", "accounts_breakdown", "data_dir"):
             self.assertIn(key, r.json())
         self.assertIn("contact_found", r.json()["breakdown"])
 

@@ -1,6 +1,11 @@
 @echo off
-REM DivarLead launcher (Persian name shortcut)
+REM خواجوی لید — اگر نصب شده باشد برنامه باز می‌شود؛ وگرنه نصب‌کننده
 cd /d "%~dp0"
+if exist ".venv\Scripts\python.exe" (
+  set PYTHONUTF8=1
+  start "" ".venv\Scripts\python.exe" main.py
+  exit /b 0
+)
 powershell -NoProfile -STA -ExecutionPolicy Bypass -File "installer\installer.ps1"
 set EC=%errorlevel%
 if not "%EC%"=="0" (

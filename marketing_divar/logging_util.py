@@ -8,9 +8,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections import deque
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+def _log_dir() -> Path:
+    return Path(os.environ.get("DIVAR_LOG_DIR") or "logs")
 
 LOG_DIR = Path("logs")
 LOG_FILE = LOG_DIR / "divar_app.log"
@@ -47,13 +51,15 @@ class _MemoryHandler(logging.Handler):
 
 def setup() -> logging.Logger:
     """راه‌اندازی لاگر اصلی برنامه (یک بار در اجرای سرور صدا زده شود)."""
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_dir = _log_dir()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "divar_app.log"
     logger = logging.getLogger("divar")
     if logger.handlers:      # از تکرار هندلر جلوگیری می‌شود
         return logger
     logger.setLevel(logging.INFO)
 
-    fh = RotatingFileHandler(LOG_FILE, maxBytes=2_000_000, backupCount=5,
+    fh = RotatingFileHandler(log_file, maxBytes=2_000_000, backupCount=5,
                              encoding="utf-8")
     fh.setFormatter(_formatter)
     logger.addHandler(fh)

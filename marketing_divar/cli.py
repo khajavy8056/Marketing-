@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -20,6 +21,7 @@ from .client import DivarAuthError, DivarBlockedError, DivarClient
 from .collector import run_collection
 from .db import connect, export_csv, quota_today, set_lead_status, stats
 from .messaging import draft_flow
+from .paths import apply_runtime_paths
 
 
 def cmd_login(args: argparse.Namespace) -> None:
@@ -164,7 +166,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="marketing_divar",
         description="سیستم جمع‌آوری سرنخ و شماره تماس از دیوار (نسخه ضد بلاک)")
-    ap.add_argument("--db", default="data/divar_leads.db", help="مسیر دیتابیس")
+    ap.add_argument("--db", default=os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db"),
+                   help="مسیر دیتابیس")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("login", help="لاگین با شماره موبایل + کد پیامکی")
@@ -230,6 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> None:
+    apply_runtime_paths()
     args = build_parser().parse_args(argv)
     try:
         args.func(args)

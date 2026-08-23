@@ -39,10 +39,10 @@ DEFAULTS: Dict[str, Any] = {
 }
 
 
-def load_config(path: str = "config.json") -> Dict[str, Any]:
+def load_config(path: str | None = None) -> Dict[str, Any]:
     """config.json روی پیش‌فرض‌ها سوار می‌شود (بدون آن هم کار می‌کند)."""
     cfg = json.loads(json.dumps(DEFAULTS))  # کپی عمیق
-    p = Path(path)
+    p = Path(path or os.environ.get("DIVAR_CONFIG_PATH") or "config.json")
     if p.exists():
         try:
             user = json.loads(p.read_text(encoding="utf-8"))

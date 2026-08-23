@@ -27,7 +27,8 @@ def _check_windows_installer() -> None:
     ps1 = (root / "installer" / "installer.ps1").read_text(encoding="utf-8-sig")
     bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8", errors="replace")
     for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
-                   "main.py --check", "localhost:8642", ".venv", "CreateShortcut"):
+                   "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
+                   "KhajavyLead"):
         if needle not in ps1:
             raise FileNotFoundError(f"نصب‌کننده ناقص است — «{needle}» نیست")
     if "installer.ps1" not in bat:

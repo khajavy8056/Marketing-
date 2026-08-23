@@ -43,7 +43,7 @@ def _base_url():
 logging_util.setup()
 log = logging_util.log
 
-app = FastAPI(title="خواجوی لید — دیوار لید", version="1.6.4")
+app = FastAPI(title="خواجوی لید — دیوار لید", version="1.7.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -367,6 +367,7 @@ def status():
         "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
         "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
         "sms_ready": sms_ready(store.settings_all(DB_PATH))[0],
+        "data_dir": os.environ.get("DIVAR_DATA_DIR") or str(Path(DB_PATH).resolve().parent),
         "breakdown": breakdown, "accounts_breakdown": acc_break,
         "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),

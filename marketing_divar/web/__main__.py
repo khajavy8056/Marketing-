@@ -5,7 +5,10 @@ import webbrowser
 
 import uvicorn
 
-from .server import app, start_background  # noqa: F401
+from ..paths import apply_runtime_paths
+
+apply_runtime_paths()
+from .server import app, start_background  # noqa: E402,F401
 
 HOST = "0.0.0.0"
 PORT = 8642

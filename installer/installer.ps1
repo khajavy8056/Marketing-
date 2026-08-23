@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 #  DivarLead Installer — GUI installer with progress bar
 #  Requires: Windows + built-in PowerShell (no prerequisites)
 #  Fixes: SmartScreen (Unblock-File), garbled Persian in cmd,
@@ -299,19 +299,23 @@ function Stream-File([string]$path, [int]$alreadyLogged) {
 
 function New-DesktopShortcut([string]$pyExe) {
     Set-Step $L[$Lang].stepS 90
+    $dataDir = Join-Path $env:LOCALAPPDATA "KhajavyLead"
+    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+    Log "[data] settings persist in $dataDir (never wiped by installer)"
     $desktop = [Environment]::GetFolderPath("Desktop")
-    $lnk = Join-Path $desktop "DivarLead.lnk"
     $w = New-Object -ComObject WScript.Shell
-    $sc = $w.CreateShortcut($lnk)
-    $sc.TargetPath = $pyExe
-    $sc.Arguments = "main.py"
-    $sc.WorkingDirectory = $Root
-    $sc.WindowStyle = 1
-    $sc.Description = "DivarLead — دیوار لید"
-    $bat = Join-Path $Root "Install-and-Run.bat"
-    if (Test-Path $bat) { $sc.IconLocation = "imageres.dll,109" }
-    $sc.Save()
-    Log "[4b] shortcut: $lnk"
+    foreach ($name in @("خواجوی لید.lnk", "DivarLead.lnk")) {
+        $lnk = Join-Path $desktop $name
+        $sc = $w.CreateShortcut($lnk)
+        $sc.TargetPath = $pyExe
+        $sc.Arguments = "main.py"
+        $sc.WorkingDirectory = $Root
+        $sc.WindowStyle = 1
+        $sc.Description = "خواجوی لید — DivarLead"
+        $sc.IconLocation = "imageres.dll,109"
+        $sc.Save()
+        Log "[4b] shortcut: $lnk"
+    }
 }
 
 # ---------- main flow ----------
