@@ -68,6 +68,8 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("FA_EN", r.text)
         self.assertIn('"Dashboard"', r.text)          # ترجمه انگلیسی داشبورد
         self.assertIn('dir="rtl"', r.text)            # پیش‌فرض فارسی
+        self.assertIn("function openChat", r.text)
+        self.assertIn("chat-dlg", r.text)
 
     def test_status_shape(self):
         r = client.get("/api/status")
@@ -99,6 +101,24 @@ class TestAccountFlow(unittest.TestCase):
         st = next(a for a in r.json()["accounts"] if a["name"] == "web1")
         self.assertEqual(st["status"], "active")
         self.assertTrue(st["has_token"])
+
+    def test_01b_get_phone_after_web_login(self):
+        """بعد از OTP وب، همان سشن باید شماره را از شبیه‌ساز بگیرد."""
+        from marketing_divar.accounts import AccountManager
+        from marketing_divar.client import DivarClient
+        from marketing_divar.config import DEFAULTS
+        from marketing_divar.rate import RateLimiter
+        client.post("/api/accounts/otp", json={"name": "web1", "phone": "09121110000"})
+        client.post("/api/accounts/confirm", json={"name": "web1", "code": "123456"})
+        m = AccountManager(DEFAULTS, os.environ["DIVAR_ACCOUNTS_DIR"])
+        cl = DivarClient(session_path=str(m.session_path("web1")),
+                         base_url=os.environ["DIVAR_BASE_URL"],
+                         limiter=RateLimiter(search_delay=0, phone_delay=0,
+                                             page_delay=0, jitter=0))
+        self.assertTrue(cl.is_logged_in())
+        res = cl.get_phone("webtok1")
+        self.assertEqual(res["status"], "found", res)
+        self.assertTrue(str(res["phone"]).startswith("0912"))
 
     def test_02_release_disable(self):
         client.post("/api/accounts/action", json={"name": "web1", "action": "disable"})

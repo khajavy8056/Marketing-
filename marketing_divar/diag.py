@@ -98,19 +98,16 @@ def run_diag(base_url: Optional[str] = None, keyword: str = "آپارتمان",
         return f"وصل شد — HTTP {r.status_code}"
     run_step("connect", connect)
 
-    # ۳) جستجو + استخراج پست‌ها (اعتبارسنجی ساختار پاسخ)
+    # ۳) جستجو — همان زنجیرهٔ زنده (web-search → POST /v8/search → HTML)
     def search():
-        r = s.get(f"{base}/v8/web-search/iran",
-                  params={"q": keyword}, timeout=15)
-        if r.status_code != 200:
-            return f"HTTP {r.status_code} — جستجو کار نمی‌کند"
-        try:
-            posts = DivarClient._extract_post_list(r.json())
-        except Exception as e:
-            return f"پاسخ ۲۰۰ آمد ولی ساختار عجیب است ({e}) — گزارش شود"
+        from .rate import RateLimiter
+        cl = DivarClient(base_url=base,
+                         limiter=RateLimiter(search_delay=0, phone_delay=0,
+                                             page_delay=0, jitter=0))
+        posts = cl.search(keyword)
         holder["posts"] = posts
         if not posts:
-            return "پاسخ ۲۰۰ ولی ۰ آگهی — ساختار پاسخ احتمالاً عوض شده"
+            return "۰ آگهی از همهٔ مسیرهای جستجو (API+HTML)"
         return f"{len(posts)} آگهی؛ نمونه: «{(posts[0].get('title') or '?')[:40]}»"
     run_step("search", search)
 
@@ -127,7 +124,8 @@ def run_diag(base_url: Optional[str] = None, keyword: str = "آپارتمان",
         except ValueError:
             return "پاسخ JSON نیست"
         holder["token"] = token
-        holder["uuid"] = (data.get("contact") or {}).get("contact_uuid")
+        from .client import extract_contact_uuid
+        holder["uuid"] = extract_contact_uuid(data)
         d = data.get("data") or {}
         title = d.get("title") or holder["posts"][0].get("title") or "?"
         body = (d.get("description") or (d.get("seo") or {}).get("description")

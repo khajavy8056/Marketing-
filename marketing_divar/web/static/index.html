@@ -309,6 +309,19 @@
 
 </main>
 
+<dialog id="chat-dlg">
+  <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
+  <p class="hint" id="chat-dlg-title" style="margin:8px 0 10px"></p>
+  <textarea id="chat-dlg-msg" style="min-height:140px"></textarea>
+  <div class="hint" style="margin-top:8px">متن کپی می‌شود؛ آگهی در دیوار باز می‌شود؛ شما Paste و ارسال می‌کنید. ارسال انبوه خودکار نداریم.</div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn" type="button" onclick="chatCopy()">📋 کپی متن</button>
+    <button class="btn ok" type="button" onclick="chatOpenAd()">باز کردن آگهی</button>
+    <button class="btn gray" type="button" onclick="chatMarkSent()">✓ ارسال کردم</button>
+    <button class="btn gray" type="button" onclick="document.getElementById('chat-dlg').close()">بستن</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -445,6 +458,32 @@ async function tplSave(ch){ const text = ch==='chat'?$('tpl-chat').value:$('tpl-
 
 /* ───────────────────────── سرنخ‌ها ───────────────────────── */
 let leadsFilter='all';
+let chatDraft = null;
+async function openChat(token){
+  try{
+    const d = await api('/api/leads/'+encodeURIComponent(token)+'/draft');
+    chatDraft = d;
+    $('chat-dlg-title').textContent = (d.title || token);
+    $('chat-dlg-msg').value = d.message || '';
+    $('chat-dlg').showModal();
+    try { await navigator.clipboard.writeText(d.message || ''); toast('متن در کلیپ‌بورد کپی شد'); } catch(e){}
+  } catch(e){ toast('❌ '+e.message, false); }
+}
+async function chatCopy(){
+  try { await navigator.clipboard.writeText($('chat-dlg-msg').value || ''); toast('کپی شد'); }
+  catch(e){ toast('کپی دستی از کادر بالا', false); }
+}
+function chatOpenAd(){
+  if (chatDraft && chatDraft.url) window.open(chatDraft.url, '_blank');
+}
+async function chatMarkSent(){
+  if (!chatDraft || !chatDraft.token) return;
+  if (await act('/api/leads/'+encodeURIComponent(chatDraft.token)+'/status',
+                {status:'contacted', chat_status:'sent'})) {
+    $('chat-dlg').close();
+    leadsLoad();
+  }
+}
 async function leadsLoad(filter){
   leadsFilter=filter||leadsFilter;
   try{ const s=await api('/api/leads?filter='+leadsFilter);

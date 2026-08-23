@@ -21,6 +21,19 @@ CHECKS = [
 ]
 
 
+def _check_windows_installer() -> None:
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    ps1 = (root / "installer" / "installer.ps1").read_text(encoding="utf-8-sig")
+    bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8", errors="replace")
+    for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
+                   "main.py --check", "localhost:8642", ".venv", "CreateShortcut"):
+        if needle not in ps1:
+            raise FileNotFoundError(f"نصب‌کننده ناقص است — «{needle}» نیست")
+    if "installer.ps1" not in bat:
+        raise FileNotFoundError("Install-and-Run.bat به installer.ps1 وصل نیست")
+
+
 def _check_static_ui() -> None:
     from pathlib import Path
     p = Path(__file__).parent / "web" / "static" / "index.html"
@@ -39,6 +52,7 @@ def _check_db() -> None:
 CHECKS += [
     ("فایل رابط گرافیکی فارسی", _check_static_ui),
     ("دسترسی دیتابیس (data/)", _check_db),
+    ("نصب‌کننده ویندوز (نوار پیشرفت + venv)", _check_windows_installer),
 ]
 
 

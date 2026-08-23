@@ -1,8 +1,8 @@
-﻿\xef\xbb\xbf# ============================================================
+﻿# ============================================================
 #  DivarLead Installer — GUI installer with progress bar
 #  Requires: Windows + built-in PowerShell (no prerequisites)
 #  Fixes: SmartScreen (Unblock-File), garbled Persian in cmd,
-#         clear progress for every step
+#         local .venv, desktop shortcut, clear progress
 # ============================================================
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -12,6 +12,7 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $Root   # repo root (installer/ is one level down)
 Set-Location $Root
 $LogFile = Join-Path $Root "installer\install-log.txt"
+$VenvPy  = Join-Path $Root ".venv\Scripts\python.exe"
 "=== DivarLead install $(Get-Date) ===" | Out-File $LogFile -Encoding utf8
 
 # ---------- bilingual labels (WinForms renders Persian correctly) ----------
@@ -19,13 +20,17 @@ $L = @{
     fa = @{
         title = "دیوار لید — نصب و راه‌اندازی"
         status = "آماده شروع. دکمه «شروع نصب» را بزنید."
+        statusReady = "نصب قبلی پیدا شد. شروع را بزنید تا بررسی شود و برنامه باز شود."
         start = "شروع نصب"
+        rerun = "بررسی و اجرا"
         close = "بستن"
         lang  = "English"
         step1 = "بررسی پایتون"
         step2 = "دانلود و نصب پایتون"
+        stepV = "ساخت محیط مجازی برنامه"
         step3 = "نصب کتابخانه‌ها"
         step4 = "تست سلامت"
+        stepS = "میانبر دسکتاپ"
         step5 = "اجرای برنامه"
         done  = "نصب کامل شد ✔ برنامه در حال اجراست — مرورگر: http://localhost:8642"
         fail  = "نصب ناتمام ماند — علت در لاگ پایین مشخص است؛ می‌توانید دوباره شروع نصب را بزنید. اگر تکرار شد، فایل installer\install-log.txt را بفرستید."
@@ -38,13 +43,17 @@ $L = @{
     en = @{
         title = "DivarLead — Install & Run"
         status = "Ready. Click 'Start Install'."
+        statusReady = "Previous install found. Click Start to verify and launch."
         start = "Start Install"
+        rerun = "Verify & Run"
         close = "Close"
         lang  = "فارسی"
         step1 = "Checking Python"
         step2 = "Downloading & installing Python"
+        stepV = "Creating app virtual environment"
         step3 = "Installing libraries"
         step4 = "Health check"
+        stepS = "Desktop shortcut"
         step5 = "Launching app"
         done  = "Install complete! App is running — browser: http://localhost:8642"
         fail  = "Install incomplete — reason is in the log below. You may press Start again. If it repeats, send installer\install-log.txt to support."
@@ -76,6 +85,13 @@ $onCrash = {
 [System.AppDomain]::CurrentDomain.add_UnhandledException({ param($s, $e)
     try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value ("`r`n[FATAL-Domain] " + $e.ExceptionObject) -Encoding UTF8 } catch {}
 })
+
+# SmartScreen: unblock our own scripts after zip extract
+foreach ($p in @(
+    (Join-Path $Root "Install-and-Run.bat"),
+    (Join-Path $Root "شروع-دیوار-لید.bat"),
+    (Join-Path $Root "installer\installer.ps1")
+)) { try { if (Test-Path $p) { Unblock-File -Path $p } } catch {} }
 
 # ---------- GUI ----------
 $form = New-Object System.Windows.Forms.Form
@@ -150,8 +166,9 @@ function Set-Step([string]$s, [int]$percent) {
 }
 function Apply-Lang {
     $lblTitle.Text = $L[$Lang].title
-    $lblStatus.Text = $L[$Lang].status
-    $btnStart.Text = $L[$Lang].start
+    $hasVenv = Test-Path $VenvPy
+    $lblStatus.Text = if ($hasVenv) { $L[$Lang].statusReady } else { $L[$Lang].status }
+    $btnStart.Text = if ($hasVenv) { $L[$Lang].rerun } else { $L[$Lang].start }
     $btnClose.Text = $L[$Lang].close
     $btnLang.Text = $L[$Lang].lang
     $form.Text = "DivarLead Installer"
@@ -205,7 +222,6 @@ function Install-Python {
     if (-not (Test-Path $dl) -or (Get-Item $dl).Length -lt 5MB) {
         throw "Python download failed (file too small)"
     }
-    # رفع SmartScreen: حذف Zone.Identifier از فایل دانلودی
     try { Unblock-File -Path $dl } catch { }
     Log "[2] $($L[$Lang].inst) ..."
     Set-Step $L[$Lang].inst -1
@@ -215,20 +231,31 @@ function Install-Python {
     Start-Sleep -Seconds 2
     $cand = Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"
     if (Test-Path $cand) { return $cand }
-    # جستجو در نسخه‌های دیگر نصب‌شده
     $found = Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs\Python") -Filter "python.exe" -Recurse -ErrorAction SilentlyContinue |
              Select-Object -First 1
     if ($found) { return $found.FullName }
     throw "Python installed but python.exe not found"
 }
 
+function Ensure-Venv([string]$pyExe) {
+    if (Test-Path $VenvPy) {
+        Log "[2b] venv exists: $VenvPy"
+        return $VenvPy
+    }
+    Log "[2b] $($L[$Lang].stepV)"
+    Set-Step $L[$Lang].stepV -1
+    $venvDir = Join-Path $Root ".venv"
+    & $pyExe -m venv $venvDir
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPy)) {
+        throw "venv creation failed (code $LASTEXITCODE)"
+    }
+    Log "[2b] $($L[$Lang].ok): $VenvPy"
+    return $VenvPy
+}
+
 function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     Log "[3] $label"
     Set-Step $label -1
-    # NOTE: از رویدادهای cross-thread (DataReceivedEventHandler) استفاده نمی‌کنیم —
-    # اسکریپت‌بلاک روی تردهای threadpool اجرا نمی‌شود و کل پروسه را می‌کشد
-    # (علت کرش ناگهانی پنجره در v1.3.1). راه امن: cmd خروجی را به فایل موقت
-    # می‌نویسد و ما همان فایل را به‌صورت زنده و بدون قفل می‌خوانیم.
     $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarpip-" + [guid]::NewGuid().ToString("N") + ".log")
     $inner = '"' + $pyExe + '" ' + ($pipArgs -join " ") + ' > "' + $outFile + '" 2>&1'
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -254,7 +281,6 @@ function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     return $proc.ExitCode
 }
 
-# خواندن امنِ هم‌زمان فایلِ در حال نوشته‌شدن — فقط خطوط جدید را به لاگ می‌فرستد
 function Stream-File([string]$path, [int]$alreadyLogged) {
     try {
         if (-not (Test-Path $path)) { return $alreadyLogged }
@@ -271,43 +297,61 @@ function Stream-File([string]$path, [int]$alreadyLogged) {
     } catch { return $alreadyLogged }
 }
 
+function New-DesktopShortcut([string]$pyExe) {
+    Set-Step $L[$Lang].stepS 90
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $lnk = Join-Path $desktop "DivarLead.lnk"
+    $w = New-Object -ComObject WScript.Shell
+    $sc = $w.CreateShortcut($lnk)
+    $sc.TargetPath = $pyExe
+    $sc.Arguments = "main.py"
+    $sc.WorkingDirectory = $Root
+    $sc.WindowStyle = 1
+    $sc.Description = "DivarLead — دیوار لید"
+    $bat = Join-Path $Root "Install-and-Run.bat"
+    if (Test-Path $bat) { $sc.IconLocation = "imageres.dll,109" }
+    $sc.Save()
+    Log "[4b] shortcut: $lnk"
+}
+
 # ---------- main flow ----------
 $btnStart.Add_Click({
     $btnStart.Enabled = $false
     $btnLang.Enabled = $false
     $pyExe = $null
     try {
-        # STEP 1 — python
         Log "[1] $($L[$Lang].step1)"
         Set-Step $L[$Lang].step1 5
         $pyExe = Find-Python
         if ($pyExe) {
             Log "[1] $($L[$Lang].found): $pyExe"
             & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
-            $bar.Value = 40
+            $bar.Value = 20
         } else {
             Log "[1] Python not found -> auto-install"
             $pyExe = Install-Python
             Log "[1] $($L[$Lang].ok): $pyExe"
             & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
-            $bar.Value = 40
+            $bar.Value = 20
         }
 
-        # STEP 2 — deps (pip)
-        $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") $L[$Lang].deps
+        $appPy = Ensure-Venv $pyExe
+        $bar.Value = 35
+
+        $rc = Run-Pip $appPy @("-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check", "--progress-bar", "off") "pip upgrade"
+        $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") $L[$Lang].deps
         if ($rc -ne 0) {
             Log "[3] PyPI failed -> trying mirror ..."
-            $rc = Run-Pip $pyExe @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
+            $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
             if ($rc -ne 0) { throw "pip install failed (code $rc)" }
         }
         Log "[3] $($L[$Lang].ok)"
-        $bar.Value = 80
+        $bar.Value = 75
 
-        # STEP 3 — health check (stdout + stderr هر دو نمایش داده می‌شوند)
         Log "[4] $($L[$Lang].step4)"
-        Set-Step $L[$Lang].step4 85
+        Set-Step $L[$Lang].step4 80
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.FileName = $pyExe; $pinfo.Arguments = "main.py --check"
+        $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"
         $pinfo.WorkingDirectory = $Root
         $pinfo.UseShellExecute = $false
         $pinfo.RedirectStandardOutput = $true
@@ -327,26 +371,30 @@ $btnStart.Add_Click({
         if ($proc.ExitCode -ne 0) {
             throw "health check failed (exit $($proc.ExitCode)) — see log above"
         }
-        $bar.Value = 100
+        $bar.Value = 88
 
-        # STEP 4 — launch
+        try { New-DesktopShortcut $appPy } catch { Log "[4b] shortcut skipped: $_" }
+
         Log "[5] $($L[$Lang].step5)"
         Set-Step $L[$Lang].step5 100
         $env:PYTHONUTF8 = "1"
-        Start-Process -FilePath $pyExe -ArgumentList "main.py" -WorkingDirectory $Root
+        Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root
         Start-Sleep -Seconds 3
         Start-Process "http://localhost:8642"
         $lblStatus.Text = $L[$Lang].done
         $lblStatus.ForeColor = [System.Drawing.Color]::Green
         Log $L[$Lang].done
         $btnStart.Enabled = $true
+        $btnLang.Enabled = $true
     } catch {
         $lblStatus.Text = $L[$Lang].fail
         $lblStatus.ForeColor = [System.Drawing.Color]::Firebrick
         Log "[ERROR] $_"
         Log "Log file: $LogFile"
-        $btnStart.Enabled = $true   # اجازه تلاش دوباره
+        $btnStart.Enabled = $true
+        $btnLang.Enabled = $true
     }
 })
 $btnClose.Add_Click({ $form.Close() })
+Apply-Lang
 [void]$form.ShowDialog()
