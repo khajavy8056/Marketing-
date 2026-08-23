@@ -44,11 +44,20 @@ class MockDivar:
             cls.contact_calls = []
 
     @classmethod
-    def account_of(cls, auth_header: str) -> str:
-        # Authorization: Basic tok-<name>
-        if not auth_header or not auth_header.startswith("Basic "):
-            return ""
-        return auth_header[6:].replace("tok-", "")
+    def account_of(cls, auth_header: str, cookies: str = "") -> str:
+        """شناسایی اکانت از هدر Basic/Bearer یا کوکی sAccessToken (فلوی v8)."""
+        for prefix in ("Basic ", "Bearer "):
+            if auth_header.startswith(prefix):
+                return auth_header[len(prefix):].replace("tok-", "")
+        for part in (cookies or "").split(";"):
+            if "sAccessToken=" in part:
+                return part.split("=", 1)[1].strip().replace("tok-", "")
+        return ""
+
+    @staticmethod
+    def to_persian_digits(text: str) -> str:
+        """شبیه‌سازی رفتار واقعی: دیوار گاهی ارقام فارسی می‌فرستد."""
+        return str(text).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -78,6 +87,47 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(401, {"error": "invalid code"})
             else:
                 self._json(200, {"token": "tok-ok"})
+        elif u.path == "/v8/authenticate/signinup/code":
+            self._json(200, {})
+        elif u.path.startswith("/v8/postcontact/web/contact_info_v2/"):
+            # فلوی جدید دو مرحله‌ای — باید Bearer/کوکی + contact_uuid درست باشد
+            token = u.path.rsplit("/", 1)[-1]
+            acct = MockDivar.account_of(
+                self.headers.get("Authorization", ""),
+                self.headers.get("Cookie", ""))
+            with MockDivar.lock:
+                MockDivar.contact_calls.append((token, acct))
+                n = MockDivar.counters.get(acct, 0)
+                cap_n = MockDivar.captcha_after.get(acct)
+                if cap_n is not None and n >= cap_n and acct not in MockDivar.released:
+                    return self._json(403, {"error": "captcha_required"})
+                MockDivar.counters[acct] = n + 1
+            if not acct:
+                return self._json(401, {"error": "unauthorized"})
+            if body.get("contact_uuid") != "uuid-" + token:
+                return self._json(400, {"error": "bad contact_uuid"})
+            if "chat" in token:
+                return self._json(200, {"widget_list": [
+                    {"data": {"title": "شمارهٔ مخفی‌شده است"}}]})
+            if "v1only" in token:
+                return self._json(404, {"error": "use v1"})  # تست fallback
+            phone_ascii = "0912" + token[-7:].rjust(7, "3")
+            return self._json(200, {"widget_list": [
+                {"data": {"title": "شمارهٔ موبایل",
+                          "value": MockDivar.to_persian_digits(phone_ascii)}}]})
+        elif u.path == "/v8/authenticate/signinup/code/consume":
+            if body.get("code") == "000000":
+                self._json(401, {"error": "invalid code"})
+            else:
+                # فلوی v8: کوکی‌های سشن ست می‌شوند (شبیه دیوار واقعی)
+                self.send_response(200)
+                self.send_header("Set-Cookie", "sAccessToken=tok-v8web")
+                self.send_header("Set-Cookie", "sFrontToken=front-xyz")
+                self.send_header("Content-Type", "application/json")
+                b = json.dumps({"ok": True}, ensure_ascii=False).encode()
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
         else:
             self._json(404, {})
 
@@ -100,6 +150,15 @@ class Handler(BaseHTTPRequestHandler):
                     "bottom_description_text": "۱ دقیقه پیش",
                     "has_chat": p["has_chat"]}})
             self._json(200, {"web_widgets": {"post_list": post_list}})
+        elif u.path.startswith("/v8/posts-v2/web/"):
+            token = u.path.rsplit("/", 1)[-1]
+            if "gone" in token:
+                self._json(404, {})
+            else:
+                # فلوی v2: uuid تماس از جزئیات آگهی (بدون لاگین)
+                self._json(200, {"contact": {"contact_uuid": "uuid-" + token}})
+        elif u.path.startswith("/v8/postcontact/web/contact_info_v2/"):
+            pass  # در do_POST مدیریت می‌شود (متد POST است)
         elif u.path.startswith("/v8/postcontact/web/contact_info/"):
             token = u.path.rsplit("/", 1)[-1]
             acct = MockDivar.account_of(self.headers.get("Authorization", ""))

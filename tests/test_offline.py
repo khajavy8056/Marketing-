@@ -32,33 +32,38 @@ SEARCH_RESPONSE = {
     }
 }
 
-PHONE_FOUND_RESPONSE = {
+# ── فلوی v2 (فعلی دیوار): posts-v2 → contact_uuid → contact_info_v2 (POST) ──
+POSTS_V2_RESPONSE = {"contact": {"contact_uuid": "uuid-gZtQ1"}}
+POSTS_V2_NO_CONTACT = {"sections": []}          # uuid ندارد → fallback به v1
+PHONE_V2_FOUND = {"widget_list": [
+    {"data": {"title": "شمارهٔ موبایل", "value": "۰۹۱۲۱۲۳۴۵۶۷"}}]}   # ارقام فارسی!
+PHONE_V2_HIDDEN = {"widget_list": [
+    {"data": {"title": "شمارهٔ مخفی‌شده است"}}]}
+# ── فلوی v1 قدیمی (پشتیبان) ──
+PHONE_V1_FOUND = {
     "widget_list": [
         {"data": {"title": "شماره تماس",
                   "action": {"payload": {"phone_number": 9121234567}}}}
     ]
 }
 
-PHONE_HIDDEN_RESPONSE = {
-    "widget_list": [{"data": {"title": "شماره مخفی شده است"}}]
-}
-
 
 def make_client(responses):
-    """کلاینتی که به جای اینترنت، پاسخ‌های داده‌شده را برمی‌گرداند."""
+    """کلاینتی که به جای اینترنت، پاسخ‌های داده‌شده را برمی‌گرداند (GET+POST)."""
     cl = DivarClient.__new__(DivarClient)  # بدون خواندن سشن
     cl.session_path = "data/test_session.json"
     cl.token = "fake-jwt-token"
     cl.limiter = MagicMock()  # بدون تاخیر واقعی در تست
     cl.base = "https://api.divar.ir"
     cl.http = MagicMock()
-    def get(url, **kw):
+    def _resp(url):
         r = MagicMock()
         r.status_code = responses.get(url, {}).get("status", 200)
         r.json.return_value = responses.get(url, {}).get("json", {})
         r.text = json.dumps(r.json.return_value, ensure_ascii=False)
         return r
-    cl.http.get.side_effect = get
+    cl.http.get.side_effect = lambda url, **kw: _resp(url)
+    cl.http.post.side_effect = lambda url, **kw: _resp(url)
     return cl
 
 
@@ -73,23 +78,60 @@ class TestParsing(unittest.TestCase):
         self.assertTrue(posts[0]["has_chat"])
         self.assertEqual(posts[0]["url"], "https://divar.ir/v/gZtQ1")
 
-    def test_phone_found_normalized(self):
-        # دیوار گاهی 9121234567 می‌دهد → باید 09121234567 ذخیره شود
-        cl = make_client({"https://api.divar.ir/v8/postcontact/web/contact_info/gZtQ1":
-                          {"json": PHONE_FOUND_RESPONSE}})
+    def test_phone_v2_found_persian_digits(self):
+        # فلوی فعلی دیوار: uuid → POST v2 → «شمارهٔ موبایل» با ارقام فارسی
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gZtQ1": {"json": POSTS_V2_RESPONSE},
+            f"{B}/v8/postcontact/web/contact_info_v2/gZtQ1": {"json": PHONE_V2_FOUND},
+        })
+        res = cl.get_phone("gZtQ1")
+        self.assertEqual(res["status"], "found")
+        self.assertEqual(res["phone"], "09121234567")  # ۰۹۱۲… → 0912…
+
+    def test_phone_v2_hidden(self):
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gZtQ1": {"json": POSTS_V2_RESPONSE},
+            f"{B}/v8/postcontact/web/contact_info_v2/gZtQ1": {"json": PHONE_V2_HIDDEN},
+        })
+        self.assertEqual(cl.get_phone("gZtQ1")["status"], "hidden")
+
+    def test_v1_fallback_when_no_uuid(self):
+        # uuid نبود → فلوی قدیمی GET contact_info با Basic
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gZtQ1": {"json": POSTS_V2_NO_CONTACT},
+            f"{B}/v8/postcontact/web/contact_info/gZtQ1": {"json": PHONE_V1_FOUND},
+        })
         res = cl.get_phone("gZtQ1")
         self.assertEqual(res["status"], "found")
         self.assertEqual(res["phone"], "09121234567")
 
-    def test_phone_hidden(self):
-        cl = make_client({"https://api.divar.ir/v8/postcontact/web/contact_info/kYw3A":
-                          {"json": PHONE_HIDDEN_RESPONSE}})
-        res = cl.get_phone("kYw3A")
-        self.assertEqual(res["status"], "hidden")
+    def test_v1_fallback_when_v2_404(self):
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gZtQ1": {"json": POSTS_V2_RESPONSE},
+            f"{B}/v8/postcontact/web/contact_info_v2/gZtQ1": {"status": 404},
+            f"{B}/v8/postcontact/web/contact_info/gZtQ1": {"json": PHONE_V1_FOUND},
+        })
+        res = cl.get_phone("gZtQ1")
+        self.assertEqual(res["status"], "found")
+
+    def test_removed_post(self):
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gone1": {"status": 404},
+            f"{B}/v8/postcontact/web/contact_info/gone1": {"status": 404},
+        })
+        self.assertEqual(cl.get_phone("gone1")["status"], "removed")
 
     def test_auth_rejected(self):
-        cl = make_client({"https://api.divar.ir/v8/postcontact/web/contact_info/x":
-                          {"status": 401}})
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/x": {"json": POSTS_V2_RESPONSE},
+            f"{B}/v8/postcontact/web/contact_info_v2/x": {"status": 401},
+        })
         with self.assertRaises(DivarAuthError):
             cl.get_phone("x")
 

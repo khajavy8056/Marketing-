@@ -23,6 +23,7 @@ class TestCaptchaDetection(unittest.TestCase):
         self.assertFalse(looks_like_captcha('{"phone_number":"0912"}'))
 
     def _client_with(self, status, body):
+        """کلاینت با فلوی v2: uuid سالم + پاسخ contact_info_v2 = status/body."""
         cl = DivarClient.__new__(DivarClient)
         cl.session_path = "data/x.json"
         cl.token = "t"
@@ -31,8 +32,13 @@ class TestCaptchaDetection(unittest.TestCase):
         r = MagicMock()
         r.status_code = status
         r.text = body
+        r.json.side_effect = ValueError("no json")
+        r_uuid = MagicMock()
+        r_uuid.status_code = 200
+        r_uuid.json.return_value = {"contact": {"contact_uuid": "uuid-tok"}}
         cl.http = MagicMock()
-        cl.http.get.return_value = r
+        cl.http.post.return_value = r          # contact_info_v2 → POST
+        cl.http.get.return_value = r_uuid      # posts-v2 → uuid
         return cl
 
     def test_429_raises_block(self):
@@ -47,20 +53,7 @@ class TestCaptchaDetection(unittest.TestCase):
 
     def test_200_captcha_body_raises_block(self):
         # چالش کپچا گاهی با کد 200 می‌آید — باید تشخیص داده شود
-        r = MagicMock()
-        r.status_code = 200
-        r.text = '{"widget_list": null, "error": "captcha"}'
-
-        def raise_valueerror(*a, **k):
-            raise ValueError("no json")
-        r.json.side_effect = raise_valueerror
-        cl = DivarClient.__new__(DivarClient)
-        cl.session_path = "data/x.json"
-        cl.token = "t"
-        cl.limiter = MagicMock()
-        cl.base = "https://api.divar.ir"
-        cl.http = MagicMock()
-        cl.http.get.return_value = r
+        cl = self._client_with(200, '{"widget_list": null, "error": "captcha"}')
         with self.assertRaises(DivarBlockedError):
             cl.get_phone("tok")
 

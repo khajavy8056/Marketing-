@@ -27,6 +27,27 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
 HIDDEN_MARKER = "شماره مخفی شده است"
+MOBILE_MARKER = "موبایل"          # عنوان ویجت شماره در پاسخ v2
+HIDDEN_MARKER_V2 = "مخفی"         # عنوان ویجت شماره مخفی در v2
+
+# ارقام فارسی/عربی → انگلیسی (دیوار گاهی ۰۹۱۲... می‌فرستد)
+_DIGIT_MAP = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def normalize_phone(raw: Any) -> Optional[str]:
+    """پاک‌سازی شماره: ارقام فارسی، فاصله، +98 → 09xxxxxxxxx"""
+    if raw is None:
+        return None
+    t = str(raw).translate(_DIGIT_MAP).strip().replace(" ", "").replace("-", "")
+    if not t or not any(c.isdigit() for c in t):
+        return None
+    if t.startswith("+98"):
+        t = "0" + t[3:]
+    elif t.startswith("98") and len(t) == 12:
+        t = "0" + t[2:]
+    if not t.startswith("0"):
+        t = "0" + t
+    return t if t.isdigit() and len(t) == 11 else t
 # نشانه‌های احتمالی چالش کپچا در بدنه پاسخ
 CAPTCHA_MARKERS = ("captcha", "challenge", "arkose", "rcsc", "puzzle")
 
@@ -72,13 +93,20 @@ class DivarClient:
             try:
                 data = json.loads(self.session_path.read_text(encoding="utf-8"))
                 self.token = data.get("token")
+                # بازیابی کوکی‌های سشن (برای فلوی v8 که کوکی‌محور است)
+                for k, v in (data.get("cookies") or {}).items():
+                    self.http.cookies.set(k, v)
             except Exception:
                 self.token = None
 
     def _save_session(self, phone: str) -> None:
         self.session_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            cookies = {c.name: c.value for c in self.http.cookies}
+        except Exception:
+            cookies = {}
         self.session_path.write_text(
-            json.dumps({"phone": phone, "token": self.token,
+            json.dumps({"phone": phone, "token": self.token, "cookies": cookies,
                         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
                        ensure_ascii=False, indent=2),
             encoding="utf-8")
@@ -96,7 +124,7 @@ class DivarClient:
 
     # --------------------------------------------------------------- login --
     def request_otp(self, phone: str) -> bool:
-        """گام ۱: درخواست کد تایید پیامکی (فرمت 09xxxxxxxxx)."""
+        """گام ۱: درخواست کد تایید پیامکی — v5 اصلی، v8 پشتیبان."""
         r = self.http.post(f"{self.base}/v5/auth/authenticate",
                            json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
@@ -104,21 +132,54 @@ class DivarClient:
         if r.status_code in (403, 429) or looks_like_captcha(r.text):
             raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
                                     r.status_code, r.text)
-        raise RuntimeError(f"ارسال کد ناموفق: HTTP {r.status_code} — {r.text[:200]}")
+        # مسیر جدید v8 (کوکی‌محور) — اگر v5 غیرفعال شده باشد
+        try:
+            r2 = self.http.post(
+                f"{self.base}/v8/authenticate/signinup/code",
+                json={"phoneNumber": str(phone)},
+                headers={"st-auth-mode": "cookie"}, timeout=25)
+            if r2.status_code in (200, 201):
+                return True
+        except requests.exceptions.RequestException:
+            pass
+        raise RuntimeError(
+            f"ارسال کد ناموفق: v5→HTTP {r.status_code}؛ "
+            f"v8→HTTP {getattr(r2, 'status_code', '—')} — {r.text[:150]}")
 
     def confirm_otp(self, phone: str, code: str) -> str:
-        """گام ۲: تأیید کد و دریافت توکن JWT."""
+        """گام ۲: تأیید کد و دریافت توکن — v5 اصلی، v8 پشتیبان."""
         r = self.http.post(f"{self.base}/v5/auth/confirm",
                            json={"phone": str(phone), "code": str(code)},
                            timeout=25)
         if r.status_code in (200, 201):
-            tok = r.json().get("token")
-            if not tok:
-                raise RuntimeError("پاسخ موفق ولی توکن نداشت: " + r.text[:200])
-            self.token = tok
-            self._save_session(phone)
-            return tok
-        raise DivarAuthError(f"کد تأیید نامعتبر یا منقضی (HTTP {r.status_code})")
+            tok = (r.json() or {}).get("token")
+            if tok:
+                self.token = tok
+                self._save_session(phone)
+                return tok
+        # مسیر جدید v8 — سشن کوکی‌محور (sAccessToken/sFrontToken)
+        try:
+            r2 = self.http.post(
+                f"{self.base}/v8/authenticate/signinup/code/consume",
+                json={"code": str(code), "phoneNumber": str(phone)},
+                headers={"st-auth-mode": "cookie"}, timeout=25)
+            if r2.status_code in (200, 201):
+                tok = ""
+                try:
+                    tok = (r2.json() or {}).get("token") or ""
+                except ValueError:
+                    pass
+                # در فلوی v8 اعتبارسنجی با کوکی‌های ست‌شده توسط سرور انجام می‌شود
+                if tok or self.http.cookies.get("sAccessToken"):
+                    self.token = tok or self.http.cookies.get("sAccessToken")
+                    self._save_session(phone)
+                    return self.token
+                raise DivarAuthError("پاسخ v8 نه توکن داشت نه کوکی سشن")
+        except requests.exceptions.RequestException as e:
+            raise DivarAuthError(f"خطای شبکه در تأیید v8: {e}")
+        raise DivarAuthError(
+            f"کد تأیید نامعتبر یا منقضی (v5→HTTP {r.status_code}؛ "
+            f"v8→HTTP {getattr(r2, 'status_code', '—')})")
 
     def login_interactive(self, phone: Optional[str] = None) -> None:
         """جریان کامل لاگین: شماره → کد پیامکی → ذخیره توکن."""
@@ -192,42 +253,109 @@ class DivarClient:
         return r.json()
 
     # ------------------------------------------------------------ phone 🔑 --
+    def get_contact_uuid(self, token: str) -> Optional[str]:
+        """گام ۱ فلوی v2: شناسه تماس از جزئیات آگهی (بدون لاگین)."""
+        r = self.http.get(f"{self.base}/v8/posts-v2/web/{token}", timeout=25)
+        if r.status_code == 404:
+            return None  # آگهی حذف شده
+        if r.status_code != 200:
+            return None
+        try:
+            return (r.json().get("contact") or {}).get("contact_uuid")
+        except ValueError:
+            return None
     def get_phone(self, token: str) -> Dict[str, Any]:
-        """دریافت شماره تماس آگهی (نیاز به لاگین؛ گران‌ترین درخواست از نظر ریسک).
+        """دریافت شماره تماس آگهی (نیاز به لاگین).
+
+        فلوی اصلی (v2 — مطابق رفتار فعلی دیوار):
+          ۱) GET  /v8/posts-v2/web/{token}              → contact.contact_uuid
+          ۲) POST /v8/postcontact/web/contact_info_v2/  → Authorization: Bearer
+             payload={"contact_uuid": ...} → widget_list → «شمارهٔ موبایل» → value
+        فلوی پشتیبان (v1 قدیمی): GET contact_info/{token} با Basic
 
         خروجی: {"status": "found"|"hidden"|"removed"|"error", ...}
-        خطاها: DivarAuthError (لاگین) / DivarBlockedError (کپچا/بلاک/429)
         """
-        self.limiter.wait("phone")
-        r = self.http.get(f"{self.base}/v8/postcontact/web/contact_info/{token}",
-                          headers=self._auth_headers(), timeout=25)
+        auth = self._auth_headers()  # DivarAuthError اگر لاگین نیست
+        uuid = self.get_contact_uuid(token)
+        if uuid is None:
+            # آگهی حذف شده یا پاسخ نامعتبر — با v1 هم امتحان می‌کنیم
+            return self._get_phone_v1(token)
+
+        res = self._get_phone_v2(token, uuid, auth)
+        if res.get("status") == "error" and "v1" in res.get("fallback", "v1"):
+            v1 = self._get_phone_v1(token)
+            if v1.get("status") in ("found", "hidden", "removed"):
+                return v1
+        res.pop("fallback", None)
+        return res
+
+    def _get_phone_v2(self, token: str, uuid: str,
+                      auth: Dict[str, str]) -> Dict[str, Any]:
+        """فلوی جدید دو مرحله‌ای (contact_info_v2 + Bearer)."""
+        try:
+            r = self.http.post(
+                f"{self.base}/v8/postcontact/web/contact_info_v2/{token}",
+                headers={**auth, "Authorization": f"Bearer {self.token}",
+                         "Content-Type": "application/json"},
+                json={"contact_uuid": uuid}, timeout=25)
+        except requests.exceptions.RequestException as e:
+            return {"status": "error", "message": str(e), "fallback": "v1"}
         if r.status_code == 401:
             raise DivarAuthError("توکن منقضی/رد شد — دوباره لاگین کنید")
         if r.status_code in (403, 429):
-            self._check_block(r)  # DivarBlockedError
+            self._check_block(r)
         if r.status_code == 404:
-            return {"status": "removed", "message": "آگهی حذف شده است"}
+            return {"status": "error", "message": "اندپوینت v2 نیست", "fallback": "v1"}
         if r.status_code != 200:
-            # گاهی چالش کپچا با 200/جای دیگر می‌آید؛ بدنه را هم چک می‌کنیم
             if looks_like_captcha(r.text):
-                raise DivarBlockedError("چالش کپچا در پاسخ تماس",
-                                        r.status_code, r.text)
-            return {"status": "error", "message": f"HTTP {r.status_code}: {r.text[:150]}"}
+                raise DivarBlockedError("چالش کپچا در پاسخ تماس", r.status_code, r.text)
+            return {"status": "error", "message": f"HTTP {r.status_code}",
+                    "fallback": "v1"}
         try:
             widgets = r.json().get("widget_list") or []
         except ValueError:
             if looks_like_captcha(r.text):
                 raise DivarBlockedError("چالش کپچا در پاسخ تماس", 200, r.text)
+            return {"status": "error", "message": "پاسخ غیر JSON", "fallback": "v1"}
+        return self._parse_widgets_v2(widgets)
+
+    @staticmethod
+    def _parse_widgets_v2(widgets: list) -> Dict[str, Any]:
+        """پارس پاسخ v2: عنوان «شمارهٔ موبایل» → value (ممکن است فارسی باشد)."""
+        for w in widgets:
+            d = (w or {}).get("data") or {}
+            title = d.get("title") or ""
+            if MOBILE_MARKER in title and d.get("value"):
+                phone = normalize_phone(d.get("value"))
+                if phone:
+                    return {"status": "found", "phone": phone}
+            if HIDDEN_MARKER_V2 in title:
+                return {"status": "hidden"}
+        # شماره‌ای در ویجت‌ها نبود → فقط چت
+        return {"status": "hidden"}
+
+    def _get_phone_v1(self, token: str) -> Dict[str, Any]:
+        """فلوی قدیمی (پشتیبان): GET contact_info با Basic."""
+        r = self.http.get(f"{self.base}/v8/postcontact/web/contact_info/{token}",
+                          headers=self._auth_headers(), timeout=25)
+        if r.status_code == 401:
+            raise DivarAuthError("توکن منقضی/رد شد — دوباره لاگین کنید")
+        if r.status_code in (403, 429):
+            self._check_block(r)
+        if r.status_code == 404:
+            return {"status": "removed", "message": "آگهی حذف شده است"}
+        if r.status_code != 200:
+            return {"status": "error", "message": f"HTTP {r.status_code}"}
+        try:
+            widgets = r.json().get("widget_list") or []
+        except ValueError:
             return {"status": "error", "message": "پاسخ غیر JSON"}
         for w in widgets:
             d = (w or {}).get("data") or {}
             if d.get("title") == HIDDEN_MARKER:
                 return {"status": "hidden"}
             payload = ((d.get("action") or {}).get("payload") or {})
-            phone = payload.get("phone_number")
+            phone = normalize_phone(payload.get("phone_number"))
             if phone:
-                phone = str(phone)
-                if not phone.startswith("0"):
-                    phone = "0" + phone  # نرمال‌سازی 98… → 098…
                 return {"status": "found", "phone": phone}
         return {"status": "hidden"}
