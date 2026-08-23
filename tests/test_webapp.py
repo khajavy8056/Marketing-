@@ -209,6 +209,18 @@ class TestTemplatesAndSettings(unittest.TestCase):
         eff = store.effective_config(os.environ["DIVAR_DB_PATH"], DEFAULTS)
         self.assertEqual(eff["phone_delay_sec"], 12)
         self.assertEqual(eff["notify"]["telegram_bot_token"], "TT")
+        r = client.post("/api/sms/test", json={"to": ""})
+        self.assertEqual(r.status_code, 400)
+        r = client.post("/api/settings", json={"values": {
+            "sms_username": "meliuser", "sms_password": "melipass",
+            "sms_auto_on_new": False, "sms_daily_limit": 15}})
+        self.assertEqual(r.status_code, 200)
+        s = client.get("/api/settings").json()
+        self.assertEqual(s["sms_username"], "meliuser")
+        self.assertFalse(s["sms_auto_on_new"])
+        r = client.post("/api/telegram/test")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("preview", r.json())
 
 
 class TestMonitorFlow(unittest.TestCase):

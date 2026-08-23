@@ -42,7 +42,7 @@ def _base_url():
 logging_util.setup()
 log = logging_util.log
 
-app = FastAPI(title="دیوار لید — سیستم جمع‌آوری سرنخ", version="1.0")
+app = FastAPI(title="خواجوی لید — دیوار لید", version="1.6.4")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -90,6 +90,10 @@ class MonitorStart(BaseModel):
 class AccountAction(BaseModel):
     name: str
     action: str             # release | disable | enable
+
+
+class SmsTest(BaseModel):
+    to: str = ""            # خالی = فقط موجودی پنل
 
 
 class LeadStatusUpdate(BaseModel):
@@ -323,6 +327,8 @@ def status():
         "queue": queue_len, "chat_queue": chat_len, "total_leads": total_leads,
         "phones_found": found, "phones_today": q["phones"],
         "searches_today": q["searches"],
+        "sms_today": q.get("sms", 0),
+        "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
         "breakdown": breakdown, "accounts_breakdown": acc_break,
         "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),
@@ -435,6 +441,59 @@ def lead_status_update(token: str, req: LeadStatusUpdate):
 
 # ------------------------------------------------------------ صفحه اصلی --
 _STATIC = Path(__file__).parent / "static"
+
+
+def start_background() -> None:
+    """ربات تلگرام ادمین — فقط اگر توکن ذخیره شده باشد درخواست می‌زند."""
+    from ..telegram_bot import start_bot
+
+    def _cfg():
+        return store.effective_config(DB_PATH, load_config())
+
+    def _st():
+        mon = _state.get("monitor")
+        return {"running": bool(_state.get("thread") and _state["thread"].is_alive()),
+                "tick": mon.tick if mon else 0}
+
+    start_bot(_cfg, DB_PATH, _st)
+
+
+@app.post("/api/sms/test")
+def sms_test(req: SmsTest):
+    """آزمایش موجودی یا ارسال یک پیامک از مسیر رسمی ملی‌پیامک."""
+    from ..sms import credit_melipayamak, send_melipayamak
+    s = store.settings_all(DB_PATH)
+    user = s.get("sms_username") or ""
+    pwd = s.get("sms_password") or s.get("sms_api_key") or ""
+    if (s.get("sms_provider") or "none") != "melipayamak":
+        raise HTTPException(400, "سرویس‌دهنده را ملی‌پیامک کنید")
+    if not user or not pwd:
+        raise HTTPException(400, "نام کاربری و رمز ملی‌پیامک را ذخیره کنید")
+    if req.to.strip():
+        line = s.get("sms_line_number") or ""
+        if not line:
+            raise HTTPException(400, "شماره خط ارسال را وارد کنید")
+        r = send_melipayamak(user, pwd, req.to.strip(), line, "تست خواجوی لید")
+    else:
+        r = credit_melipayamak(user, pwd)
+    log("info" if r.get("ok") else "error",
+        f"ملی‌پیامک: {r.get('message')}")
+    return r
+
+
+@app.post("/api/telegram/test")
+def telegram_test():
+    from ..notifier import notify
+    from ..telegram_bot import build_status_text
+    cfg = store.effective_config(DB_PATH, load_config())
+    mon = _state.get("monitor")
+    running = bool(_state.get("thread") and _state["thread"].is_alive())
+    text = build_status_text(DB_PATH, cfg, running=running,
+                             tick=mon.tick if mon else 0)
+    tok = ((cfg.get("notify") or {}).get("telegram_bot_token") or "")
+    if ":" in tok:
+        notify(cfg, text)
+    return {"ok": True, "preview": text}
 
 
 @app.post("/api/diag")

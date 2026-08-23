@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>دیوار لید — سیستم جمع‌آوری سرنخ</title>
+<title>خواجوی لید — دیوار لید</title>
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <style>
   :root{
@@ -80,6 +80,27 @@
          padding:12px 18px; border-radius:10px; font-size:13.5px; opacity:0;
          transition:.3s; z-index:99; max-width:340px}
   .toast.show{opacity:1}
+  footer{text-align:center; color:var(--mut); font-size:12.5px; padding:28px 16px 36px}
+  #theme-btn{background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
+             padding:6px 12px; border-radius:99px; font-size:16px; cursor:pointer; font-family:inherit}
+  html[data-theme="dark"]{
+    --bg:#0f1419; --card:#1a222c; --line:#2a3544; --txt:#e8eef5; --mut:#8b9bb0;
+    --pri:#4ea3f0; --pri-d:#2d7fd1; --shadow:0 2px 14px rgba(0,0,0,.4);
+  }
+  html[data-theme="dark"] header{background:linear-gradient(135deg,#0a1628,#163a66)}
+  html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea{
+    background:#121920; color:var(--txt); border-color:var(--line)}
+  html[data-theme="dark"] th{background:#151c24}
+  html[data-theme="dark"] tr:hover td{background:#1e2833}
+  html[data-theme="dark"] .warn-box{background:#2a2416; border-color:#5a4a22; color:#e8c97a}
+  html[data-theme="dark"] .tag.ok{background:#16351f; color:#6fd99a}
+  html[data-theme="dark"] .tag.err{background:#3a1818; color:#f0a0a0}
+  html[data-theme="dark"] .tag.warn{background:#3a2e14; color:#e8c97a}
+  html[data-theme="dark"] .tag.chat{background:#2a1f3a; color:#c9b0f0}
+  html[data-theme="dark"] .tag.gray{background:#243040; color:var(--mut)}
+  html[data-theme="dark"] .btn.gray{background:#243040; color:var(--txt)}
+  html[data-theme="dark"] .btn.gray:hover{background:#2e3c4e}
+  html[data-theme="dark"] dialog{background:var(--card); color:var(--txt)}
   @media(max-width:640px){ header{padding:14px} main{margin:12px auto} }
 </style>
 </head>
@@ -87,10 +108,11 @@
 
 <header>
   <div>
-    <div class="logo">🏷️ دیوار لید</div>
-    <div class="sub">سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار</div>
+    <div class="logo">خواجوی لید</div>
+    <div class="sub">سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار — دیوار لید</div>
   </div>
   <div class="spacer"></div>
+  <button id="theme-btn" onclick="cycleTheme()" title="تم روشن / تیره / خودکار">◐</button>
   <button id="lang-btn" onclick="toggleLang()" title="فارسی / English">🌐 English</button>
   <div id="run-badge">⏸ متوقف</div>
 </header>
@@ -113,7 +135,7 @@
     <div class="card"><h3>وضعیت مانیتور</h3><div class="kpi" id="k-run">خاموش</div><small class="hint" id="k-run-sub">—</small></div>
     <div class="card"><h3>در صف شماره‌گیری</h3><div class="kpi" id="k-queue">0</div><small class="hint">سرنخ‌های منتظر شماره</small></div>
     <div class="card"><h3>لیست چت (فقط چت)</h3><div class="kpi" id="k-chat" style="color:var(--chat)">0</div><small class="hint">آگهی‌های بدون شماره → پیام چت</small></div>
-    <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف روزانه</small></div></div>
+    <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف IP امروز</small></div></div>
     <div class="card"><h3>کل سرنخ‌ها</h3><div class="kpi" id="k-total">0</div><small class="hint">همه آگهی‌های منطبق</small></div>
     <div class="card"><h3>شماره پیدا شده</h3><div class="kpi" id="k-found" style="color:var(--ok)">0</div><small class="hint">Contact Found</small></div>
     <div class="card"><h3>بدون شماره</h3><div class="kpi" id="k-hidden" style="color:var(--chat)">0</div><small class="hint">فقط چت</small></div>
@@ -134,9 +156,9 @@
       <button class="btn err" onclick="monitorStop()">⏹ توقف</button>
     </div>
     <div class="warn-box">💡 <b>نکته ضد بلاک:</b> سیستم خودش تاخیرها و سهمیه‌ها را رعایت می‌کند
-      (پیش‌فرض: هر ۱۰ ثانیه یک شماره، سقف هر اکانت ۶۰ در روز، سقف کل ۲۴۰).
+      (پیش‌فرض: هر ۱۰ ثانیه یک شماره، سقف هر اکانت ۶۰ در روز، سقف کل ۲۴۰ از همین IP).
       اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛
-      در تب اکانت‌ها دکمه «آزادسازی» را بزنید.</div>
+      در تب اکانت‌ها کارت حل دستی را باز کنید و بعد «آزادسازی» را بزنید.</div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -217,14 +239,14 @@
         انجام می‌شود؛ متن آماده + باز شدن چت + ارسال با یک کلیک توسط شما (ضد بن).</div>
     </div>
     <div class="card">
-      <h3>قالب پیامک (برای آینده)</h3>
+      <h3>قالب پیامک ملی‌پیامک</h3>
       <textarea id="tpl-sms" placeholder="متن پیامک برای شماره‌های استخراج‌شده…"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('sms')">💾 ذخیره قالب پیامک</button>
       </div>
-      <div class="hint" style="margin-top:8px">🔗 اتصال به سرویس‌های پیامکی
-        (مثل <b>ملی‌پیامک</b>) در نسخه بعدی فعال می‌شود؛ کلید و شماره خط را از الان
-        می‌توانید در تب تنظیمات وارد کنید تا آماده باشد.</div>
+      <div class="hint" style="margin-top:8px">اگر در تنظیمات «ارسال خودکار» را روشن کنید،
+        بعد از استخراج شمارهٔ آگهی منطبق، همین متن از خط رسمی ملی‌پیامک ارسال می‌شود.
+        پیش‌فرض خاموش است.</div>
     </div>
   </div>
 </section>
@@ -263,10 +285,14 @@
       <input id="set-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
       <div class="lbl">شناسه گفتگو (Chat ID)</div>
       <input id="set-tg-chat" dir="ltr" placeholder="مثلاً 123456789">
-      <div class="hint">وقتی کپچا بیاید یا اکانتی محدود شود، همان لحظه به تلگرام اعلان می‌گیرید.</div>
+      <div class="hint">وقتی کپچا بیاید یا اکانتی محدود شود، همان لحظه به تلگرام اعلان می‌گیرید.
+        ربات همین شناسه را برای فرمان‌های /status /today /leads /release هم جواب می‌دهد.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش آزمایشی</button>
+      </div>
     </div>
     <div class="card">
-      <h3>🛡️ پارامترهای ضد بلاک</h3>
+      <h3>🛡️ پارامترهای ضد بلاک و سهمیه IP</h3>
       <div class="grid g2">
         <div><div class="lbl">فاصله دورهای اسکن (ثانیه)</div><input id="set-watch" type="number" dir="ltr"></div>
         <div><div class="lbl">فاصله شماره‌گیری (ثانیه)</div><input id="set-delay" type="number" dir="ltr"></div>
@@ -274,20 +300,38 @@
         <div><div class="lbl">سقف روزانه کل (IP)</div><input id="set-iplimit" type="number" dir="ltr"></div>
         <div><div class="lbl">سرد شدن بعد از بلاک (دقیقه)</div><input id="set-cooldown" type="number" dir="ltr"></div>
       </div>
+      <div class="warn-box">سقف روزانه IP یعنی چند شماره از <b>همین رایانه / همین اینترنت</b> در روز گرفته شود.
+        زیاد کردن این عدد محدودیت دیوار را دور نمی‌زند — فقط حد نرم‌افزاری خودتان را شل می‌کند و ریسک بلاک را بالا می‌برد.
+        برای ظرفیت بیشتر: رایانه یا اینترنت جدا (IP جدا) با نصب جداگانه همین برنامه.
+        پروکسی یا وی‌پی‌ان اضافه نکنید.</div>
       <div class="hint">⚠️ مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.</div>
     </div>
     <div class="card">
-      <h3>📱 سرویس پیامک (به‌زودی)</h3>
+      <h3>📱 ملی‌پیامک (رسمی)</h3>
       <div class="lbl">سرویس‌دهنده</div>
       <select id="set-sms-provider">
-        <option value="none">غیرفعال (فعلاً)</option>
+        <option value="none">غیرفعال</option>
         <option value="melipayamak">ملی‌پیامک</option>
       </select>
-      <div class="lbl">کلید API</div>
-      <input id="set-sms-key" dir="ltr">
+      <div class="lbl">نام کاربری پنل</div>
+      <input id="set-sms-user" dir="ltr" autocomplete="off">
+      <div class="lbl">رمز عبور پنل (یا کلید API)</div>
+      <input id="set-sms-key" type="password" dir="ltr" autocomplete="off">
       <div class="lbl">شماره خط ارسال</div>
-      <input id="set-sms-line" dir="ltr">
-      <div class="hint">ارسال خودکار پیامک در نسخه بعدی با همین اطلاعات فعال می‌شود.</div>
+      <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
+      <div class="lbl">سقف پیامک روزانه</div>
+      <input id="set-sms-limit" type="number" dir="ltr">
+      <div class="checkline">
+        <input type="checkbox" id="set-sms-auto">
+        <label for="set-sms-auto">ارسال خودکار بعد از استخراج شمارهٔ آگهی جدید (پیش‌فرض خاموش)</label>
+      </div>
+      <div class="hint">ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.
+        اگر خط اختصاصی از ملی‌پیامک بخرید، همان شماره را در «خط ارسال» بگذارید.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm gray" type="button" onclick="smsTest('')">بررسی موجودی</button>
+        <input id="set-sms-testto" dir="ltr" placeholder="09xxxxxxxxx آزمایش" style="max-width:180px">
+        <button class="btn sm" type="button" onclick="smsTest($('set-sms-testto').value)">ارسال آزمایشی</button>
+      </div>
     </div>
     <div class="card" style="display:flex; align-items:flex-end">
       <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
@@ -308,6 +352,8 @@
 </section>
 
 </main>
+
+<footer>طراحی و توسعه توسط خواجوی · خواجوی لید</footer>
 
 <dialog id="chat-dlg">
   <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
@@ -362,7 +408,9 @@ async function refreshStatus(){
     $('k-run-sub').textContent = s.started_at ? 'شروع: '+s.started_at : '—';
     $('k-queue').textContent = s.queue;
     $('k-chat').textContent = s.chat_queue;
-    $('k-today').innerHTML = s.phones_today + `<small>${tt('شماره گرفته‌شده امروز','numbers fetched today')}</small>`;
+    const ipLim = s.ip_daily_limit || 240;
+    $('k-today').innerHTML = s.phones_today + `<small>${tt('از سقف IP','of IP quota')} ${ipLim}` +
+      (s.sms_today ? ` · ${tt('پیامک','SMS')} ${s.sms_today}` : '') + `</small>`;
     const bd = s.breakdown || {};
     if ($('k-total')) $('k-total').textContent = bd.total ?? s.total_leads ?? 0;
     if ($('k-found')) $('k-found').textContent = bd.contact_found ?? s.phones_found ?? 0;
@@ -399,6 +447,17 @@ async function accRefresh(){
     $('accounts-list').innerHTML = s.accounts.length ? s.accounts.map(a=>{
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
+      const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
+          <b>کپچای انسانی — خودتان حل کنید</b><br>
+          دیوار کپچا را فقط داخل سایت خودش نشان می‌دهد. این پنل حل‌کننده ندارد.<br>
+          ۱) با همین شماره اکانت در مرورگر دیوار را باز کنید<br>
+          ۲) کپچا را حل کنید<br>
+          ۳) اینجا آزادسازی را بزنید تا شماره‌گیری ادامه یابد
+          <div class="row" style="margin-top:8px">
+            <a class="btn sm" href="https://divar.ir" target="_blank">باز کردن دیوار</a>
+            <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
+          </div>
+        </div>` : '';
       return `<div class="acc"><div class="row">
           <span>${ic}</span><b style="font-size:15px">${esc(a.name)}</b>
           <span class="tag ${m}">${esc(a.status)}</span>
@@ -408,7 +467,7 @@ async function accRefresh(){
           ${a.status!=='active'?`<button class="btn sm ok" onclick="accAction('${a.name}','release')">🔄 آزادسازی</button>`:''}
           ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
           ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
-        </div></div>`;}).join('') : '<div class="empty">هنوز اکانتی لاگین نشده</div>';
+        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز اکانتی لاگین نشده</div>';
   }catch(e){}
 }
 async function accAction(name, action){ if (await act('/api/accounts/action',{name, action})) accRefresh(); }
@@ -541,10 +600,15 @@ async function settingsLoad(){
     $('set-peracc').value=s.per_account_daily_limit; $('set-iplimit').value=s.ip_daily_limit;
     $('set-cooldown').value=s.cooldown_on_block_min;
     $('set-sms-provider').value=s.sms_provider||'none';
-    $('set-sms-key').value=s.sms_api_key||''; $('set-sms-line').value=s.sms_line_number||'';
+    $('set-sms-user').value=s.sms_username||'';
+    $('set-sms-key').value=s.sms_password||s.sms_api_key||'';
+    $('set-sms-line').value=s.sms_line_number||'';
+    $('set-sms-limit').value=s.sms_daily_limit||40;
+    $('set-sms-auto').checked=!!s.sms_auto_on_new;
   }catch(e){}
 }
 async function settingsSave(){
+  const pwd=$('set-sms-key').value.trim();
   const values={
     telegram_bot_token:$('set-tg-token').value.trim(),
     telegram_chat_id:$('set-tg-chat').value.trim(),
@@ -554,11 +618,50 @@ async function settingsSave(){
     ip_daily_limit:parseInt($('set-iplimit').value)||240,
     cooldown_on_block_min:parseInt($('set-cooldown').value)||30,
     sms_provider:$('set-sms-provider').value,
-    sms_api_key:$('set-sms-key').value.trim(),
+    sms_username:$('set-sms-user').value.trim(),
+    sms_password:pwd,
+    sms_api_key:pwd,
     sms_line_number:$('set-sms-line').value.trim(),
+    sms_daily_limit:parseInt($('set-sms-limit').value)||40,
+    sms_auto_on_new:!!$('set-sms-auto').checked,
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
 }
+async function smsTest(to){
+  try{
+    const r = await api('/api/sms/test',{method:'POST',body:JSON.stringify({to: to||''})});
+    toast((r.ok?'✓ ':'❌ ')+(r.message||JSON.stringify(r)), !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function tgTest(){
+  try{
+    const r = await api('/api/telegram/test',{method:'POST',body:'{}'});
+    toast(r.ok ? 'گزارش به تلگرام فرستاده شد' : 'ناموفق', !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
+function resolveTheme(){
+  const mode = localStorage.getItem('theme') || 'auto';
+  if (mode === 'dark' || mode === 'light') return mode;
+  const h = new Date().getHours();
+  if (h >= 19 || h < 7) return 'dark';
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', resolveTheme());
+  const mode = localStorage.getItem('theme') || 'auto';
+  const btn = $('theme-btn');
+  if (btn) btn.textContent = mode==='dark' ? '☀️' : (mode==='light' ? '🌙' : '◐');
+  if (btn) btn.title = mode==='auto' ? 'تم: خودکار' : (mode==='dark' ? 'تم: تیره' : 'تم: روشن');
+}
+function cycleTheme(){
+  const order = ['auto','light','dark'];
+  const cur = localStorage.getItem('theme') || 'auto';
+  localStorage.setItem('theme', order[(order.indexOf(cur)+1)%3]);
+  applyTheme();
+}
+applyTheme();
 
 /* ───────────────────────── حلقه تازه‌سازی ───────────────────────── */
 refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();
@@ -603,7 +706,7 @@ const FA_EN = {
   "هر کلمه کلیدی فعال، به‌صورت دوره‌ای (پیش‌فرض هر ۵ دقیقه)":"Each active keyword is scanned periodically (default every 5 min)",
   "پایش می‌شود و آگهی جدید همان کلمه وارد صف شماره‌گیری می‌شود.":"and its new ads enter the phone queue.",
   "قالب پیام چت (نیمه‌خودکار)":"Chat message template (semi-auto)",
-  "قالب پیامک (برای آینده)":"SMS template (future)","ذخیره قالب چت":"Save chat template",
+  "قالب پیامک ملی‌پیامک":"Melipayamak SMS template","ذخیره قالب چت":"Save chat template",
   "ذخیره قالب پیامک":"Save SMS template","عنوان آگهی":"ad title","توضیح میانی":"mid description",
   "لیست سرنخ‌ها":"Leads list","همه":"All","شماره‌دار":"Has phone","فقط چت":"Chat only",
   "خروجی اکسل (شماره‌ها)":"Export Excel (numbers)","خروجی (چت‌ها)":"Export (chats)",

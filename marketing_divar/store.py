@@ -46,9 +46,13 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "per_account_daily_limit": 60,
     "ip_daily_limit": 240,
     "cooldown_on_block_min": 30,
-    "sms_provider": "none",          # none | melipayamak (آینده)
+    "sms_provider": "none",          # none | melipayamak
     "sms_api_key": "",
+    "sms_username": "",
+    "sms_password": "",
     "sms_line_number": "",
+    "sms_auto_on_new": False,        # پیش‌فرض خاموش
+    "sms_daily_limit": 40,
 }
 
 
@@ -162,4 +166,7 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
         cfg[k] = s[k]
     cfg["notify"] = {"telegram_bot_token": s["telegram_bot_token"],
                      "telegram_chat_id": s["telegram_chat_id"]}
+    for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+        cfg[k] = s[k]
     return cfg

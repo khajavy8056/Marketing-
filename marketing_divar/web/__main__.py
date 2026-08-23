@@ -5,7 +5,7 @@ import webbrowser
 
 import uvicorn
 
-from .server import app  # noqa: F401
+from .server import app, start_background  # noqa: F401
 
 HOST = "0.0.0.0"
 PORT = 8642

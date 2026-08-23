@@ -162,6 +162,34 @@ class Monitor:
             con.close()
 
     # ------------------------------------------------------- شماره‌گیری 📞 --
+    def _maybe_sms(self, con, row, phone: str) -> None:
+        """ارسال اختیاری پیامک ملی‌پیامک — پیش‌فرض خاموش."""
+        if not phone:
+            return
+        try:
+            from . import store
+            from .sms import maybe_send_for_lead
+            lim = int(self.cfg.get("sms_daily_limit") or 40)
+            if quota_today(con).get("sms", 0) >= lim:
+                self._ev("warning", "سقف پیامک امروز پر شد")
+                return
+            tpl = (store.template_get(self.db_path, "sms") or {}).get("text") or ""
+            r = maybe_send_for_lead(self.cfg, {
+                "title": row["title"] if "title" in row.keys() else "",
+                "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
+                "url": row["url"] if "url" in row.keys() else "",
+                "phone": phone,
+            }, tpl)
+            if not r:
+                return
+            if r.get("ok"):
+                bump_quota(con, "sms")
+                self._ev("success", f"پیامک ارسال شد → {phone}")
+            else:
+                self._ev("warning", f"پیامک ناموفق: {r.get('message')}")
+        except Exception as e:
+            self._ev("warning", f"پیامک: {e}")
+
     def _global_quota_left(self, con) -> int:
         return self.cfg.get("ip_daily_limit", 240) - quota_today(con)["phones"]
 
@@ -265,6 +293,7 @@ class Monitor:
             st = res.get("status")
             if st == "found":
                 print(f"  📞 ✓ {name}: {row['title'][:32]} → {res['phone']}")
+                self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")
             elif st == "removed":

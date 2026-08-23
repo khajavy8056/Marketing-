@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS quota (
     day TEXT PRIMARY KEY,
     phones INTEGER DEFAULT 0,
-    searches INTEGER DEFAULT 0
+    searches INTEGER DEFAULT 0,
+    sms INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS quota_accounts (
     day TEXT,
