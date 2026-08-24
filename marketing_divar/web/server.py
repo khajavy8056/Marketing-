@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.3")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.4")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -251,10 +251,20 @@ def accounts_open_puzzle(req: AccountPuzzle):
                 live.stop()
             except Exception:
                 pass
+            from ..session_view import launch_account_browser
+            ok, win_msg = launch_account_browser(
+                str(m.session_path(req.name)), req.name)
+            if ok:
+                log("warning",
+                    f"تصویر داخل پنل نیامد — پنجرهٔ Edge برای «{req.name}» باز شد")
+                return {"ok": True, "embed": False, "fallback": True,
+                        "url": start_url,
+                        "message": (win_msg + " پازل را در همان پنجره حل کنید، "
+                                    "بعد «الان با همین اکانت بزن» را بزنید.")}
             msg = str(e)
             if "timed out" in msg.lower() or "CDP" in msg or "آماده نشد" in msg:
                 msg = ("مرورگر روی رایانه برای پازل آماده نشد. "
-                       "پروکسی/وی‌پی‌ان ویندوز را خاموش کنید و Edge را کامل ببندید، "
+                       "همه پنجره‌های Edge/Chrome را ببندید، پروکسی را خاموش کنید، "
                        "بعد دوباره «نمایش پازل همین‌جا» را بزنید. " + msg)
             raise HTTPException(400, msg)
         _state["puzzles"] = {req.name: live}

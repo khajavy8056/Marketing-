@@ -222,39 +222,58 @@ def _cdp_set_cookies(ws_url: str, cookies: List[Dict[str, Any]],
             pass
 
 
-def _http_get_local(port: int, path: str, timeout: float = 1.2) -> str:
+def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
     """GET روی 127.0.0.1 — هرگز از پروکسی سیستم استفاده نمی‌کند.
 
     urlopen در ویندوز اگر HTTP_PROXY ست باشد به 127.0.0.1 هم از پروکسی
     می‌رود و با «timed out» می‌میرد (خطای زندهٔ پازل).
     """
-    sock = socket.create_connection(("127.0.0.1", int(port)), timeout=timeout)
-    try:
-        req = (f"GET {path} HTTP/1.1\r\n"
-               f"Host: 127.0.0.1:{int(port)}\r\n"
-               "Connection: close\r\n\r\n")
-        sock.sendall(req.encode("ascii"))
-        sock.settimeout(timeout)
-        buf = b""
-        while True:
-            chunk = sock.recv(65536)
-            if not chunk:
-                break
-            buf += chunk
-            if len(buf) > 2_000_000:
-                break
-    finally:
+    if int(port) <= 0:
+        raise RuntimeError("پورت دیباگ هنوز صفر است")
+    last = "پاسخ خالی از CDP"
+    for _ in range(3):
+        sock = None
         try:
-            sock.close()
-        except Exception:
-            pass
-    if b"\r\n\r\n" not in buf:
-        raise RuntimeError("پاسخ خالی از CDP")
-    head, body = buf.split(b"\r\n\r\n", 1)
-    status = head.split(b"\r\n", 1)[0]
-    if b"200" not in status:
-        raise RuntimeError(status.decode("ascii", errors="replace")[:80])
-    return body.decode("utf-8", errors="replace")
+            sock = socket.create_connection(("127.0.0.1", int(port)),
+                                            timeout=timeout)
+            req = (f"GET {path} HTTP/1.0\r\n"
+                   f"Host: 127.0.0.1:{int(port)}\r\n"
+                   "Connection: close\r\n\r\n")
+            sock.sendall(req.encode("ascii"))
+            sock.settimeout(timeout)
+            buf = b""
+            while True:
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                if b"\r\n\r\n" in buf or len(buf) > 2_000_000:
+                    break
+        except OSError as e:
+            last = str(e)
+            time.sleep(0.15)
+            continue
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+        if b"\r\n\r\n" not in (buf if "buf" in locals() else b""):
+            last = "پاسخ خالی از CDP"
+            time.sleep(0.15)
+            continue
+        head, body = buf.split(b"\r\n\r\n", 1)
+        status = head.split(b"\r\n", 1)[0]
+        if b"200" not in status:
+            last = status.decode("ascii", errors="replace")[:80]
+            time.sleep(0.15)
+            continue
+        return body.decode("utf-8", errors="replace")
+    raise RuntimeError(last)
 
 
 def _devtools_port_file(profile: Path) -> int:
@@ -287,14 +306,46 @@ def _page_ws_from_list(port: int) -> str:
     return ""
 
 
-def _wait_cdp(port: int, tries: int = 80, profile: Optional[Path] = None) -> str:
+def _clear_stale_locks(profile: Path) -> None:
+    """قفل باقی‌ماندهٔ Edge قبلی باعث می‌شود پورت دیباگ نادیده گرفته شود."""
+    for name in ("SingletonLock", "SingletonSocket", "SingletonCookie",
+                 "lockfile", "DevToolsActivePort"):
+        p = Path(profile) / name
+        try:
+            if p.exists() or p.is_symlink():
+                p.unlink()
+        except Exception:
+            pass
+
+
+def _tail_text(path: Path, n: int = 400) -> str:
+    try:
+        raw = Path(path).read_bytes()
+    except Exception:
+        return ""
+    return raw[-n:].decode("utf-8", errors="replace").strip()
+
+
+def _wait_cdp(port: int, tries: int = 80, profile: Optional[Path] = None,
+              proc: Optional[subprocess.Popen] = None) -> str:
     last = ""
     use_port = int(port)
     for _ in range(tries):
+        if proc is not None and proc.poll() is not None:
+            hint = ""
+            if profile:
+                hint = _tail_text(Path(profile) / "browser.err")
+            raise RuntimeError(
+                "مرورگر پازل بسته شد قبل از آماده شدن"
+                + (f" — {hint[:180]}" if hint else "")
+            )
         if profile:
             file_port = _devtools_port_file(profile)
             if file_port:
                 use_port = file_port
+        if use_port <= 0:
+            time.sleep(0.2)
+            continue
         try:
             ws = _page_ws_from_list(use_port)
             if ws:
@@ -343,8 +394,8 @@ def _kill_proc(proc: Optional[subprocess.Popen]) -> None:
 def _browser_cmd(browser: str, profile: Path, port: int) -> List[str]:
     return [
         browser,
-        f"--user-data-dir={profile}",
-        f"--remote-debugging-port={port}",
+        f"--user-data-dir={str(profile)}",
+        f"--remote-debugging-port={int(port)}",
         "--remote-debugging-address=127.0.0.1",
         "--remote-allow-origins=*",
         "--no-first-run",
@@ -360,6 +411,7 @@ def _browser_cmd(browser: str, profile: Path, port: int) -> List[str]:
         "--force-device-scale-factor=1",
         "--window-size=900,720",
         "--window-position=60,40",
+        "--new-window",
         "about:blank",
     ]
 
@@ -372,20 +424,22 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
     cookies = cookies_from_session(session_path)
     if not cookies:
         raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
-    profile = Path(session_path).resolve().parent / "edge-profile"
+    profile = persistent_profile_dir(session_path)
     profile.mkdir(parents=True, exist_ok=True)
-    port = _free_port()
+    _clear_stale_locks(profile)
+    port = 0
     cmd = [
         browser,
-        f"--user-data-dir={profile}",
-        f"--remote-debugging-port={port}",
+        f"--user-data-dir={str(profile)}",
+        "--remote-debugging-port=0",
         "--remote-allow-origins=*",
         "--no-first-run",
         "--no-default-browser-check",
+        "--new-window",
         f"--app={start_url}",
     ]
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    ws = _wait_cdp(port, profile=profile)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ws = _wait_cdp(port, tries=100, profile=profile, proc=proc)
     _cdp_set_cookies(ws, cookies, start_url)
     return f"opened {browser} as session {Path(session_path).parent.name}"
 
@@ -488,10 +542,12 @@ class PuzzleLive:
         profile = persistent_profile_dir(session_path)
         profile.mkdir(parents=True, exist_ok=True)
         self.profile = profile
-        reuse = (profile / "Default").exists()
+        _clear_stale_locks(profile)
         last = ""
         for browser in browsers:
-            port = _free_port()
+            # پورت ۰: خود Edge/Chrome پورت واقعی را در DevToolsActivePort می‌نویسد.
+            # پورت ازپیش‌گرفته‌شده در ویندوز اغلب نادیده گرفته می‌شد → پاسخ خالی CDP.
+            port = 0
             cmd = _browser_cmd(browser, profile, port)
             err_log = profile / "browser.err"
             err_f = open(err_log, "wb")
@@ -510,9 +566,12 @@ class PuzzleLive:
             except Exception:
                 pass
             try:
-                ws = _wait_cdp(port, tries=90, profile=profile)
+                ws = _wait_cdp(port, tries=100, profile=profile, proc=self.proc)
             except Exception as e:
                 last = str(e)
+                hint = _tail_text(err_log)
+                if hint:
+                    last = f"{last} | {hint[:160]}"
                 _kill_proc(self.proc)
                 self.proc = None
                 continue
@@ -524,8 +583,8 @@ class PuzzleLive:
                     self.cdp.call("Runtime.enable")
                 except Exception:
                     pass
-                if not reuse:
-                    for ck in cookies:
+                for ck in cookies:
+                    try:
                         self.cdp.call("Network.setCookie", {
                             "name": ck["name"], "value": ck["value"],
                             "domain": ck.get("domain") or ".divar.ir",
@@ -533,6 +592,8 @@ class PuzzleLive:
                             "secure": True,
                             "httpOnly": ck["name"] != "sFrontToken",
                         })
+                    except Exception:
+                        pass
                 self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
                 self._wait_ready()
                 self._nudge_window()
@@ -654,6 +715,10 @@ class PuzzleLive:
 
     def stop(self) -> None:
         try:
+            self.harvest_cookies()
+        except Exception:
+            pass
+        try:
             if self.cdp:
                 self.cdp.close()
         except Exception:
@@ -661,7 +726,9 @@ class PuzzleLive:
         self.cdp = None
         _kill_proc(self.proc)
         self.proc = None
-        self._wipe_profile()
+        if self.profile and "puzzle-live-" in Path(self.profile).name:
+            self._wipe_profile()
+        self.profile = None
 
     def _wipe_profile(self) -> None:
         """فقط پوشهٔ موقت puzzle-live-* را پاک می‌کند — session.json اکانت نمی‌رود."""

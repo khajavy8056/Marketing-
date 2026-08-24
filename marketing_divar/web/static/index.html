@@ -611,7 +611,7 @@ function bindPuzzleFrame(){
   im.addEventListener('error', ()=>{
     const msg = $('cap-stage-msg');
     if (msg){ msg.style.display = 'flex';
-      msg.textContent = 'پازل هنوز نیامد — «نمایش پازل همین‌جا» را بزنید. اگر timeout دیدید پروکسی ویندوز را خاموش کنید.'; }
+      msg.textContent = 'تصویر داخل پنل نیامد. اگر پنجرهٔ Edge باز شد پازل را همان‌جا حل کنید و «الان با همین اکانت بزن» را بزنید.'; }
   });
   im.addEventListener('click', ev=>{
     if (!_capShown) return;

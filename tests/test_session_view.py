@@ -127,6 +127,14 @@ class TestCdpLocalHttp(unittest.TestCase):
                     os.environ[k] = v
             srv.shutdown()
 
+    def test_wait_cdp_reports_dead_browser(self):
+        class Dead:
+            def poll(self):
+                return 1
+        with self.assertRaises(RuntimeError) as ctx:
+            _wait_cdp(9, tries=4, proc=Dead())
+        self.assertIn("بسته شد", str(ctx.exception))
+
     def test_start_uses_isolated_profile(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")

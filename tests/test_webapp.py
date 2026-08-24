@@ -202,7 +202,7 @@ class TestAccountFlow(unittest.TestCase):
         self.assertIn(r.status_code, (200, 400))
         if r.status_code == 200:
             self.assertTrue(r.json().get("ok"))
-            self.assertTrue(r.json().get("embed"))
+            self.assertTrue(r.json().get("embed") or r.json().get("fallback"))
         else:
             self.assertTrue(r.json().get("detail"))
         r = client.get("/api/accounts/puzzle-frame?name=ghost")
