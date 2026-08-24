@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.1")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.2")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -352,6 +352,16 @@ def monitor_stop():
     return {"ok": True}
 
 
+def _telegram_status() -> Dict[str, Any]:
+    from ..notifier import telegram_configured, telegram_last
+    cfg = store.effective_config(DB_PATH, load_config())
+    last = telegram_last()
+    last["configured"] = telegram_configured(cfg)
+    if not last["configured"]:
+        last["message"] = "توکن/Chat ID ذخیره نشده — پنل بدون تلگرام کار می‌کند"
+    return last
+
+
 @app.get("/api/status")
 def status():
     mon = _state.get("monitor")
@@ -415,6 +425,7 @@ def status():
             "per_account_daily_limit", 129),
         "adaptive_until_captcha": bool(store.settings_all(DB_PATH).get(
             "adaptive_until_captcha", True)),
+        "telegram": _telegram_status(),
     }
 
 
@@ -426,6 +437,45 @@ def monitor_pause():
         log("info", "مانیتور " + ("متوقف موقت شد" if mon.paused else "ادامه یافت"))
         return {"ok": True, "paused": mon.paused}
     raise HTTPException(404, "مانیتور در حال اجرا نیست")
+
+
+class RequeueOne(BaseModel):
+    token: str
+
+
+@app.post("/api/leads/requeue-hidden")
+def requeue_hidden():
+    """آگهی‌هایی که اشتباه «فقط چت» شده‌اند را به صف شماره‌گیری برگردان."""
+    con = connect(DB_PATH)
+    try:
+        cur = con.execute(
+            "UPDATE leads SET phone_status='pending', last_error='requeued', "
+            "retry_count=0, phone_error='' "
+            "WHERE phone_status='hidden'")
+        n = cur.rowcount
+        con.commit()
+    finally:
+        con.close()
+    log("info", f"{n} آگهی از فقط‌چت به صف شماره‌گیری برگشت")
+    return {"ok": True, "count": n, "message": f"{n} آگهی به صف شماره‌گیری برگشت"}
+
+
+@app.post("/api/leads/requeue")
+def requeue_one(req: RequeueOne):
+    con = connect(DB_PATH)
+    try:
+        cur = con.execute(
+            "UPDATE leads SET phone_status='pending', last_error='requeued', "
+            "retry_count=0, phone_error='' WHERE token=? AND "
+            "phone_status IN ('hidden','error')",
+            (req.token,))
+        n = cur.rowcount
+        con.commit()
+    finally:
+        con.close()
+    if not n:
+        raise HTTPException(404, "این سرنخ برای برگشت به صف مناسب نیست")
+    return {"ok": True, "message": "به صف شماره‌گیری برگشت"}
 
 
 # ------------------------------------------------------------- API سرنخ‌ها --
@@ -442,7 +492,7 @@ def leads(filter: str = "all", limit: int = 100):
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
             f"matched_keywords,city,lead_status,chat_status,sms_status,url,first_seen_at,"
-            f"phone_checked_at FROM leads WHERE {where} "
+            f"phone_checked_at,last_error FROM leads WHERE {where} "
             f"ORDER BY id DESC LIMIT ?", (*args, min(limit, 500))).fetchall()
         return {"leads": [dict(r) for r in rows]}
     finally:
@@ -613,17 +663,18 @@ def sms_test(req: SmsTest):
 
 @app.post("/api/telegram/test")
 def telegram_test():
-    from ..notifier import notify
+    from ..notifier import notify, telegram_configured, telegram_last
     from ..telegram_bot import build_status_text
     cfg = store.effective_config(DB_PATH, load_config())
     mon = _state.get("monitor")
     running = bool(_state.get("thread") and _state["thread"].is_alive())
     text = build_status_text(DB_PATH, cfg, running=running,
                              tick=mon.tick if mon else 0)
-    tok = ((cfg.get("notify") or {}).get("telegram_bot_token") or "")
-    if ":" in tok:
+    if telegram_configured(cfg):
         notify(cfg, text)
-    return {"ok": True, "preview": text}
+    last = telegram_last()
+    return {"ok": last.get("ok") or not telegram_configured(cfg),
+            "preview": text, "telegram": last}
 
 
 class CaptchaSolve(BaseModel):

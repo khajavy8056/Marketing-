@@ -191,6 +191,56 @@ def normalize_phone(raw: Any) -> Optional[str]:
     if not t.startswith("0"):
         t = "0" + t
     return t if t.isdigit() and len(t) == 11 else t
+
+
+_HIDDEN_TITLES = ("مخفی", "شماره مخفی", "فقط چت", "از طریق چت")
+
+
+def _walk_phone(obj: Any, depth: int = 0) -> Optional[str]:
+    if depth > 6 or obj is None:
+        return None
+    if isinstance(obj, (str, int)):
+        p = normalize_phone(obj)
+        if p and str(p).startswith("09") and len(str(p)) == 11:
+            return p
+        return None
+    if isinstance(obj, dict):
+        for k in ("phone", "phone_number", "value", "mobile"):
+            p = normalize_phone(obj.get(k))
+            if p and str(p).startswith("09") and len(str(p)) == 11:
+                return p
+        for v in obj.values():
+            p = _walk_phone(v, depth + 1)
+            if p:
+                return p
+    elif isinstance(obj, list):
+        for item in obj:
+            p = _walk_phone(item, depth + 1)
+            if p:
+                return p
+    return None
+
+
+def classify_contact_widgets(widgets: Any) -> Dict[str, Any]:
+    """شماره پیدا شد / صریحاً مخفی / هنوز معلوم نیست (error → صف شماره)."""
+    if not isinstance(widgets, list) or not widgets:
+        return {"status": "error", "message": "پاسخ تماس خالی بود — در صف شماره ماند"}
+    saw_hidden = False
+    for w in widgets:
+        d = (w or {}).get("data") if isinstance(w, dict) else {}
+        if not isinstance(d, dict):
+            d = {}
+        title = str(d.get("title") or "")
+        phone = _walk_phone(d) or _walk_phone(w)
+        if phone:
+            return {"status": "found", "phone": phone}
+        if any(m in title for m in _HIDDEN_TITLES) or title == HIDDEN_MARKER:
+            saw_hidden = True
+    if saw_hidden:
+        return {"status": "hidden", "message": "explicit_hidden"}
+    return {"status": "error", "message": "شماره در پاسخ نبود — در صف شماره ماند"}
+
+
 # نشانه‌های واقعی کپچا — «challenge» به‌تنهایی در HTML عادی دیوار هم هست
 CAPTCHA_MARKERS = ("captcha_required", "captcha-required", "arkose",
                    "hcaptcha", "recaptcha", "کپچا")
@@ -759,18 +809,8 @@ class DivarClient:
 
     @staticmethod
     def _parse_widgets_v2(widgets: list) -> Dict[str, Any]:
-        """پارس پاسخ v2: عنوان «شمارهٔ موبایل» → value (ممکن است فارسی باشد)."""
-        for w in widgets:
-            d = (w or {}).get("data") or {}
-            title = d.get("title") or ""
-            if MOBILE_MARKER in title and d.get("value"):
-                phone = normalize_phone(d.get("value"))
-                if phone:
-                    return {"status": "found", "phone": phone}
-            if HIDDEN_MARKER_V2 in title:
-                return {"status": "hidden"}
-        # شماره‌ای در ویجت‌ها نبود → فقط چت
-        return {"status": "hidden"}
+        """فقط وقتی دیوار صریحاً بگوید مخفی → hidden؛ وگرنه error تا در صف بماند."""
+        return classify_contact_widgets(widgets)
 
     def _get_phone_v1(self, token: str) -> Dict[str, Any]:
         """فلوی قدیمی (پشتیبان): GET contact_info با Basic."""
@@ -788,12 +828,4 @@ class DivarClient:
             widgets = r.json().get("widget_list") or []
         except ValueError:
             return {"status": "error", "message": "پاسخ غیر JSON"}
-        for w in widgets:
-            d = (w or {}).get("data") or {}
-            if d.get("title") == HIDDEN_MARKER:
-                return {"status": "hidden"}
-            payload = ((d.get("action") or {}).get("payload") or {})
-            phone = normalize_phone(payload.get("phone_number"))
-            if phone:
-                return {"status": "found", "phone": phone}
-        return {"status": "hidden"}
+        return classify_contact_widgets(widgets)

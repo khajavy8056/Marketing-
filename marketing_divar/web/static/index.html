@@ -298,6 +298,7 @@
         <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
+        <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
         <a class="btn sm gray" href="/api/export?filter=phone" style="text-decoration:none">⬇️ خروجی اکسل (شماره‌ها)</a>
         <a class="btn sm gray" href="/api/export?filter=chat" style="text-decoration:none">⬇️ خروجی (چت‌ها)</a>
       </div>
@@ -332,8 +333,14 @@
       <input id="set-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
       <div class="lbl">شناسه گفتگو (Chat ID)</div>
       <input id="set-tg-chat" dir="ltr" placeholder="مثلاً 123456789">
-      <div class="hint">وقتی شمارهٔ جدید پیدا شود یا پیامک برود، همان لحظه در ربات پیام می‌آید.
-        پایین ربات دکمه‌های گزارش، سرنخ امروز و خروجی اکسل هست (با تاریخ و ساعت استخراج).</div>
+      <div class="lbl">آدرس Bot API سفارشی (اختیاری)</div>
+      <input id="set-tg-base" dir="ltr" placeholder="خالی = https://api.telegram.org">
+      <div class="lbl">پروکسی تلگرام (اختیاری)</div>
+      <input id="set-tg-proxy" dir="ltr" placeholder="http://127.0.0.1:1080 یا socks5://...">
+      <div class="hint">در ایران <b>api.telegram.org</b> اغلب فیلتر است. اگر ربات پیام نداد:
+        ۱) پروکسی محلی بگذارید ۲) یا آدرس Bot API خودتان (مثلاً local Bot API).
+        <b>بدون تلگرام برنامه کامل کار می‌کند</b> — سرنخ و شماره‌گیری در همین پنل می‌مانند.</div>
+      <div class="hint" id="tg-status">وضعیت تلگرام: هنوز آزمایش نشده</div>
       <div class="row" style="margin-top:10px">
         <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش آزمایشی</button>
       </div>
@@ -522,6 +529,7 @@ async function refreshStatus(){
     $('feed').innerHTML = s.logs.slice().reverse().map(l =>
       `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
       || `<div class="empty">${tt('رخدادی نیست','No events yet')}</div>`;
+    if (s.telegram) showTgStatus(s.telegram);
     maybeCapPopup(s.captcha_needed || []);
   }catch(e){ console.error(e); }
 }
@@ -721,10 +729,13 @@ async function leadsLoad(filter){
                   removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
       const chatBtn = l.phone_status==='hidden'
-        ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>`
+        ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>
+           <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
         : (l.phone_status==='found'
           ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?tt('ارسال شد','Sent'):tt('پیامک','SMS')}</button>`
-          : (l.chat_status||'—'));
+          : (l.phone_status==='error'
+            ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
+            : (l.chat_status||'—')));
       return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
         <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>
@@ -763,6 +774,8 @@ async function settingsLoad(){
   try{ const s=await api('/api/settings');
     $('set-tg-token').value=s.telegram_bot_token||'';
     $('set-tg-chat').value=s.telegram_chat_id||'';
+    if($('set-tg-base')) $('set-tg-base').value=s.telegram_api_base||'';
+    if($('set-tg-proxy')) $('set-tg-proxy').value=s.telegram_proxy||'';
     $('set-watch').value=s.watch_interval_sec; $('set-delay').value=s.phone_delay_sec;
     $('set-peracc').value=s.per_account_daily_limit; $('set-iplimit').value=s.ip_daily_limit;
     $('set-cooldown').value=s.cooldown_on_block_min;
@@ -781,6 +794,8 @@ async function settingsSave(){
   const values={
     telegram_bot_token:$('set-tg-token').value.trim(),
     telegram_chat_id:$('set-tg-chat').value.trim(),
+    telegram_api_base:$('set-tg-base')?$('set-tg-base').value.trim():'',
+    telegram_proxy:$('set-tg-proxy')?$('set-tg-proxy').value.trim():'',
     watch_interval_sec:parseInt($('set-watch').value)||300,
     phone_delay_sec:parseFloat($('set-delay').value)||10,
     per_account_daily_limit:parseInt($('set-peracc').value)||129,
@@ -818,11 +833,26 @@ async function smsTest(to){
     toast((r.ok?'✓ ':'❌ ')+(r.message||JSON.stringify(r)), !!r.ok);
   }catch(e){ toast('❌ '+e.message,false); }
 }
+function showTgStatus(tg){
+  const el = $('tg-status');
+  if (!el || !tg) return;
+  el.textContent = (tg.configured
+    ? (tg.ok ? ('تلگرام وصل: '+(tg.path||'')) : (tg.message||'تلگرام قطع است'))
+    : 'تلگرام پیکربندی نشده — پنل بدون ربات کار می‌کند');
+}
 async function tgTest(){
   try{
     const r = await api('/api/telegram/test',{method:'POST',body:'{}'});
-    toast(r.ok ? 'گزارش به تلگرام فرستاده شد' : 'ناموفق', !!r.ok);
+    if (r.telegram) showTgStatus(r.telegram);
+    toast(r.ok ? (r.telegram && r.telegram.ok ? 'گزارش به تلگرام فرستاده شد' : 'پیش‌نمایش آماده (تلگرام پیکربندی نشده)')
+               : (r.telegram && r.telegram.message) || 'تلگرام نرسید — برنامه ادامه دارد', !!r.ok);
   }catch(e){ toast('❌ '+e.message,false); }
+}
+async function requeueHidden(){
+  if (await act('/api/leads/requeue-hidden',{})) leadsLoad();
+}
+async function requeueOne(token){
+  if (await act('/api/leads/requeue',{token})) leadsLoad();
 }
 
 function resolveTheme(){

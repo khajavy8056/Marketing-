@@ -217,24 +217,21 @@ def found_alert_text(title: str, phone: str, extracted_at: str,
     return "\n".join(lines)
 
 
-def _send_text(token: str, chat_id: str, text: str) -> None:
-    if requests is None or not token or ":" not in token:
-        return
-    requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={"chat_id": chat_id, "text": text,
-              "reply_markup": REPLY_KEYBOARD},
-        timeout=10)
+def _send_text(cfg: Dict[str, Any], chat_id: str, text: str) -> None:
+    from .notifier import telegram_request
+    telegram_request(cfg, "sendMessage",
+                     json={"chat_id": chat_id, "text": text,
+                           "reply_markup": REPLY_KEYBOARD},
+                     timeout=12)
 
 
-def _send_doc(token: str, chat_id: str, data: bytes, filename: str, caption: str) -> None:
-    if requests is None or not token or ":" not in token:
-        return
-    requests.post(
-        f"https://api.telegram.org/bot{token}/sendDocument",
-        data={"chat_id": chat_id, "caption": caption},
-        files={"document": (filename, data, "text/csv")},
-        timeout=30)
+def _send_doc(cfg: Dict[str, Any], chat_id: str, data: bytes,
+              filename: str, caption: str) -> None:
+    from .notifier import telegram_request
+    telegram_request(cfg, "sendDocument",
+                     data={"chat_id": chat_id, "caption": caption},
+                     files={"document": (filename, data, "text/csv")},
+                     timeout=30)
 
 
 def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
@@ -249,12 +246,16 @@ def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
             _stop.wait(8)
             continue
         try:
-            r = requests.get(
-                f"https://api.telegram.org/bot{token}/getUpdates",
-                params={"timeout": 20, "offset": offset}, timeout=30)
-            data = r.json() if r.status_code == 200 else {}
+            from .notifier import telegram_request
+            r = telegram_request(cfg, "getUpdates",
+                                 params={"timeout": 20, "offset": offset},
+                                 timeout=30)
+            data = r.json() if r is not None and r.status_code == 200 else {}
         except Exception:
             _stop.wait(6)
+            continue
+        if r is None:
+            _stop.wait(8)
             continue
         for upd in data.get("result") or []:
             offset = max(offset, int(upd.get("update_id", 0)) + 1)
@@ -268,10 +269,10 @@ def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
                                 tick=int(st.get("tick") or 0))
             try:
                 if out.get("document"):
-                    _send_doc(token, allow, out["document"], out["filename"],
+                    _send_doc(cfg, allow, out["document"], out["filename"],
                               out.get("text") or "خروجی اکسل")
                 else:
-                    _send_text(token, allow, out.get("text") or "")
+                    _send_text(cfg, allow, out.get("text") or "")
             except Exception:
                 pass
 

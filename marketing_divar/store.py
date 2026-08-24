@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS settings (
 EDITABLE_SETTINGS: Dict[str, Any] = {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
+    "telegram_api_base": "",      # مثلاً http://127.0.0.1:8081 یا ورکر
+    "telegram_proxy": "",         # http://... یا socks5://... اگر api.telegram.org فیلتر است
     "watch_interval_sec": 300,
     "phone_delay_sec": 10,
     "search_delay_sec": 5,
@@ -293,7 +295,9 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
               "search_page_delay_sec", "jitter_sec"):
         cfg[k] = s[k]
     cfg["notify"] = {"telegram_bot_token": s["telegram_bot_token"],
-                     "telegram_chat_id": s["telegram_chat_id"]}
+                     "telegram_chat_id": s["telegram_chat_id"],
+                     "telegram_api_base": s.get("telegram_api_base") or "",
+                     "telegram_proxy": s.get("telegram_proxy") or ""}
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "adaptive_until_captcha"):

@@ -90,6 +90,7 @@ class Monitor:
         self._clients: Dict[str, DivarClient] = {}
         self._anon: Optional[DivarClient] = None
         self._notified_all_stuck = False
+        self._acct_errors: Dict[str, int] = {}
 
     def _ev(self, level: str, message: str) -> None:
         """رخداد را به رابط وب (در صورت وجود) می‌فرستد؛ خطای خودش بی‌اثر است."""
@@ -106,6 +107,8 @@ class Monitor:
             self.cfg["notify"] = {
                 "telegram_bot_token": s.get("telegram_bot_token") or "",
                 "telegram_chat_id": s.get("telegram_chat_id") or "",
+                "telegram_api_base": s.get("telegram_api_base") or "",
+                "telegram_proxy": s.get("telegram_proxy") or "",
             }
         except Exception:
             pass
@@ -353,21 +356,20 @@ class Monitor:
                               error=str(e), started_at=started)
                 return "wait"
             except DivarBlockedError as e:
-                # این اکانت می‌ایستد؛ سرنخ به صف برمی‌گردد؛ بقیه ادامه می‌دهند
-                con.execute("UPDATE leads SET phone_status='pending' WHERE token=?",
-                            (row["token"],))
+                # این اکانت می‌ایستد؛ سرنخ در صف شماره می‌ماند
+                con.execute("UPDATE leads SET phone_status='pending', last_error=? WHERE token=?",
+                            (str(e)[:200], row["token"]))
                 con.commit()
-                status = "captcha" if "کپچا" in str(e) or "captcha" in str(e).lower() \
-                    else "cooldown"
+                # ۴۰۳/۴۲۹ تماس = محدودیت شماره — پاپ‌آپ آزادسازی، نه «فقط چت»
+                status = "captcha"
                 self.mgr.set_status(
                     name, status,
                     cooldown_sec=self.cfg.get("cooldown_on_block_min", 30) * 60,
                     note=f"{e} (status={e.status})")
-                self._ev("warning" if status == "captcha" else "error",
-                         f"اکانت {name} → {status} ({e}). بقیه اکانت‌ها ادامه می‌دهند")
-                action = (f"در مرورگر divar.ir با همین اکانت کپچا را حل کنید "
-                          f"سپس در پنل «آزادسازی {name}» را بزنید") if status == "captcha" \
-                    else "صبر کنید تا سرد شدن تمام شود؛ اکانت‌های دیگر ادامه می‌دهند"
+                self._ev("warning",
+                         f"اکانت {name} محدود شد ({e}). آگهی در صف شماره ماند.")
+                action = (f"در پنل پاپ‌آپ را حل کنید یا دیوار را باز کنید "
+                          f"سپس «آزادسازی {name}» را بزنید")
                 notify(self.cfg, f"اکانت {name} → {status} ({e}). "
                                  f"بقیه اکانت‌ها ادامه می‌دهند. بعد از حل: release {name}",
                        account=name, problem=status, operation="contact",
@@ -387,20 +389,40 @@ class Monitor:
                               error=str(e), started_at=started)
                 self._ev("error", f"خطای شماره‌گیری {row['token']}: {e}")
                 return "done"
+            st = res.get("status")
+            if st == "error":
+                con.execute(
+                    "UPDATE leads SET phone_status='pending', last_error=?, "
+                    "retry_count=retry_count+1 WHERE token=?",
+                    ((res.get("message") or "شماره گرفته نشد")[:200], row["token"]))
+                con.commit()
+                log_operation(con, token=row["token"], account=name,
+                              operation="contact", result="error",
+                              error=res.get("message"), started_at=started)
+                self._acct_errors[name] = self._acct_errors.get(name, 0) + 1
+                self._ev("warning",
+                         f"شماره گرفته نشد — در صف ماند: {str(row['title'] or '')[:40]}")
+                if self._acct_errors[name] >= 2:
+                    self.mgr.set_status(
+                        name, "captcha",
+                        note=res.get("message") or "محدودیت شماره — آزادسازی کنید")
+                    self._ev("warning",
+                             f"اکانت {name} به آزادسازی نیاز دارد (شماره پشت‌سرهم گرفته نشد)")
+                    return "wait"
+                return "done"
             set_phone(con, row["token"], res)
             log_operation(con, token=row["token"], account=name,
-                          operation="contact", result=res.get("status"),
+                          operation="contact", result=st,
                           phone=res.get("phone"), error=res.get("message"),
                           started_at=started)
             bump_quota(con, "phones")
-            st0 = res.get("status")
-            if st0 == "found":
+            self._acct_errors[name] = 0
+            if st == "found":
                 self._ev("success", f"📞 شماره پیدا شد: {row['title'][:40]} → {res['phone']}")
-            elif st0 == "hidden":
-                self._ev("info", f"💬 فقط چت: {row['title'][:40]} (به لیست چت رفت)")
+            elif st == "hidden":
+                self._ev("info", f"💬 فقط چت (دیوار صریحاً مخفی کرد): {row['title'][:40]}")
             self.mgr.record_use(self.db_path, name)
             con.commit()
-            st = res.get("status")
             if st == "found":
                 print(f"  📞 ✓ {name}: {row['title'][:32]} → {res['phone']}")
                 qn = quota_today(con)
@@ -437,12 +459,15 @@ class Monitor:
             if r == "empty" or r == "quota_done":
                 return
             if r == "wait":
-                # همه اکانت‌ها مشغول‌اند: کمی صبر و دوباره (release را می‌شنود)
-                for _ in range(min(self.cfg.get("watch_interval_sec", 300), 60)):
+                # تا آزادسازی صبر کن؛ اگر اکانت آزاد شد همان‌جا صف را ادامه بده
+                for _ in range(90):
                     if self.stop_event.is_set():
                         return
-                    time.sleep(1)
-                return  # به دور بعدی ساعت برگرد
+                    time.sleep(2)
+                    if self.mgr.pick(self.db_path):
+                        break
+                else:
+                    return
             done += 1
             if max_items > 0 and done >= max_items:
                 return

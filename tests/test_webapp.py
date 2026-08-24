@@ -71,6 +71,9 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="cap-dlg"', r.text)
         self.assertIn('id="cap-answer"', r.text)
         self.assertIn("/api/captcha/pending", r.text)
+        self.assertIn('id="set-tg-base"', r.text)
+        self.assertIn("requeueHidden", r.text)
+        self.assertIn("/api/leads/requeue-hidden", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
@@ -168,6 +171,7 @@ class TestAccountFlow(unittest.TestCase):
                   if a["name"] == "web1")
         self.assertEqual(st["status"], "active")
         self.assertIn("captcha_needed", client.get("/api/status").json())
+        self.assertIn("telegram", client.get("/api/status").json())
 
 
 class TestKeywords(unittest.TestCase):
@@ -244,6 +248,11 @@ class TestTemplatesAndSettings(unittest.TestCase):
         row = next(l for l in leads if l["token"] == "draft1")
         self.assertEqual(row["lead_status"], "contacted")
         self.assertEqual(row["chat_status"], "sent")
+        r = client.post("/api/leads/requeue-hidden")
+        self.assertEqual(r.status_code, 200)
+        leads = client.get("/api/leads?filter=all").json()["leads"]
+        row = next(l for l in leads if l["token"] == "draft1")
+        self.assertEqual(row["phone_status"], "pending")
 
     def test_settings_roundtrip_and_effect(self):
         r = client.post("/api/settings", json={"values": {

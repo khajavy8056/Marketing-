@@ -141,6 +141,25 @@ class TestParsing(unittest.TestCase):
         with self.assertRaises(DivarAuthError):
             cl.get_phone("any")
 
+    def test_empty_widgets_stay_error_not_hidden(self):
+        from marketing_divar.client import classify_contact_widgets
+        self.assertEqual(classify_contact_widgets([])["status"], "error")
+        self.assertEqual(classify_contact_widgets(None)["status"], "error")
+        self.assertEqual(classify_contact_widgets(
+            [{"data": {"title": "چیز دیگر"}}])["status"], "error")
+        hid = classify_contact_widgets(
+            [{"data": {"title": "شمارهٔ مخفی‌شده است"}}])
+        self.assertEqual(hid["status"], "hidden")
+        B = "https://api.divar.ir"
+        cl = make_client({
+            f"{B}/v8/posts-v2/web/gZtQ1": {"json": POSTS_V2_RESPONSE},
+            f"{B}/v8/postcontact/web/contact_info_v2/gZtQ1": {"json": {"widget_list": []}},
+            f"{B}/v8/postcontact/web/contact_info/gZtQ1": {"json": {"widget_list": []}},
+        })
+        res = cl.get_phone("gZtQ1")
+        self.assertEqual(res["status"], "error")
+        self.assertNotEqual(res["status"], "hidden")
+
 
 class TestDatabase(unittest.TestCase):
     def setUp(self):

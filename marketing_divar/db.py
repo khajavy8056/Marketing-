@@ -228,7 +228,10 @@ def pending_phone(con: sqlite3.Connection, keyword: Optional[str] = None,
     if keyword:
         q += " AND keyword=?"
         args.append(keyword)
-    q += " ORDER BY id DESC" if newest_first else " ORDER BY id"
+    if newest_first:
+        q += " ORDER BY COALESCE(retry_count,0) ASC, id DESC"
+    else:
+        q += " ORDER BY COALESCE(retry_count,0) ASC, id"
     if limit > 0:
         q += " LIMIT ?"
         args.append(limit)
