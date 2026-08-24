@@ -73,6 +73,34 @@ class TestDivarCategories(unittest.TestCase):
         joined = " ".join(seen)
         self.assertTrue(any("/s/tehran/light" in u or "/light" in u for u in seen), joined)
 
+    def test_watch_once_category_keeps_ads_without_title_phrase(self):
+        """دستهٔ بدون کلمه باید آگهی‌های همان لیست را بگیرد، حتی اگر عنوان دسته در آگهی نباشد."""
+        from marketing_divar.monitor import Monitor
+        tmp = tempfile.mkdtemp()
+        db = os.path.join(tmp, "w.db")
+        acc = os.path.join(tmp, "acc")
+        os.makedirs(acc)
+
+        class Fake:
+            def search(self, q, cities=None, page=1, category=None):
+                self.q, self.category = q, category
+                return [{"token": "iphone13", "title": "آیفون ۱۳ پرومکس",
+                         "subtitle": "", "url": "u", "has_chat": 1}]
+
+        fake = Fake()
+        mon = Monitor(
+            {"watch_interval_sec": 1, "phone_delay_sec": 0, "search_delay_sec": 0,
+             "search_page_delay_sec": 0, "jitter_sec": 0, "ip_daily_limit": 240},
+            [{"keyword": "موبایل و تبلت", "cities": None, "pages": 1,
+              "category": "mobile-tablet", "match_all": True}],
+            db_path=db, accounts_dir=acc, interactive=False)
+        mon._anon = fake
+        n = mon.watch_once()
+        self.assertEqual(fake.q, "")
+        self.assertEqual(fake.category, "mobile-tablet")
+        self.assertEqual(n, 1, "آگهی دسته باید بدون تطبیق عبارت عنوان ذخیره شود")
+        self.assertTrue(lead_exists(connect(db), "iphone13"))
+
     def test_build_exe_bat_exists(self):
         for name in ("ساخت-نصب-استاندارد.bat", os.path.join("scripts", "build_exe.bat")):
             path = os.path.join(ROOT, name)

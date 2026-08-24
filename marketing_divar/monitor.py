@@ -168,14 +168,22 @@ class Monitor:
                         break
                     new_here = 0
                     city = ",".join(str(c) for c in cities) if cities else "iran"
+                    browse = bool(spec.get("match_all"))
+                    if posts:
+                        self._ev("info",
+                                 f"جستجو «{kw}»"
+                                 + (f" / دسته {spec.get('category')}" if spec.get("category") else "")
+                                 + f": {len(posts)} آگهی")
                     for p in posts:
-                        if consider_new_lead(con, self.anon, p, kw, city):
+                        if consider_new_lead(con, self.anon, p, kw, city,
+                                             match_all=browse):
                             new_total += 1
                             new_here += 1
                             t = str(p.get("title") or "")
-                            where = ("عنوان" if kw in t else "متن")
+                            where = ("دسته" if browse else
+                                     ("عنوان" if kw in t else "متن"))
                             self._ev("info", f"🆕 سرنخ جدید: «{t[:40]}» "
-                                             f"(کلمه در: {where})")
+                                             f"({where})")
                     con.commit()
                     if new_here == 0:
                         break  # صفحه بعدی تکراری
