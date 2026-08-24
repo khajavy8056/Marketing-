@@ -48,8 +48,11 @@ def _check_windows_installer() -> None:
 def _check_static_ui() -> None:
     from pathlib import Path
     p = Path(__file__).parent / "web" / "static" / "index.html"
-    if not p.exists() or "دیوار لید" not in p.read_text(encoding="utf-8"):
+    html = p.read_text(encoding="utf-8")
+    if not p.exists() or "دیوار لید" not in html:
         raise FileNotFoundError(f"فایل رابط گرافیکی پیدا نشد: {p}")
+    if "kw-category" not in html:
+        raise FileNotFoundError("انتخاب دستهٔ دیوار در رابط نیست")
 
 
 def _check_db() -> None:

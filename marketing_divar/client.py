@@ -465,20 +465,27 @@ class DivarClient:
                 "دیوار فقط با IP ایران جواب می‌دهد", 403, r.text)
 
     def search(self, query: str, cities: Optional[List[int]] = None,
-               page: int = 1) -> List[Dict[str, Any]]:
-        """جستجوی کلمه‌کلیدی — چند مسیر تا یکی جواب بدهد.
+               page: int = 1, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """جستجوی کلمه‌کلیدی و/یا دستهٔ دیوار — چند مسیر تا یکی جواب بدهد.
 
-        ۱) JSON وب‌سرچ (اگر دیوار هنوز post_list بدهد)
-        ۲) HTML عمومی سایت (مسیر زندهٔ تأییدشده ۱۴۰۵/۰۶)
+        دسته همان اسلاگ عمومی /s/{شهر}/{دسته} است (موبایل، خودرو، …).
         """
+        from .categories import normalize_slug
+        cat = normalize_slug(category)
         self.limiter.wait("search")
-        params: Dict[str, Any] = {"q": query}
+        params: Dict[str, Any] = {}
+        if query:
+            params["q"] = query
         if cities:
             params["cities"] = ",".join(str(c) for c in cities)
         if page and page > 1:
             params["page"] = page
+        api_path = f"{self.base}/v8/web-search/iran"
+        if cat:
+            city = city_slug(cities)
+            api_path = f"{self.base}/v8/web-search/{city}/{cat}"
         try:
-            r = self._fetch("GET", f"{self.base}/v8/web-search/iran",
+            r = self._fetch("GET", api_path,
                             params=params, timeout=25,
                             headers={"Accept-Language": "fa-IR,fa;q=0.9",
                                      "Referer": "https://divar.ir/"})
@@ -505,7 +512,7 @@ class DivarClient:
             _log("warning", f"API جستجو ناموفق ({type(e).__name__}: {str(e)[:100]}) "
                             "— مسیرهای بعدی")
         try:
-            posts = self._search_post_v8(query, cities, page)
+            posts = self._search_post_v8(query, cities, page, cat)
             if posts:
                 return posts
         except DivarBlockedError as e:
@@ -514,7 +521,7 @@ class DivarClient:
             _log("warning", f"POST /v8/search محدود شد ({e}) — HTML سایت")
         except Exception as e:
             _log("warning", f"POST /v8/search ناموفق ({type(e).__name__}: {str(e)[:80]})")
-        return self._search_html(query, cities, page)
+        return self._search_html(query, cities, page, cat)
 
     # href نسبی + URL کامل + لینک مارک‌داون + توکن تکی /v/TOKEN
     _HTML_URL = re.compile(
@@ -555,14 +562,19 @@ class DivarClient:
             _keep(token, "")
         return posts[:24]
 
-    def _search_html(self, query: str, cities=None, page: int = 1):
+    def _search_html(self, query: str, cities=None, page: int = 1,
+                     category: str = ""):
         """جستجو از HTML سایت (راه نجات وقتی API خاموش/تغییرشکل‌داده است)."""
         host = "https://divar.ir"
         if self.base.startswith("http") and "divar.ir" not in self.base:
             host = self.base  # شبیه‌ساز تست
         city = city_slug(cities)
         url = f"{host}/s/{city}"
-        params = {"q": query}
+        if category:
+            url = f"{host}/s/{city}/{category}"
+        params: Dict[str, Any] = {}
+        if query:
+            params["q"] = query
         if page and page > 1:
             params["page"] = page
         r = self._fetch("GET", url, params=params, timeout=25,
@@ -581,12 +593,18 @@ class DivarClient:
              else "جستجوی HTML سایت هم ۰ آگهی داد")
         return posts
 
-    def _search_post_v8(self, query: str, cities=None, page: int = 1) -> List[Dict[str, Any]]:
+    def _search_post_v8(self, query: str, cities=None, page: int = 1,
+                        category: str = "") -> List[Dict[str, Any]]:
         """مسیر جایگزین جامعه: POST /v8/search/{شهر}. اگر شکل عوض شود، خالی برمی‌گردد."""
         city = city_slug(cities)
         url = f"{self.base}/v8/search/{city}"
-        payload = {"city": city, "q": query, "page": page or 1,
-                   "json_schema": {"query": query}}
+        schema: Dict[str, Any] = {}
+        if query:
+            schema["query"] = query
+        if category:
+            schema["category"] = {"value": category}
+        payload = {"city": city, "q": query or "", "page": page or 1,
+                   "json_schema": schema or {"query": query or ""}}
         r = self._fetch("POST", url, json=payload, timeout=25)
         self._check_block(r)
         if r.status_code != 200:

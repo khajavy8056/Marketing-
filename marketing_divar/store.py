@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS keywords (
     keyword TEXT UNIQUE NOT NULL,
     cities TEXT,                -- 'null' = کل کشور، '[1,3]' = شهرهای خاص
     active INTEGER DEFAULT 1,
-    created_at TEXT
+    created_at TEXT,
+    category TEXT DEFAULT ''    -- اسلاگ دسته دیوار؛ خالی = همه دسته‌ها
 );
 CREATE TABLE IF NOT EXISTS templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,35 +60,59 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
 def _con(db_path: str) -> sqlite3.Connection:
     con = connect(db_path)
     con.executescript(SCHEMA_EXTRA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(keywords)")}
+    if "category" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN category TEXT DEFAULT ''")
+        con.commit()
     return con
 
 
 # ------------------------------------------------------------ کلمات کلیدی --
 def keywords_list(db_path: str) -> List[Dict[str, Any]]:
+    from .categories import title_of
     with _con(db_path) as con:
         rows = con.execute(
-            "SELECT id, keyword, cities, active, created_at FROM keywords "
+            "SELECT id, keyword, cities, active, created_at, category FROM keywords "
             "ORDER BY id DESC").fetchall()
     out = []
     for r in rows:
+        cat = ""
+        try:
+            if "category" in r.keys():
+                cat = r["category"] or ""
+        except Exception:
+            cat = ""
         out.append({"id": r["id"], "keyword": r["keyword"],
                     "cities": json.loads(r["cities"]) if r["cities"] else None,
-                    "active": bool(r["active"]), "created_at": r["created_at"]})
+                    "active": bool(r["active"]), "created_at": r["created_at"],
+                    "category": cat, "category_title": title_of(cat)})
     return out
 
 
 def keywords_add(db_path: str, keyword: str,
-                 cities: Optional[List[int]] = None) -> bool:
-    """افزودن کلمه کلیدی؛ رشته‌ای با کاما را می‌پذیرد و چندتایی می‌کند."""
+                 cities: Optional[List[int]] = None,
+                 category: str = "") -> bool:
+    """افزودن کلمه و/یا دستهٔ دیوار؛ رشتهٔ کلمه با کاما چندتایی می‌شود."""
+    from .categories import normalize_slug, title_of
+    cat = normalize_slug(category)
+    parts = [k.strip() for k in (keyword or "").split(",") if k.strip()]
+    if not parts:
+        if not cat:
+            return False
+        parts = [title_of(cat)]
     added = False
     with _con(db_path) as con:
-        for kw in [k.strip() for k in keyword.split(",") if k.strip()]:
+        for label in parts:
             cur = con.execute(
-                "INSERT OR IGNORE INTO keywords (keyword, cities, created_at) "
-                "VALUES (?,?,?)",
-                (kw, json.dumps(cities) if cities else None,
-                 time.strftime("%Y-%m-%d %H:%M:%S")))
+                "INSERT OR IGNORE INTO keywords (keyword, cities, created_at, category) "
+                "VALUES (?,?,?,?)",
+                (label, json.dumps(cities) if cities else None,
+                 time.strftime("%Y-%m-%d %H:%M:%S"), cat))
             added = added or cur.rowcount > 0
+            if cur.rowcount == 0 and cat:
+                con.execute("UPDATE keywords SET category=? WHERE keyword=?",
+                            (cat, label))
+                added = True
     return added
 
 
@@ -103,8 +128,16 @@ def keywords_toggle(db_path: str, kw_id: int, active: bool) -> None:
 
 def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
     """تبدیل کلمات فعال به ساختار ورودی مانیتور."""
-    return [{"keyword": k["keyword"], "cities": k["cities"], "pages": 1}
-            for k in keywords_list(db_path) if k["active"]]
+    from .categories import title_of
+    specs = []
+    for k in keywords_list(db_path):
+        if not k["active"]:
+            continue
+        cat = k.get("category") or ""
+        match_all = bool(cat) and (not k["keyword"] or k["keyword"] == title_of(cat))
+        specs.append({"keyword": k["keyword"], "cities": k["cities"], "pages": 1,
+                      "category": cat, "match_all": match_all})
+    return specs
 
 
 # ------------------------------------------------------------ قالب پیام --

@@ -146,7 +146,10 @@ class Monitor:
                 pages = int(spec.get("pages", 1))
                 for page in range(1, pages + 1):
                     try:
-                        posts = self.anon.search(kw, cities=cities, page=page)
+                        posts = self.anon.search(
+                            "" if spec.get("match_all") else kw,
+                            cities=cities, page=page,
+                            category=spec.get("category") or None)
                         bump_quota(con, "searches", len(posts))
                     except DivarBlockedError as e:
                         notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "

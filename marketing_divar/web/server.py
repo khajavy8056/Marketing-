@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import io
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -43,7 +44,7 @@ def _base_url():
 logging_util.setup()
 log = logging_util.log
 
-app = FastAPI(title="خواجوی لید — دیوار لید", version="1.7.1")
+app = FastAPI(title="خواجوی لید — دیوار لید", version="1.8.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -71,8 +72,9 @@ class OtpConfirm(BaseModel):
 
 
 class KeywordAdd(BaseModel):
-    keyword: str            # می‌تواند «a,b,c» باشد
+    keyword: str = ""            # می‌تواند «a,b,c» باشد؛ با دسته می‌تواند خالی باشد
     cities: Optional[List[int]] = None
+    category: str = ""           # اسلاگ دسته دیوار (mobile-tablet, light, …)
 
 
 class SettingsUpdate(BaseModel):
@@ -166,6 +168,12 @@ def accounts_action(req: AccountAction):
 
 
 # --------------------------------------------------------- API کلمات کلیدی --
+@app.get("/api/categories")
+def categories_get():
+    from ..categories import public_list
+    return {"categories": public_list()}
+
+
 @app.get("/api/keywords")
 def keywords_get():
     return {"keywords": store.keywords_list(DB_PATH)}
@@ -173,8 +181,10 @@ def keywords_get():
 
 @app.post("/api/keywords")
 def keywords_add(req: KeywordAdd):
-    added = store.keywords_add(DB_PATH, req.keyword, req.cities)
-    log("info", f"کلمات کلیدی اضافه شد: {req.keyword}")
+    if not (req.keyword or "").strip() and not (req.category or "").strip():
+        raise HTTPException(400, "کلمه کلیدی یا دسته‌بندی دیوار را انتخاب کنید")
+    added = store.keywords_add(DB_PATH, req.keyword, req.cities, req.category)
+    log("info", f"پایش اضافه شد: {req.keyword or req.category}")
     return {"ok": added, "message": "اضافه شد" if added else "از قبل موجود بود"}
 
 
@@ -262,7 +272,7 @@ def monitor_start(req: MonitorStart):
         raise HTTPException(409, "مانیتور از قبل در حال اجراست")
     specs = store.keywords_active_specs(DB_PATH)
     if not specs:
-        raise HTTPException(400, "اول حداقل یک کلمه کلیدی فعال اضافه کنید")
+        raise HTTPException(400, "اول حداقل یک کلمه کلیدی یا دسته‌بندی فعال اضافه کنید")
     if not mgr().list_accounts():
         raise HTTPException(400, "اول حداقل یک اکانت لاگین کنید")
 
@@ -518,7 +528,17 @@ def lead_send_sms(token: str):
 
 
 # ------------------------------------------------------------ صفحه اصلی --
-_STATIC = Path(__file__).parent / "static"
+def _static_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        for cand in (root / "marketing_divar" / "web" / "static",
+                     root / "static"):
+            if cand.exists():
+                return cand
+    return Path(__file__).parent / "static"
+
+
+_STATIC = _static_dir()
 
 
 def start_background() -> None:

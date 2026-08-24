@@ -116,8 +116,12 @@ def match_keywords(haystack: str, keywords: Iterable[str]) -> List[str]:
 
 
 def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
-                      city: str, fetch_details: bool = True) -> bool:
-    """اگر آگهی جدید و منطبق باشد در دیتابیس ذخیره می‌شود. True = درج شد."""
+                      city: str, fetch_details: bool = True,
+                      match_all: bool = False) -> bool:
+    """اگر آگهی جدید و منطبق باشد در دیتابیس ذخیره می‌شود. True = درج شد.
+
+    match_all: آگهی از دستهٔ دیوار آمده و فیلتر کلمه لازم نیست.
+    """
     from .db import lead_exists, upsert_lead
 
     token = post.get("token")
@@ -125,7 +129,10 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
         return False
 
     blob = search_blob(post)
-    hits = match_keywords(blob, [keyword])
+    if match_all or not (keyword or "").strip():
+        hits = [keyword or "دسته"]
+    else:
+        hits = match_keywords(blob, [keyword])
     desc = post.get("description") or ""
 
     if not hits and fetch_details and client is not None:

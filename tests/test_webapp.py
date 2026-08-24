@@ -62,6 +62,8 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("smsAutoToggle", r.text)
         self.assertIn('dir="rtl"', r.text)
         self.assertIn("کلمات کلیدی", r.text)
+        self.assertIn('id="kw-category"', r.text)
+        self.assertIn("/api/categories", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
@@ -147,6 +149,13 @@ class TestKeywords(unittest.TestCase):
         self.assertTrue({"آپارتمان", "تدریس", "پرده"} <= got)
         one = next(k for k in kws if k["keyword"] == "آپارتمان")
         self.assertEqual(one["cities"], [1])
+        cats = client.get("/api/categories").json()["categories"]
+        self.assertTrue(any(c["slug"] == "mobile-tablet" for c in cats))
+        r = client.post("/api/keywords",
+                        json={"keyword": "", "cities": None, "category": "light"})
+        self.assertEqual(r.status_code, 200, r.text)
+        kws = client.get("/api/keywords").json()["keywords"]
+        self.assertTrue(any(k.get("category") == "light" for k in kws))
 
     def test_toggle_and_delete(self):
         kws = client.get("/api/keywords").json()["keywords"]

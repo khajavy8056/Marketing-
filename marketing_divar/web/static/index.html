@@ -208,9 +208,15 @@
 <!-- ═══════════════════════ کلمات کلیدی ═══════════════════════ -->
 <section id="tab-keywords" class="tab">
   <div class="card">
-    <h3>کلمات کلیدی پایش</h3>
-    <div class="lbl">کلمات کلیدی — با کاما (، یا ,) از هم جدا کنید</div>
-    <input id="kw-input" placeholder="مثلاً: آپارتمان اجاره، تدریس خصوصی، پرده شاسی">
+    <h3>کلمات کلیدی و دسته‌بندی دیوار</h3>
+    <div class="lbl">دسته‌بندی دیوار (مثل خود سایت)</div>
+    <select id="kw-category">
+      <option value="">همه دسته‌ها</option>
+    </select>
+    <div class="hint">موبایل، خودرو، رایانه، املاک و بقیه همان اسلاگ‌های /s/شهر/دسته هستند.
+      اگر فقط دسته را بزنید، آگهی‌های همان دسته می‌آیند. کلمه اختیاری است.</div>
+    <div class="lbl">کلمه کلیدی (اختیاری) — با کاما جدا کنید</div>
+    <input id="kw-input" placeholder="مثلاً: آیفون، پراید، تدریس خصوصی — می‌تواند خالی باشد">
     <div class="lbl">محدوده جستجو</div>
     <div class="row">
       <label class="checkline"><input type="radio" name="kw-city" value="" checked> همه کشور</label>
@@ -220,8 +226,8 @@
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="kwAdd()">➕ افزودن</button>
     </div>
-    <div class="hint" style="margin-top:8px">هر کلمه کلیدی فعال، به‌صورت دوره‌ای (پیش‌فرض هر ۵ دقیقه)
-      پایش می‌شود و آگهی جدید همان کلمه وارد صف شماره‌گیری می‌شود.</div>
+    <div class="hint" style="margin-top:8px">هر مورد فعال، دوره‌ای پایش می‌شود.
+      می‌توانید فقط دسته، فقط کلمه، یا هر دو را با هم بگذارید.</div>
   </div>
   <div class="card" style="margin-top:14px">
     <h3>فهرست کلمات</h3>
@@ -509,25 +515,40 @@ async function confirmOtp(){
 }
 
 /* ───────────────────────── کلمات کلیدی ───────────────────────── */
+async function catsLoad(){
+  try{
+    const s = await api('/api/categories');
+    const sel = $('kw-category'); if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = (s.categories||[]).map(c =>
+      `<option value="${esc(c.slug)}">${esc(c.group? (c.group+' — '+c.title): c.title)}</option>`
+    ).join('');
+    if (cur) sel.value = cur;
+  }catch(e){}
+}
 async function kwLoad(){
+  catsLoad();
   try{ const s = await api('/api/keywords');
     $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
       <div class="acc"><div class="row">
         <b>${esc(k.keyword)}</b>
+        ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}</span>`:''}
         <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
         <span class="hint">${k.cities?(tt('شهرهای','cities')+' '+k.cities.join('،')):tt('همه کشور','All country')}</span>
       </div><div class="row">
         <button class="btn sm gray" onclick="kwToggle(${k.id},${!k.active})">${k.active?'غیرفعال‌کردن':'فعال‌کردن'}</button>
         <button class="btn sm err" onclick="kwDel(${k.id})">حذف</button>
-      </div></div>`).join('') : '<div class="empty">کلمه‌ای اضافه نشده</div>';
+      </div></div>`).join('') : '<div class="empty">کلمه یا دسته‌ای اضافه نشده</div>';
   }catch(e){}
 }
 async function kwAdd(){
-  const kw=$('kw-input').value.trim(); if(!kw){toast('کلمه کلیدی بنویسید',false);return;}
+  const kw=$('kw-input').value.trim();
+  const category=($('kw-category')&&$('kw-category').value)||'';
+  if(!kw && !category){toast('کلمه یا دسته‌بندی را انتخاب کنید',false);return;}
   let cities=null;
   const codes=$('kw-cities').value.trim();
   if(codes){ cities=codes.split(',').map(x=>parseInt(x.trim())).filter(x=>!isNaN(x)); if(!cities.length)cities=null; }
-  if (await act('/api/keywords',{keyword:kw, cities})) { $('kw-input').value=''; kwLoad(); }
+  if (await act('/api/keywords',{keyword:kw, cities, category})) { $('kw-input').value=''; kwLoad(); }
 }
 async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
 async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwLoad(); }
