@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="1.9.1")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="1.9.2")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -274,6 +274,10 @@ def monitor_start(req: MonitorStart):
     if _state["thread"] and _state["thread"].is_alive():
         raise HTTPException(409, "مانیتور از قبل در حال اجراست")
     specs = store.keywords_active_specs(DB_PATH)
+    if req.include_existing:
+        for s in specs:
+            if s.get("match_all"):
+                s["pages"] = max(int(s.get("pages") or 1), 5)
     if not specs:
         raise HTTPException(400, "اول حداقل یک کلمه کلیدی یا دسته‌بندی فعال اضافه کنید")
     if not mgr().list_accounts():

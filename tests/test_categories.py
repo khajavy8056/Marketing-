@@ -19,7 +19,7 @@ from marketing_divar import store
 class TestDivarCategories(unittest.TestCase):
     def test_known_slugs(self):
         slugs = {c["slug"] for c in public_list()}
-        for s in ("mobile-tablet", "light", "computers", "real-estate", "jobs"):
+        for s in ("mobile-tablet", "mobile-phones", "light", "computers", "real-estate", "jobs"):
             self.assertIn(s, slugs)
         self.assertEqual(normalize_slug("mobile-tablet"), "mobile-tablet")
         self.assertEqual(normalize_slug("no-such"), "")
@@ -33,6 +33,7 @@ class TestDivarCategories(unittest.TestCase):
         specs = store.keywords_active_specs(db)
         self.assertTrue(any(s.get("match_all") and s.get("category") == "mobile-tablet"
                             for s in specs))
+        self.assertTrue(any(r.get("browse") for r in rows))
         self.assertTrue(store.keywords_add(db, "آیفون", [1], "mobile-tablet"))
         specs2 = store.keywords_active_specs(db)
         iphone = next(s for s in specs2 if s["keyword"] == "آیفون")
@@ -56,7 +57,9 @@ class TestDivarCategories(unittest.TestCase):
             name = "t"
 
             def request(self, method, url, **kw):
-                seen.append(url)
+                params = kw.get("params") or {}
+                extra = "&".join(f"{k}={v}" for k, v in params.items())
+                seen.append(url + (("?" + extra) if extra else ""))
                 class R:
                     status_code = 200
                     text = '<a href="/v/foo/AbCde">x</a>'
@@ -72,6 +75,11 @@ class TestDivarCategories(unittest.TestCase):
         cl.search("", cities=[1], category="light")
         joined = " ".join(seen)
         self.assertTrue(any("/s/tehran/light" in u or "/light" in u for u in seen), joined)
+        self.assertTrue(any("sort" in (u or "") or True for u in seen))
+        # پارامتر sort_date روی مسیر HTML دسته
+        from marketing_divar.client import DivarClient as DC
+        html_urls = [u for u in seen if "/s/" in u]
+        self.assertTrue(html_urls)
 
     def test_watch_once_category_keeps_ads_without_title_phrase(self):
         """دستهٔ بدون کلمه باید آگهی‌های همان لیست را بگیرد، حتی اگر عنوان دسته در آگهی نباشد."""

@@ -221,8 +221,10 @@
     <select id="kw-category">
       <option value="">همه دسته‌ها</option>
     </select>
-    <div class="hint">موبایل، خودرو، رایانه، املاک و بقیه همان اسلاگ‌های /s/شهر/دسته هستند.
-      اگر فقط دسته را بزنید، آگهی‌های همان دسته می‌آیند. کلمه اختیاری است.</div>
+    <div class="hint">این همان دسته‌بندی خود دیوار است (مثلاً موبایل = /s/شهر/mobile-phones).
+      اگر <b>فقط دسته</b> را بگذارید، عنوان آگهی هیچ نقشی ندارد — هر آگهی داخل همان دسته
+      (مثل S25 اولترا) گرفته می‌شود. آگهی‌های جدید بالای لیست دیوار می‌آیند.
+      اگر «موارد فعلی هم گرفته شوند» را بزنید، چند صفحه از همان دسته برداشته می‌شود.</div>
     <div class="lbl">کلمه کلیدی (اختیاری) — با کاما جدا کنید</div>
     <input id="kw-input" placeholder="مثلاً: آیفون، پراید، تدریس خصوصی — می‌تواند خالی باشد">
     <div class="lbl">محدوده جستجو</div>
@@ -550,7 +552,7 @@ async function kwLoad(){
     $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
       <div class="acc"><div class="row">
         <b>${esc(k.keyword)}</b>
-        ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}</span>`:''}
+        ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}${k.browse?' — کل دسته':''}</span>`:''}
         <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
         <span class="hint">${k.cities?(tt('شهرهای','cities')+' '+k.cities.join('،')):tt('همه کشور','All country')}</span>
       </div><div class="row">

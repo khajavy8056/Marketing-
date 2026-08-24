@@ -476,6 +476,8 @@ class DivarClient:
         params: Dict[str, Any] = {}
         if query:
             params["q"] = query
+        elif cat:
+            params["sort"] = "sort_date"
         if cities:
             params["cities"] = ",".join(str(c) for c in cities)
         if page and page > 1:
@@ -560,7 +562,7 @@ class DivarClient:
             _keep(token, "")
         for token in DivarClient._HTML_JSON_TOKEN.findall(html or ""):
             _keep(token, "")
-        return posts[:24]
+        return posts[:80]
 
     def _search_html(self, query: str, cities=None, page: int = 1,
                      category: str = ""):
@@ -575,6 +577,9 @@ class DivarClient:
         params: Dict[str, Any] = {}
         if query:
             params["q"] = query
+        elif category:
+            # لیست خود دسته، جدیدترین‌ها اول — مثل صفحهٔ دیوار
+            params["sort"] = "sort_date"
         if page and page > 1:
             params["page"] = page
         r = self._fetch("GET", url, params=params, timeout=25,

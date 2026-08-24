@@ -129,7 +129,15 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
         return False
 
     blob = search_blob(post)
-    if match_all or not (keyword or "").strip():
+    # دستهٔ دیوار: عنوان/متن مهم نیست — آگهی داخل همان لیست دسته است
+    if match_all:
+        post = dict(post)
+        post["matched_keywords"] = keyword or "دسته"
+        if not post.get("published_at"):
+            post["published_at"] = post.get("bottom") or ""
+        return upsert_lead(con, post, keyword or "دسته", city)
+
+    if not (keyword or "").strip():
         hits = [keyword or "دسته"]
     else:
         hits = match_keywords(blob, [keyword])

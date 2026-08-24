@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS keywords (
     cities TEXT,                -- 'null' = کل کشور، '[1,3]' = شهرهای خاص
     active INTEGER DEFAULT 1,
     created_at TEXT,
-    category TEXT DEFAULT ''    -- اسلاگ دسته دیوار؛ خالی = همه دسته‌ها
+    category TEXT DEFAULT '',   -- اسلاگ دسته دیوار؛ خالی = همه دسته‌ها
+    browse INTEGER DEFAULT 0    -- 1 = کل دسته بدون فیلتر عنوان
 );
 CREATE TABLE IF NOT EXISTS templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,6 +65,22 @@ def _con(db_path: str) -> sqlite3.Connection:
     if "category" not in cols:
         con.execute("ALTER TABLE keywords ADD COLUMN category TEXT DEFAULT ''")
         con.commit()
+        cols.add("category")
+    if "browse" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN browse INTEGER DEFAULT 0")
+        con.commit()
+        try:
+            from .categories import CATEGORIES, title_of
+            titles = {c["title"] for c in CATEGORIES}
+            titles.add("موبایل و تبلت")
+            for r in con.execute("SELECT id, keyword, category FROM keywords").fetchall():
+                cat = (r["category"] or "") if "category" in r.keys() else ""
+                kw = r["keyword"] or ""
+                if cat and (not kw or kw in titles or kw == title_of(cat)):
+                    con.execute("UPDATE keywords SET browse=1 WHERE id=?", (r["id"],))
+            con.commit()
+        except Exception:
+            pass
     return con
 
 
@@ -72,46 +89,57 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
     from .categories import title_of
     with _con(db_path) as con:
         rows = con.execute(
-            "SELECT id, keyword, cities, active, created_at, category FROM keywords "
+            "SELECT id, keyword, cities, active, created_at, category, browse FROM keywords "
             "ORDER BY id DESC").fetchall()
     out = []
     for r in rows:
         cat = ""
+        browse = 0
         try:
             if "category" in r.keys():
                 cat = r["category"] or ""
+            if "browse" in r.keys():
+                browse = int(r["browse"] or 0)
         except Exception:
-            cat = ""
+            cat, browse = cat, 0
         out.append({"id": r["id"], "keyword": r["keyword"],
                     "cities": json.loads(r["cities"]) if r["cities"] else None,
                     "active": bool(r["active"]), "created_at": r["created_at"],
-                    "category": cat, "category_title": title_of(cat)})
+                    "category": cat, "category_title": title_of(cat),
+                    "browse": bool(browse)})
     return out
 
 
 def keywords_add(db_path: str, keyword: str,
                  cities: Optional[List[int]] = None,
                  category: str = "") -> bool:
-    """افزودن کلمه و/یا دستهٔ دیوار؛ رشتهٔ کلمه با کاما چندتایی می‌شود."""
+    """افزودن کلمه و/یا دستهٔ دیوار.
+
+    بدون کلمه + دسته = مرور کل دسته (عنوان آگهی مهم نیست).
+    کلمه + دسته = جستجو داخل همان دسته سپس تطبیق عبارت.
+    """
     from .categories import normalize_slug, title_of
     cat = normalize_slug(category)
     parts = [k.strip() for k in (keyword or "").split(",") if k.strip()]
+    browse = 0
     if not parts:
         if not cat:
             return False
         parts = [title_of(cat)]
+        browse = 1
     added = False
     with _con(db_path) as con:
         for label in parts:
             cur = con.execute(
-                "INSERT OR IGNORE INTO keywords (keyword, cities, created_at, category) "
-                "VALUES (?,?,?,?)",
+                "INSERT OR IGNORE INTO keywords "
+                "(keyword, cities, created_at, category, browse) "
+                "VALUES (?,?,?,?,?)",
                 (label, json.dumps(cities) if cities else None,
-                 time.strftime("%Y-%m-%d %H:%M:%S"), cat))
+                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse))
             added = added or cur.rowcount > 0
-            if cur.rowcount == 0 and cat:
-                con.execute("UPDATE keywords SET category=? WHERE keyword=?",
-                            (cat, label))
+            if cur.rowcount == 0:
+                con.execute("UPDATE keywords SET category=?, browse=? WHERE keyword=?",
+                            (cat, browse, label))
                 added = True
     return added
 
@@ -134,7 +162,12 @@ def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
         if not k["active"]:
             continue
         cat = k.get("category") or ""
-        match_all = bool(cat) and (not k["keyword"] or k["keyword"] == title_of(cat))
+        from .categories import CATEGORIES
+        titles = {c["title"] for c in CATEGORIES}
+        titles.add("موبایل و تبلت")
+        match_all = bool(k.get("browse")) or (
+            bool(cat) and (not k["keyword"] or k["keyword"] in titles
+                           or k["keyword"] == title_of(cat)))
         specs.append({"keyword": k["keyword"], "cities": k["cities"], "pages": 1,
                       "category": cat, "match_all": match_all})
     return specs
