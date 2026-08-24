@@ -112,7 +112,7 @@ class TestTelegramCommands(unittest.TestCase):
         self.assertIn("/status", h)
         self.assertIn("/leads", h)
         st = handle_command("/status", self.db, self.cfg)
-        self.assertIn("خواجوی لید", st)
+        self.assertIn("مارکتینگ دیوار", st)
         self.assertIn("سقف IP", st)
 
     def test_leads_today(self):

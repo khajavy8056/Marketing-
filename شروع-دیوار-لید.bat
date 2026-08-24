@@ -1,6 +1,6 @@
 ﻿@echo off
 setlocal EnableExtensions
-title Khajavy Lead
+title Divar Marketing
 cd /d "%~dp0"
 
 if not exist "main.py" goto NOEXTRACT
@@ -10,12 +10,13 @@ if exist ".venv\Scripts\python.exe" (
   echo Checking previous install...
   ".venv\Scripts\python.exe" -c "import fastapi,uvicorn" 1>nul 2>nul
   if not errorlevel 1 (
-    echo Starting Khajavy Lead...
+    echo Starting Divar Marketing...
     set PYTHONUTF8=1
-    start "Khajavy Lead" ".venv\Scripts\python.exe" main.py
+    start "Divar Marketing" ".venv\Scripts\python.exe" main.py
     ping -n 4 127.0.0.1 >nul
     start "" "http://localhost:8642"
     echo App started: http://localhost:8642
+    echo Phone on same Wi-Fi: http://THIS-PC-IP:8642
     ping -n 6 127.0.0.1 >nul
     exit /b 0
   )
@@ -47,7 +48,7 @@ goto FAIL
 :FAIL
 echo.
 echo Install did not finish.
-echo Log: %TEMP%\khajavy-lead-install.log
+echo Log: %TEMP%\divar-marketing-install.log
 echo Log: %CD%\installer\install-log.txt
 pause
 exit /b 1

@@ -69,7 +69,7 @@ def build_status_text(db_path: str, cfg: Dict[str, Any],
     except Exception:
         kws = []
     lines = [
-        "خواجوی لید — گزارش",
+        "مارکتینگ دیوار — گزارش",
         f"مانیتور: {'روشن' if running else 'خاموش'}" + (f" (دور {tick})" if running else ""),
         f"شماره امروز: {q['phones']} از سقف IP {ip_lim}",
         f"جستجوی امروز: {q['searches']} | پیامک امروز: {sms_n}",
@@ -130,7 +130,7 @@ def export_excel_bytes(db_path: str, only_phone: bool = True) -> Tuple[bytes, st
     for r in rows:
         w.writerow(list(r))
     data = buf.getvalue().encode("utf-8-sig")
-    name = f"khajavy_leads_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+    name = f"divar_marketing_leads_{time.strftime('%Y%m%d_%H%M%S')}.csv"
     return data, name, len(rows)
 
 
@@ -139,7 +139,7 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
     """پاسخ متنی یک فرمان ادمین (بدون شبکه)."""
     mapped, raw = _norm_cmd(text)
     if mapped == "help" or raw in ("/start",):
-        return ("خواجوی لید\n"
+        return ("مارکتینگ دیوار\n"
                 "دکمه‌های پایین ربات را بزنید.\n"
                 "/status گزارش امروز\n"
                 "/today همان گزارش\n"

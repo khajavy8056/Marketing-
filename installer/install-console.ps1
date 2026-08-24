@@ -1,8 +1,8 @@
-﻿# Khajavy Lead console installer
+﻿# Divar Marketing console installer
 # ASCII-only so Windows PowerShell 5.1 always parses this file.
 #requires -Version 3.0
 $ErrorActionPreference = "Stop"
-$Log = Join-Path $env:TEMP "khajavy-lead-install.log"
+$Log = Join-Path $env:TEMP "divar-marketing-install.log"
 
 function L([string]$m) {
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m
@@ -69,7 +69,7 @@ try {
         $Log = $local
     } catch {}
 
-    L "Khajavy Lead console install"
+    L "Divar Marketing console install"
     L "root=$Root"
     L "powershell=$($PSVersionTable.PSVersion)"
 
@@ -114,32 +114,35 @@ try {
     & $venvPy "main.py" "--check"
     if ($LASTEXITCODE -ne 0) { throw "health check failed" }
 
-    $dataDir = Join-Path $env:LOCALAPPDATA "KhajavyLead"
+    $dataDir = Join-Path $env:LOCALAPPDATA "DivarMarketing"
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
     L "settings persist in $dataDir (never wiped)"
 
     try {
         $desktop = [Environment]::GetFolderPath("Desktop")
         $w = New-Object -ComObject WScript.Shell
-        foreach ($name in @("KhajavyLead.lnk", "DivarLead.lnk")) {
-            $lnk = Join-Path $desktop $name
-            $sc = $w.CreateShortcut($lnk)
-            $sc.TargetPath = $venvPy
-            $sc.Arguments = "main.py"
-            $sc.WorkingDirectory = $Root
-            $sc.WindowStyle = 1
-            $sc.Description = "Khajavy Lead"
-            $sc.IconLocation = "imageres.dll,109"
-            $sc.Save()
-            L "shortcut $lnk"
-        }
+        $icon = Join-Path $Root "installer\app.ico"
+        if (-not (Test-Path -LiteralPath $icon)) { $icon = "imageres.dll,109" }
+        $lnk = Join-Path $desktop "Divar Marketing.lnk"
+        $sc = $w.CreateShortcut($lnk)
+        $sc.TargetPath = $venvPy
+        $sc.Arguments = "main.py"
+        $sc.WorkingDirectory = $Root
+        $sc.WindowStyle = 1
+        $sc.Description = "Divar Marketing"
+        $sc.IconLocation = $icon
+        $sc.Save()
+        L "shortcut $lnk"
     } catch { L "shortcut skipped: $_" }
+
+    try { netsh advfirewall firewall add rule name="Divar Marketing" dir=in action=allow protocol=TCP localport=8642 | Out-Null } catch {}
 
     L "Starting app ..."
     Start-Process -FilePath $venvPy -ArgumentList "main.py" -WorkingDirectory $Root
     Start-Sleep -Seconds 3
     try { Start-Process "http://localhost:8642" } catch {}
     L "DONE. Browser: http://localhost:8642"
+    L "Phone on same Wi-Fi: http://<this-PC-IP>:8642"
     Write-Host ""
     Write-Host "Install complete. This window can stay open."
     exit 0

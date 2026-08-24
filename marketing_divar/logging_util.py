@@ -68,9 +68,11 @@ def setup() -> logging.Logger:
     mh.setFormatter(_formatter)
     logger.addHandler(mh)
 
-    sh = logging.StreamHandler()
-    sh.setFormatter(_formatter)
-    logger.addHandler(sh)
+    # Console stays English (main.py banner). Persian events go to the panel.
+    if os.environ.get("DIVAR_CONSOLE_LOG") == "1":
+        sh = logging.StreamHandler()
+        sh.setFormatter(_formatter)
+        logger.addHandler(sh)
     return logger
 
 

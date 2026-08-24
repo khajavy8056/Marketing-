@@ -1,11 +1,11 @@
 ﻿@echo off
 setlocal EnableExtensions
-title Khajavy Lead Installer
+title Divar Marketing Setup
 cd /d "%~dp0"
 
 echo.
 echo  ============================================
-echo   Khajavy Lead - Install
+echo   Divar Marketing - Install
 echo  ============================================
 echo  Folder: %CD%
 echo.
@@ -56,7 +56,7 @@ goto FAIL
 echo.
 echo ============================================================
 echo  Install did not finish.
-echo  Log 1: %TEMP%\khajavy-lead-install.log
+echo  Log 1: %TEMP%\divar-marketing-install.log
 echo  Log 2: %CD%\installer\install-log.txt
 echo ============================================================
 echo.

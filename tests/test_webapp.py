@@ -56,8 +56,8 @@ class TestUIBasics(unittest.TestCase):
     def test_index_html_persian(self):
         r = client.get("/")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("دیوار لید", r.text)
-        self.assertIn("خواجوی لید", r.text)
+        self.assertIn("مارکتینگ دیوار", r.text)
+        self.assertIn("/logo.png", r.text)
         self.assertIn('id="dash-sms-auto"', r.text)
         self.assertIn("smsAutoToggle", r.text)
         self.assertIn('dir="rtl"', r.text)
@@ -80,9 +80,11 @@ class TestUIBasics(unittest.TestCase):
         r = client.get("/api/status")
         self.assertEqual(r.status_code, 200)
         for key in ("running", "queue", "chat_queue", "accounts", "keywords", "logs",
-                    "breakdown", "accounts_breakdown", "data_dir"):
+                    "breakdown", "accounts_breakdown", "data_dir", "listen"):
             self.assertIn(key, r.json())
         self.assertIn("contact_found", r.json()["breakdown"])
+        self.assertEqual(r.json()["listen"]["port"], 8642)
+        self.assertEqual(r.json()["listen"]["bind"], "0.0.0.0")
 
 
 class TestAccountFlow(unittest.TestCase):

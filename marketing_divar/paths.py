@@ -3,8 +3,8 @@
 
 دیتابیس، اکانت‌ها، قالب‌ها، تلگرام و ملی‌پیامک در پوشهٔ ثابت کاربر ذخیره
 می‌شوند نه کنار هر Extract جدید:
-  ویندوز:  %LOCALAPPDATA%\\KhajavyLead
-  لینوکس:  ~/.local/share/khajavy-lead
+  Windows:  %LOCALAPPDATA%\\DivarMarketing
+  Linux:    ~/.local/share/divar-marketing
 
 متغیرهای DIVAR_DB_PATH / DIVAR_ACCOUNTS_DIR اگر از قبل باشند دست نمی‌خورند
 (تست‌ها و مسیر سفارشی).
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 
-APP_DIR_NAME = "KhajavyLead"
+APP_DIR_NAME = "DivarMarketing"
 
 
 def user_data_dir() -> Path:
@@ -65,6 +65,37 @@ def migrate_legacy(dest: Path, cwd: Path | None = None) -> None:
     _copy_if_missing(cfg, dest / "config.json")
 
 
+def migrate_old_brand(dest: Path) -> None:
+    """Copy settings from the previous KhajavyLead folder once."""
+    if (dest / "divar_leads.db").exists():
+        return
+    candidates = []
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        candidates.append(Path(base) / "KhajavyLead")
+    else:
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            candidates.append(Path(xdg) / "khajavy-lead")
+        candidates.append(Path.home() / ".local" / "share" / "khajavy-lead")
+    for old in candidates:
+        if old == dest or not old.is_dir():
+            continue
+        _copy_if_missing(old / "divar_leads.db", dest / "divar_leads.db")
+        _copy_if_missing(old / "config.json", dest / "config.json")
+        acc_src, acc_dst = old / "accounts", dest / "accounts"
+        if acc_src.is_dir():
+            acc_dst.mkdir(parents=True, exist_ok=True)
+            for item in acc_src.iterdir():
+                target = acc_dst / item.name
+                if not target.exists():
+                    if item.is_dir():
+                        shutil.copytree(item, target)
+                    else:
+                        shutil.copy2(item, target)
+        break
+
+
 def apply_runtime_paths() -> Path:
     """پوشهٔ پایدار را می‌سازد و متغیرهای محیطی پیش‌فرض را می‌گذارد."""
     dest = user_data_dir()
@@ -72,6 +103,7 @@ def apply_runtime_paths() -> Path:
     (dest / "accounts").mkdir(exist_ok=True)
     (dest / "logs").mkdir(exist_ok=True)
     migrate_legacy(dest)
+    migrate_old_brand(dest)
     os.environ.setdefault("DIVAR_DATA_DIR", str(dest))
     os.environ.setdefault("DIVAR_DB_PATH", str(dest / "divar_leads.db"))
     os.environ.setdefault("DIVAR_ACCOUNTS_DIR", str(dest / "accounts"))

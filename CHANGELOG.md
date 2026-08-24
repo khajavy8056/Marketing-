@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.0 — Divar Marketing + LAN + one-file Setup (۱۴۰۵/۰۶/۰۲)
+
+- Product name: **Divar Marketing** / پنل: **مارکتینگ دیوار**
+- Console, installer, and Setup window are English only
+- One-file Windows installer: run `ساخت-نصب-استاندارد.bat` on Windows → `DivarMarketing-Setup.exe` (no other files)
+- Desktop + Start Menu shortcut with the app logo
+- Listens on `0.0.0.0:8642` so a phone on the same Wi-Fi can open `http://PC-IP:8642`
+- Settings folder: `%LOCALAPPDATA%\DivarMarketing` (migrates KhajavyLead once)
+
 ## 1.8.0 — دسته‌بندی دیوار + ساخت exe استاندارد روی ویندوز شما (۱۴۰۵/۰۶/۰۲)
 
 - تب کلمات: انتخاب دستهٔ واقعی دیوار (موبایل، خودرو سواری، رایانه، املاک، …)

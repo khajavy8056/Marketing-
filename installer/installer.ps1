@@ -1,13 +1,11 @@
 ﻿# ============================================================
-#  DivarLead Installer — GUI installer with progress bar
-#  Requires: Windows + built-in PowerShell (no prerequisites)
-#  Fixes: SmartScreen (Unblock-File), garbled Persian in cmd,
-#         local .venv, desktop shortcut, clear progress
+#  Divar Marketing Installer — GUI with progress bar
+#  English only. Windows + built-in PowerShell.
 # ============================================================
 #requires -Version 3.0
 $ErrorActionPreference = "Stop"
 $script:HasGui = $false
-$script:LogFile = Join-Path $env:TEMP "khajavy-lead-install.log"
+$script:LogFile = Join-Path $env:TEMP "divar-marketing-install.log"
 function Write-InstallLog([string]$m) {
     $line = ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m)
     try { Add-Content -LiteralPath $script:LogFile -Value $line -Encoding UTF8 } catch {}
@@ -19,7 +17,7 @@ try {
     Set-Location -LiteralPath $Root
     try {
         $localLog = Join-Path $Root "installer\install-log.txt"
-        "=== DivarLead install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
+        "=== Divar Marketing install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
         $script:LogFile = $localLog
     } catch {}
     Write-InstallLog ("root=" + $Root + " ps=" + $PSVersionTable.PSVersion)
@@ -41,60 +39,8 @@ try {
 
 $VenvPy  = Join-Path $Root ".venv\Scripts\python.exe"
 $LogFile = $script:LogFile
+$IconFile = Join-Path $Root "installer\app.ico"
 
-# ---------- bilingual labels (WinForms renders Persian correctly) ----------
-$L = @{
-    fa = @{
-        title = "دیوار لید — نصب و راه‌اندازی"
-        status = "آماده شروع. دکمه «شروع نصب» را بزنید."
-        statusReady = "نصب قبلی پیدا شد. شروع را بزنید تا بررسی شود و برنامه باز شود."
-        start = "شروع نصب"
-        rerun = "بررسی و اجرا"
-        close = "بستن"
-        lang  = "English"
-        step1 = "بررسی پایتون"
-        step2 = "دانلود و نصب پایتون"
-        stepV = "ساخت محیط مجازی برنامه"
-        step3 = "نصب کتابخانه‌ها"
-        step4 = "تست سلامت"
-        stepS = "میانبر دسکتاپ"
-        step5 = "اجرای برنامه"
-        done  = "نصب کامل شد ✔ برنامه در حال اجراست — مرورگر: http://localhost:8642"
-        fail  = "نصب ناتمام ماند — علت در لاگ پایین مشخص است؛ می‌توانید دوباره شروع نصب را بزنید. اگر تکرار شد، فایل installer\install-log.txt را بفرستید."
-        found = "پایتون موجود پیدا شد"
-        dl    = "دانلود پایتون"
-        inst  = "نصب بی‌صدای پایتون (۱ تا ۳ دقیقه صبر کنید)"
-        deps  = "نصب پیش‌نیازها (چند دقیقه)"
-        ok    = "موفق"
-    }
-    en = @{
-        title = "DivarLead — Install & Run"
-        status = "Ready. Click 'Start Install'."
-        statusReady = "Previous install found. Click Start to verify and launch."
-        start = "Start Install"
-        rerun = "Verify & Run"
-        close = "Close"
-        lang  = "فارسی"
-        step1 = "Checking Python"
-        step2 = "Downloading & installing Python"
-        stepV = "Creating app virtual environment"
-        step3 = "Installing libraries"
-        step4 = "Health check"
-        stepS = "Desktop shortcut"
-        step5 = "Launching app"
-        done  = "Install complete! App is running — browser: http://localhost:8642"
-        fail  = "Install incomplete — reason is in the log below. You may press Start again. If it repeats, send installer\install-log.txt to support."
-        found = "Existing Python found"
-        dl    = "Downloading Python"
-        inst  = "Silent Python install (wait 1-3 min)"
-        deps  = "Installing dependencies (a few minutes)"
-        ok    = "OK"
-    }
-}
-$Lang = "fa"
-
-
-# ─── سپر ضدکرش: هیچ خطایی پنجره را بی‌صدا نبندد ───
 $onCrash = {
     param($sender, $e)
     $msg = ""
@@ -105,7 +51,7 @@ $onCrash = {
         [System.Windows.Forms.MessageBox]::Show(
             "An unexpected error occurred:`r`n`r`n" + $msg.Substring(0, [Math]::Min(600, $msg.Length)) +
             "`r`n`r`nFull details: installer\install-log.txt",
-            "DivarLead Installer", "OK", "Error") | Out-Null
+            "Divar Marketing", "OK", "Error") | Out-Null
     } catch {}
 }
 [System.Windows.Forms.Application]::add_ThreadException($onCrash)
@@ -113,38 +59,32 @@ $onCrash = {
     try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value ("`r`n[FATAL-Domain] " + $e.ExceptionObject) -Encoding UTF8 } catch {}
 })
 
-# SmartScreen: unblock our own scripts after zip extract
-foreach ($p in @(
-    (Join-Path $Root "Install-and-Run.bat"),
-    (Join-Path $Root "شروع-دیوار-لید.bat"),
-    (Join-Path $Root "installer\installer.ps1")
-)) { try { if (Test-Path $p) { Unblock-File -Path $p } } catch {} }
+Get-ChildItem -LiteralPath $Root -Recurse -Include *.ps1,*.bat -ErrorAction SilentlyContinue | ForEach-Object {
+    try { Unblock-File -Path $_.FullName } catch {}
+}
 
-# ---------- GUI ----------
 try {
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "DivarLead Installer"
+$form.Text = "Divar Marketing Setup"
 $form.Size = New-Object System.Drawing.Size(640, 520)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
+if (Test-Path $IconFile) {
+    try { $form.Icon = New-Object System.Drawing.Icon($IconFile) } catch {}
+}
 
 $lblTitle = New-Object System.Windows.Forms.Label
 $lblTitle.Location = New-Object System.Drawing.Point(20, 16)
-$lblTitle.Size = New-Object System.Drawing.Size(480, 30)
-$lblTitle.Font = New-Object System.Drawing.Font("Tahoma", 13, [System.Drawing.FontStyle]::Bold)
-$lblTitle.Text = $L[$Lang].title
-
-$btnLang = New-Object System.Windows.Forms.Button
-$btnLang.Location = New-Object System.Drawing.Point(510, 12)
-$btnLang.Size = New-Object System.Drawing.Size(96, 32)
-$btnLang.Text = $L[$Lang].lang
+$lblTitle.Size = New-Object System.Drawing.Size(586, 30)
+$lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lblTitle.Text = "Divar Marketing — Install"
 
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.Location = New-Object System.Drawing.Point(20, 56)
 $lblStatus.Size = New-Object System.Drawing.Size(586, 26)
-$lblStatus.Font = New-Object System.Drawing.Font("Tahoma", 10)
-$lblStatus.Text = $L[$Lang].status
+$lblStatus.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$lblStatus.Text = "Ready. Click Start Install."
 
 $bar = New-Object System.Windows.Forms.ProgressBar
 $bar.Location = New-Object System.Drawing.Point(20, 88)
@@ -154,7 +94,7 @@ $bar.Minimum = 0; $bar.Maximum = 100; $bar.Value = 0
 $lblStep = New-Object System.Windows.Forms.Label
 $lblStep.Location = New-Object System.Drawing.Point(20, 118)
 $lblStep.Size = New-Object System.Drawing.Size(586, 22)
-$lblStep.Font = New-Object System.Drawing.Font("Tahoma", 9)
+$lblStep.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $lblStep.Text = ""
 
 $logBox = New-Object System.Windows.Forms.TextBox
@@ -164,20 +104,19 @@ $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = "Vertical"
 $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
-$logBox.Anchor = "Top,Left,Right,Bottom"
 
 $btnStart = New-Object System.Windows.Forms.Button
 $btnStart.Location = New-Object System.Drawing.Point(20, 438)
 $btnStart.Size = New-Object System.Drawing.Size(180, 36)
-$btnStart.Font = New-Object System.Drawing.Font("Tahoma", 10, [System.Drawing.FontStyle]::Bold)
-$btnStart.Text = $L[$Lang].start
+$btnStart.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$btnStart.Text = "Start Install"
 
 $btnClose = New-Object System.Windows.Forms.Button
 $btnClose.Location = New-Object System.Drawing.Point(426, 438)
 $btnClose.Size = New-Object System.Drawing.Size(180, 36)
-$btnClose.Text = $L[$Lang].close
+$btnClose.Text = "Close"
 
-$form.Controls.AddRange(@($lblTitle, $btnLang, $lblStatus, $bar, $lblStep, $logBox, $btnStart, $btnClose))
+$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $logBox, $btnStart, $btnClose))
 } catch {
     Write-InstallLog "GUI build failed: $_"
     try { Write-Host "GUI build failed: $_" } catch {}
@@ -199,22 +138,10 @@ function Log([string]$m) {
 function Set-Step([string]$s, [int]$percent) {
     $lblStep.Text = $s
     if ($percent -ge 0) { $bar.Style = "Blocks"; $bar.Value = [Math]::Min(100, $percent) }
-    else { $bar.Style = "Marquee" }   # marquee = در حال کار، درصد نامشخص
+    else { $bar.Style = "Marquee" }
     [System.Windows.Forms.Application]::DoEvents()
 }
-function Apply-Lang {
-    $lblTitle.Text = $L[$Lang].title
-    $hasVenv = Test-Path $VenvPy
-    $lblStatus.Text = if ($hasVenv) { $L[$Lang].statusReady } else { $L[$Lang].status }
-    $btnStart.Text = if ($hasVenv) { $L[$Lang].rerun } else { $L[$Lang].start }
-    $btnClose.Text = $L[$Lang].close
-    $btnLang.Text = $L[$Lang].lang
-    $form.Text = "DivarLead Installer"
-    [System.Windows.Forms.Application]::DoEvents()
-}
-$btnLang.Add_Click({ if ($script:Lang -eq "fa") { $script:Lang = "en" } else { $script:Lang = "fa" }; Apply-Lang })
 
-# ---------- helpers ----------
 function Find-Python {
     foreach ($pair in @(@("py", "-3"), @("python", ""))) {
         $exe = $pair[0]; $a = $pair[1]
@@ -244,14 +171,14 @@ function Find-Python {
 function Install-Python {
     $url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
     $dl = Join-Path $env:TEMP "divar-python-3.11.9.exe"
-    Log "[2] $($L[$Lang].dl): $url"
-    Set-Step $L[$Lang].dl -1
+    Log "[2] Downloading Python"
+    Set-Step "Downloading Python" -1
     $wc = New-Object System.Net.WebClient
     $done = $false
     $wc.add_DownloadProgressChanged({
         $bar.Style = "Blocks"
         $bar.Value = [int]$args[1].ProgressPercentage
-        $lblStep.Text = "$($L[$Lang].dl) ... $([int]$args[1].ProgressPercentage)%"
+        $lblStep.Text = "Downloading Python ... $([int]$args[1].ProgressPercentage)%"
         [System.Windows.Forms.Application]::DoEvents()
     })
     $wc.add_DownloadFileCompleted({ $script:done = $true })
@@ -261,8 +188,8 @@ function Install-Python {
         throw "Python download failed (file too small)"
     }
     try { Unblock-File -Path $dl } catch { }
-    Log "[2] $($L[$Lang].inst) ..."
-    Set-Step $L[$Lang].inst -1
+    Log "[2] Silent Python install (wait 1-3 min)"
+    Set-Step "Installing Python" -1
     $p = Start-Process -FilePath $dl -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1 Include_test=0" -Wait -PassThru
     Log "[2] Python installer exit code: $($p.ExitCode)"
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "Python installer failed (code $($p.ExitCode))" }
@@ -280,15 +207,31 @@ function Ensure-Venv([string]$pyExe) {
         Log "[2b] venv exists: $VenvPy"
         return $VenvPy
     }
-    Log "[2b] $($L[$Lang].stepV)"
-    Set-Step $L[$Lang].stepV -1
+    Log "[2b] Creating app virtual environment"
+    Set-Step "Creating app virtual environment" -1
     $venvDir = Join-Path $Root ".venv"
     & $pyExe -m venv $venvDir
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPy)) {
         throw "venv creation failed (code $LASTEXITCODE)"
     }
-    Log "[2b] $($L[$Lang].ok): $VenvPy"
+    Log "[2b] OK: $VenvPy"
     return $VenvPy
+}
+
+function Stream-File([string]$path, [int]$alreadyLogged) {
+    try {
+        if (-not (Test-Path $path)) { return $alreadyLogged }
+        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
+             [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
+        $lines = @($sr.ReadToEnd() -split "`r?`n")
+        $sr.Close()
+        for ($i = $alreadyLogged; $i -lt $lines.Count; $i++) {
+            $t = $lines[$i].Trim()
+            if ($t) { Log "    $t" }
+        }
+        return $lines.Count
+    } catch { return $alreadyLogged }
 }
 
 function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
@@ -319,60 +262,49 @@ function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     return $proc.ExitCode
 }
 
-function Stream-File([string]$path, [int]$alreadyLogged) {
-    try {
-        if (-not (Test-Path $path)) { return $alreadyLogged }
-        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
-             [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-        $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
-        $lines = @($sr.ReadToEnd() -split "`r?`n")
-        $sr.Close()
-        for ($i = $alreadyLogged; $i -lt $lines.Count; $i++) {
-            $t = $lines[$i].Trim()
-            if ($t) { Log "    $t" }
-        }
-        return $lines.Count
-    } catch { return $alreadyLogged }
-}
-
 function New-DesktopShortcut([string]$pyExe) {
-    Set-Step $L[$Lang].stepS 90
-    $dataDir = Join-Path $env:LOCALAPPDATA "KhajavyLead"
+    Set-Step "Desktop shortcut" 90
+    $dataDir = Join-Path $env:LOCALAPPDATA "DivarMarketing"
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
     Log "[data] settings persist in $dataDir (never wiped by installer)"
     $desktop = [Environment]::GetFolderPath("Desktop")
+    $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+    New-Item -ItemType Directory -Force -Path $start | Out-Null
     $w = New-Object -ComObject WScript.Shell
-    foreach ($name in @("خواجوی لید.lnk", "DivarLead.lnk")) {
-        $lnk = Join-Path $desktop $name
+    $icon = if (Test-Path $IconFile) { $IconFile } else { "imageres.dll,109" }
+    foreach ($folder in @($desktop, $start)) {
+        $lnk = Join-Path $folder "Divar Marketing.lnk"
         $sc = $w.CreateShortcut($lnk)
         $sc.TargetPath = $pyExe
         $sc.Arguments = "main.py"
         $sc.WorkingDirectory = $Root
         $sc.WindowStyle = 1
-        $sc.Description = "خواجوی لید — DivarLead"
-        $sc.IconLocation = "imageres.dll,109"
+        $sc.Description = "Divar Marketing"
+        $sc.IconLocation = $icon
         $sc.Save()
         Log "[4b] shortcut: $lnk"
     }
+    try {
+        netsh advfirewall firewall add rule name="Divar Marketing" dir=in action=allow protocol=TCP localport=8642 | Out-Null
+        Log "[4c] firewall: TCP 8642 allowed (phone on same Wi-Fi)"
+    } catch { Log "[4c] firewall skipped" }
 }
 
-# ---------- main flow ----------
 $btnStart.Add_Click({
     $btnStart.Enabled = $false
-    $btnLang.Enabled = $false
     $pyExe = $null
     try {
-        Log "[1] $($L[$Lang].step1)"
-        Set-Step $L[$Lang].step1 5
+        Log "[1] Checking Python"
+        Set-Step "Checking Python" 5
         $pyExe = Find-Python
         if ($pyExe) {
-            Log "[1] $($L[$Lang].found): $pyExe"
+            Log "[1] Existing Python found: $pyExe"
             & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
             $bar.Value = 20
         } else {
             Log "[1] Python not found -> auto-install"
             $pyExe = Install-Python
-            Log "[1] $($L[$Lang].ok): $pyExe"
+            Log "[1] OK: $pyExe"
             & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
             $bar.Value = 20
         }
@@ -381,17 +313,17 @@ $btnStart.Add_Click({
         $bar.Value = 35
 
         $rc = Run-Pip $appPy @("-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check", "--progress-bar", "off") "pip upgrade"
-        $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") $L[$Lang].deps
+        $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") "Installing dependencies (a few minutes)"
         if ($rc -ne 0) {
             Log "[3] PyPI failed -> trying mirror ..."
             $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
             if ($rc -ne 0) { throw "pip install failed (code $rc)" }
         }
-        Log "[3] $($L[$Lang].ok)"
+        Log "[3] OK"
         $bar.Value = 75
 
-        Log "[4] $($L[$Lang].step4)"
-        Set-Step $L[$Lang].step4 80
+        Log "[4] Health check"
+        Set-Step "Health check" 80
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"
         $pinfo.WorkingDirectory = $Root
@@ -417,29 +349,30 @@ $btnStart.Add_Click({
 
         try { New-DesktopShortcut $appPy } catch { Log "[4b] shortcut skipped: $_" }
 
-        Log "[5] $($L[$Lang].step5)"
-        Set-Step $L[$Lang].step5 100
+        Log "[5] Launching app"
+        Set-Step "Launching app" 100
         $env:PYTHONUTF8 = "1"
         Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root
         Start-Sleep -Seconds 3
         Start-Process "http://localhost:8642"
-        $lblStatus.Text = $L[$Lang].done
+        $lblStatus.Text = "Install complete. App is running — http://localhost:8642  (phone: this-PC-IP:8642)"
         $lblStatus.ForeColor = [System.Drawing.Color]::Green
-        Log $L[$Lang].done
+        Log "Install complete. Browser: http://localhost:8642"
         $btnStart.Enabled = $true
-        $btnLang.Enabled = $true
     } catch {
-        $lblStatus.Text = $L[$Lang].fail
+        $lblStatus.Text = "Install incomplete — see the log. You may press Start Install again."
         $lblStatus.ForeColor = [System.Drawing.Color]::Firebrick
         Log "[ERROR] $_"
         Log "Log file: $LogFile"
         $btnStart.Enabled = $true
-        $btnLang.Enabled = $true
     }
 })
 $btnClose.Add_Click({ $form.Close() })
 try {
-    Apply-Lang
+    if (Test-Path $VenvPy) {
+        $lblStatus.Text = "Previous install found. Click Start Install to verify and launch."
+        $btnStart.Text = "Verify & Run"
+    }
     Write-InstallLog "showing installer window"
     [void]$form.ShowDialog()
     Write-InstallLog "installer window closed"
@@ -449,7 +382,7 @@ try {
     try {
         [System.Windows.Forms.MessageBox]::Show(
             "Installer window failed:`r`n$_`r`n`r`nLog: $script:LogFile",
-            "Khajavy Lead", "OK", "Error") | Out-Null
+            "Divar Marketing", "OK", "Error") | Out-Null
     } catch {}
     exit 1
 }

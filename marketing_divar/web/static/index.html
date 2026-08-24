@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>خواجوی لید — دیوار لید</title>
+<title>مارکتینگ دیوار</title>
+<link rel="icon" href="/logo.png">
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <style>
   :root{
@@ -15,6 +16,8 @@
   body{background:var(--bg); color:var(--txt); min-height:100vh}
   header{background:linear-gradient(135deg,#12325e,#1976d2); color:#fff; padding:18px 28px;
          display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  header .brand{display:flex; align-items:center; gap:12px}
+  header .brand img{width:44px; height:44px; border-radius:12px; background:#fff; object-fit:cover}
   header .logo{font-size:26px; font-weight:800}
   header .sub{opacity:.85; font-size:13px}
   header .spacer{flex:1}
@@ -108,8 +111,13 @@
 
 <header>
   <div>
-    <div class="logo">خواجوی لید</div>
-    <div class="sub">سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار — دیوار لید</div>
+  <div class="brand">
+    <img src="/logo.png" alt="Divar Marketing" width="44" height="44">
+    <div>
+    <div class="logo">مارکتینگ دیوار</div>
+    <div class="sub">سیستم هوشمند بازاریابی و جمع‌آوری سرنخ از آگهی‌های دیوار</div>
+    </div>
+  </div>
   </div>
   <div class="spacer"></div>
   <button id="theme-btn" onclick="cycleTheme()" title="تم روشن / تیره / خودکار">◐</button>
@@ -445,6 +453,16 @@ async function refreshStatus(){
     if ($('k-failed')) $('k-failed').textContent = bd.failed ?? 0;
     if ($('data-dir-hint') && s.data_dir)
       $('data-dir-hint').textContent = (LANG==='en' ? 'Settings saved in: ' : 'تنظیمات ذخیره می‌شوند در: ') + s.data_dir;
+    if ($('lan-hint') && s.listen) {
+      const lan = (s.listen.lan||[]).join('  ·  ');
+      $('lan-hint').textContent = lan
+        ? (LANG==='en'
+            ? ('On your phone (same Wi-Fi): ' + lan)
+            : ('از موبایل همین وای‌فای: ' + lan))
+        : (LANG==='en'
+            ? ('This computer: ' + (s.listen.local||'http://127.0.0.1:8642'))
+            : ('روی همین رایانه: ' + (s.listen.local||'http://127.0.0.1:8642')));
+    }
     $('btn-pause').disabled = !s.running;
     $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
     // اکانت‌ها در داشبورد

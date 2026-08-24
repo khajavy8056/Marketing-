@@ -44,7 +44,10 @@ def _base_url():
 logging_util.setup()
 log = logging_util.log
 
-app = FastAPI(title="خواجوی لید — دیوار لید", version="1.8.0")
+from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
+from ..netinfo import listen_urls
+
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="1.9.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -378,6 +381,8 @@ def status():
         "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
         "sms_ready": sms_ready(store.settings_all(DB_PATH))[0],
         "data_dir": os.environ.get("DIVAR_DATA_DIR") or str(Path(DB_PATH).resolve().parent),
+        "listen": listen_urls(APP_PORT),
+        "app_name": APP_NAME_FA,
         "breakdown": breakdown, "accounts_breakdown": acc_break,
         "accounts": acc_snap,
         "keywords": store.keywords_list(DB_PATH),
@@ -571,7 +576,7 @@ def sms_test(req: SmsTest):
         line = s.get("sms_line_number") or ""
         if not line:
             raise HTTPException(400, "شماره خط ارسال را وارد کنید")
-        r = send_melipayamak(user, pwd, req.to.strip(), line, "تست خواجوی لید")
+        r = send_melipayamak(user, pwd, req.to.strip(), line, f"test {APP_NAME_EN}")
     else:
         r = credit_melipayamak(user, pwd)
     log("info" if r.get("ok") else "error",
@@ -618,3 +623,22 @@ def diag_run():
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (_STATIC / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/logo.png")
+def logo_png():
+    from fastapi.responses import FileResponse
+    p = _STATIC / "logo.png"
+    if not p.exists():
+        raise HTTPException(404, "logo")
+    return FileResponse(str(p), media_type="image/png")
+
+
+@app.get("/favicon.ico")
+def favicon():
+    from fastapi.responses import FileResponse
+    for name in ("favicon.ico", "logo.png"):
+        p = _STATIC / name
+        if p.exists():
+            return FileResponse(str(p))
+    raise HTTPException(404, "favicon")

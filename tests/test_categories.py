@@ -79,7 +79,7 @@ class TestDivarCategories(unittest.TestCase):
             self.assertTrue(os.path.exists(path), name)
             body = open(path, encoding="utf-8-sig", errors="replace").read()
             self.assertTrue("pyinstaller" in body.lower(), name)
-            self.assertIn("DivarLead", body)
+            self.assertTrue("DivarMarketing" in body or "DivarLead" in body, name)
 
 
 if __name__ == "__main__":
