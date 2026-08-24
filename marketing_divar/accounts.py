@@ -91,6 +91,19 @@ class AccountManager:
         rec["last_probe_state"] = res.get("state") or ""
         rec["last_probe_http"] = res.get("http") or 0
         rec["updated_at"] = rec["last_probe_at"]
+        body = res.get("body") or ""
+        if body:
+            rec["last_block_body"] = str(body)[:800]
+            rec["last_block_at"] = rec["last_probe_at"]
+        st[name] = rec
+        self._save_states(st)
+
+    def record_block(self, name: str, body: str = "") -> None:
+        st = self._load_states()
+        rec = st.get(name) or {}
+        rec["last_block_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        rec["last_block_body"] = (body or "")[:800]
+        rec["updated_at"] = rec["last_block_at"]
         st[name] = rec
         self._save_states(st)
 
@@ -146,7 +159,9 @@ class AccountManager:
                             "has_token": self.has_token(name),
                             "phones_today": account_quota_today(con, name),
                             "last_probe_at": rec.get("last_probe_at") or "",
-                            "last_probe_state": rec.get("last_probe_state") or ""})
+                            "last_probe_state": rec.get("last_probe_state") or "",
+                            "last_block_body": rec.get("last_block_body") or "",
+                            "last_block_at": rec.get("last_block_at") or ""})
             return out
         finally:
             con.close()

@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.3")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.4")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -201,6 +201,24 @@ def accounts_probe(req: AccountProbe):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
     res = _do_unlock(req.name, "بررسی دستی")
     return res
+
+
+class AccountPuzzle(BaseModel):
+    name: str
+
+
+@app.post("/api/accounts/open-puzzle")
+def accounts_open_puzzle(req: AccountPuzzle):
+    """Edge/Chrome را با کوکی همان اکانت باز می‌کند — نه تب مهمان."""
+    m = mgr()
+    if not m.has_token(req.name):
+        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    from ..session_view import launch_account_browser
+    ok, msg = launch_account_browser(str(m.session_path(req.name)), req.name)
+    if not ok:
+        raise HTTPException(400, msg)
+    log("info", f"پنجرهٔ پازل دیوار با اکانت «{req.name}» باز شد")
+    return {"ok": True, "message": msg}
 
 
 # --------------------------------------------------------- API کلمات کلیدی --
@@ -735,10 +753,14 @@ def captcha_pending():
             continue
         ch = gates.get(a["name"]) or new_challenge(a["name"])
         gates[a["name"]] = ch
+        from ..client import parse_block_body
+        parsed = parse_block_body(a.get("last_block_body") or "")
         pending.append({"name": a["name"], "question": ch["question"],
                         "note": a.get("note") or "",
                         "last_probe_at": a.get("last_probe_at") or "",
                         "last_probe_state": a.get("last_probe_state") or "",
+                        "image_url": parsed.get("image_url") or "",
+                        "has_widget": bool(parsed.get("has_widget")),
                         "divar_url": "https://divar.ir"})
     return {"pending": pending}
 

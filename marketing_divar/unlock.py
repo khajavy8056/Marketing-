@@ -39,6 +39,8 @@ def try_release_account(mgr: AccountManager, name: str,
         return {"ok": False, "cleared": False, "state": "relogin",
                 "message": str(e), "divar_url": "https://divar.ir"}
     mgr.record_probe(name, res)
+    if res.get("body") and not res.get("ok"):
+        mgr.record_block(name, str(res.get("body") or ""))
     if res.get("ok"):
         mgr.set_status(name, "active", note=f"دیوار باز شد ({reason})")
         out = dict(res)

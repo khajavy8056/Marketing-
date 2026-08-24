@@ -72,7 +72,9 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="cap-answer"', r.text)
         self.assertIn("/api/captcha/pending", r.text)
         self.assertIn("capProbe", r.text)
-        self.assertIn('id="cap-frame"', r.text)
+        self.assertIn('id="openPuzzle"', r.text)
+        self.assertIn("/api/accounts/open-puzzle", r.text)
+        self.assertNotIn('id="cap-frame"', r.text)
         self.assertIn("/api/accounts/probe", r.text)
         self.assertIn('id="set-tg-base"', r.text)
         self.assertIn("requeueHidden", r.text)
@@ -175,6 +177,18 @@ class TestAccountFlow(unittest.TestCase):
         self.assertEqual(st["status"], "active")
         self.assertIn("captcha_needed", client.get("/api/status").json())
         self.assertIn("telegram", client.get("/api/status").json())
+
+    def test_04_open_puzzle_needs_account(self):
+        r = client.post("/api/accounts/open-puzzle", json={"name": "ghost"})
+        self.assertEqual(r.status_code, 404)
+        client.post("/api/accounts/otp", json={"name": "web1", "phone": "09121110000"})
+        client.post("/api/accounts/confirm", json={"name": "web1", "code": "123456"})
+        r = client.post("/api/accounts/open-puzzle", json={"name": "web1"})
+        self.assertIn(r.status_code, (200, 400))
+        if r.status_code == 200:
+            self.assertTrue(r.json().get("ok"))
+        else:
+            self.assertTrue(r.json().get("detail"))
 
 
 class TestKeywords(unittest.TestCase):

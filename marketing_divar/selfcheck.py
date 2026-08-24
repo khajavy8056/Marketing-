@@ -64,6 +64,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("price range / VIP missing from panel")
     if "cap-dlg" not in html or "cap-answer" not in html:
         raise FileNotFoundError("in-panel captcha popup missing")
+    if 'id="cap-frame"' in html or 'src="https://divar.ir"' in html:
+        raise FileNotFoundError("iframe of divar.ir must not be used")
+    if "openPuzzle" not in html or "/api/accounts/open-puzzle" not in html:
+        raise FileNotFoundError("logged-in puzzle window missing from panel")
     logo = Path(__file__).parent / "web" / "static" / "logo.png"
     if not logo.exists() or logo.stat().st_size < 1000:
         raise FileNotFoundError("app logo missing")

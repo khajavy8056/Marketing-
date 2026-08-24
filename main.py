@@ -27,6 +27,10 @@ if len(sys.argv) > 1 and sys.argv[1] == "--check":
     from marketing_divar.selfcheck import run
     sys.exit(run())
 
+if len(sys.argv) > 1 and sys.argv[1] == "--session-view":
+    from marketing_divar.session_view import main as session_view_main
+    sys.exit(session_view_main(sys.argv[2:]))
+
 print(f"Data folder: {_data}")
 try:
     from marketing_divar.web.__main__ import main  # noqa: E402

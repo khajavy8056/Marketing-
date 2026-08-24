@@ -366,6 +366,7 @@ class Monitor:
                     name, status,
                     cooldown_sec=self.cfg.get("cooldown_on_block_min", 30) * 60,
                     note=f"{e} (status={e.status})")
+                self.mgr.record_block(name, getattr(e, "body", "") or "")
                 self._ev("warning",
                          f"اکانت {name} محدود شد ({e}). آگهی در صف شماره ماند.")
                 action = (f"در پنل پاپ‌آپ را حل کنید یا دیوار را باز کنید "

@@ -272,6 +272,23 @@ def looks_like_captcha(text: str) -> bool:
     return False
 
 
+_BLOCK_IMG = re.compile(
+    r"(?:https?://[^\"'\\s<>]+?\.(?:png|jpe?g|gif|webp)(?:\?[^\"'\\s<>]*)?"
+    r"|data:image/[a-zA-Z0-9+.-]+;base64,[A-Za-z0-9+/=]+)",
+    re.I)
+
+
+def parse_block_body(text: str) -> Dict[str, Any]:
+    """اگر بدنهٔ ۴۰۳ تصویر/ویجت قابل‌نمایش داشته باشد برمی‌گرداند."""
+    t = text or ""
+    m = _BLOCK_IMG.search(t)
+    img = m.group(0) if m else ""
+    low = t.lower()
+    has = bool(img) or any(x in low for x in (
+        "arkose", "hcaptcha", "recaptcha", "funcaptcha"))
+    return {"image_url": img, "has_widget": has}
+
+
 def is_blocking_view(data: Any) -> bool:
     """پاسخ زنده ۱۴۰۵/۰۶: GET /v8/web-search فقط BLOCKING_VIEW می‌دهد (نسخه قدیمی)."""
     if not isinstance(data, dict):

@@ -418,17 +418,16 @@
 <dialog id="cap-dlg" style="width:min(560px,96vw)">
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="cap-live">با همان اکانت به دیوار زده می‌شود.
-    اگر پازل را روی گوشی حل کرده باشید، همین‌جا خودکار آزاد می‌شود.
-    پازل واقعی دیوار روی خود سایت است (اینجا حل‌کننده نداریم).</div>
-  <iframe id="cap-frame" title="Divar" src="about:blank"
-          style="width:100%;height:280px;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0"></iframe>
-  <div class="hint">اگر کادر بالا خالی است، دیوار داخل پنل باز نمی‌شود — دکمهٔ پایین را بزنید یا روی گوشی با همان شماره وارد دیوار شوید.</div>
+  <div class="warn-box" id="cap-live">دیوار داخل این پنل باز نمی‌شود.
+    پنجرهٔ جدا با <b>همان سشن اکانت برنامه</b> باز می‌شود تا پازل واقعی همان حساب را حل کنید.
+    اگر روی گوشی حل کرده باشید، همین‌جا خودکار آزاد می‌شود.</div>
+  <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
+  <div class="hint">تب معمولی دیوار با این اکانت لاگین نیست. دکمهٔ پایین Edge/Chrome را با کوکی همین حساب باز می‌کند.</div>
   <div class="lbl">تأیید حضور (اختیاری): <b id="cap-q" dir="ltr">—</b></div>
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
-    <a class="btn gray" id="cap-open" href="https://divar.ir" target="_blank" rel="noopener">باز کردن پازل دیوار</a>
+    <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">باز کردن پازل همین اکانت</button>
+    <button class="btn gray" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
     <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
   </div>
@@ -538,6 +537,16 @@ async function refreshStatus(){
   }catch(e){ console.error(e); }
 }
 let _capShown = '';
+let _puzzleLaunched = '';
+async function openPuzzle(name){
+  name = name || _capShown;
+  if (!name){ toast('اکانتی در انتظار نیست', false); return; }
+  try{
+    const r = await api('/api/accounts/open-puzzle',{method:'POST', body: JSON.stringify({name})});
+    if ($('cap-live')) $('cap-live').textContent = r.message || '';
+    toast(r.message||'پنجره باز شد', !!r.ok);
+  }catch(e){ toast('❌ '+e.message, false); }
+}
 async function maybeCapPopup(names){
   if (!names || !names.length){ _capShown=''; return; }
   const name = names[0];
@@ -553,13 +562,16 @@ async function maybeCapPopup(names){
       (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
     $('cap-q').textContent = one.question || '—';
     if ($('cap-answer')) $('cap-answer').value = '';
-    const fr = $('cap-frame');
-    if (fr && fr.getAttribute('data-src') !== 'https://divar.ir'){
-      fr.setAttribute('data-src','https://divar.ir');
-      fr.src = 'https://divar.ir';
+    const im = $('cap-img');
+    if (im){
+      if (one.image_url){ im.src = one.image_url; im.style.display = 'block'; }
+      else { im.removeAttribute('src'); im.style.display = 'none'; }
     }
-    if ($('cap-open')) $('cap-open').href = one.divar_url || 'https://divar.ir';
     if (!dlg.open) dlg.showModal();
+    if (_puzzleLaunched !== one.name){
+      _puzzleLaunched = one.name;
+      openPuzzle(one.name);
+    }
   }catch(e){}
 }
 async function capProbe(){
@@ -605,12 +617,10 @@ async function accRefresh(){
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
       const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
           <b>کپچای انسانی — خودتان حل کنید</b><br>
-          دیوار کپچا را فقط داخل سایت خودش نشان می‌دهد. این پنل حل‌کننده ندارد.<br>
-          ۱) با همین شماره اکانت در مرورگر دیوار را باز کنید<br>
-          ۲) کپچا را حل کنید<br>
-          ۳) اینجا آزادسازی را بزنید تا شماره‌گیری ادامه یابد
+          دیوار داخل این پنل باز نمی‌شود. تب معمولی هم با این اکانت لاگین نیست.<br>
+          دکمهٔ زیر همان سشن شماره‌گیری را در Edge/Chrome باز می‌کند.
           <div class="row" style="margin-top:8px">
-            <a class="btn sm" href="https://divar.ir" target="_blank">باز کردن دیوار</a>
+            <button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>
             <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
           </div>
         </div>` : '';
