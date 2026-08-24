@@ -43,7 +43,7 @@ def _base_url():
 logging_util.setup()
 log = logging_util.log
 
-app = FastAPI(title="خواجوی لید — دیوار لید", version="1.7.0")
+app = FastAPI(title="خواجوی لید — دیوار لید", version="1.7.1")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {

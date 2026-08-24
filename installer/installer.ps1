@@ -1,19 +1,46 @@
-# ============================================================
+﻿# ============================================================
 #  DivarLead Installer — GUI installer with progress bar
 #  Requires: Windows + built-in PowerShell (no prerequisites)
 #  Fixes: SmartScreen (Unblock-File), garbled Persian in cmd,
 #         local .venv, desktop shortcut, clear progress
 # ============================================================
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
+#requires -Version 3.0
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Root = Split-Path -Parent $Root   # repo root (installer/ is one level down)
-Set-Location $Root
-$LogFile = Join-Path $Root "installer\install-log.txt"
+$script:HasGui = $false
+$script:LogFile = Join-Path $env:TEMP "khajavy-lead-install.log"
+function Write-InstallLog([string]$m) {
+    $line = ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m)
+    try { Add-Content -LiteralPath $script:LogFile -Value $line -Encoding UTF8 } catch {}
+}
+try {
+    $here = $PSScriptRoot
+    if (-not $here) { $here = Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $Root = Split-Path -Parent $here
+    Set-Location -LiteralPath $Root
+    try {
+        $localLog = Join-Path $Root "installer\install-log.txt"
+        "=== DivarLead install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
+        $script:LogFile = $localLog
+    } catch {}
+    Write-InstallLog ("root=" + $Root + " ps=" + $PSVersionTable.PSVersion)
+} catch {
+    Write-InstallLog "startup failed: $_"
+    try { Write-Host "STARTUP FAILED: $_"; Read-Host "Press Enter" } catch {}
+    exit 1
+}
+
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $script:HasGui = $true
+} catch {
+    Write-InstallLog "WinForms missing: $_"
+    Write-Host "GUI not available."
+    exit 2
+}
+
 $VenvPy  = Join-Path $Root ".venv\Scripts\python.exe"
-"=== DivarLead install $(Get-Date) ===" | Out-File $LogFile -Encoding utf8
+$LogFile = $script:LogFile
 
 # ---------- bilingual labels (WinForms renders Persian correctly) ----------
 $L = @{
@@ -94,6 +121,7 @@ foreach ($p in @(
 )) { try { if (Test-Path $p) { Unblock-File -Path $p } } catch {} }
 
 # ---------- GUI ----------
+try {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "DivarLead Installer"
 $form.Size = New-Object System.Drawing.Size(640, 520)
@@ -150,13 +178,23 @@ $btnClose.Size = New-Object System.Drawing.Size(180, 36)
 $btnClose.Text = $L[$Lang].close
 
 $form.Controls.AddRange(@($lblTitle, $btnLang, $lblStatus, $bar, $lblStep, $logBox, $btnStart, $btnClose))
+} catch {
+    Write-InstallLog "GUI build failed: $_"
+    try { Write-Host "GUI build failed: $_" } catch {}
+    exit 2
+}
 
 function Log([string]$m) {
-    $logBox.AppendText("$m`r`n")
-    $logBox.SelectionStart = $logBox.Text.Length
-    $logBox.ScrollToCaret()
-    Add-Content -Path $LogFile -Value $m -Encoding utf8
-    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        if ($script:HasGui -and $logBox) {
+            $logBox.AppendText("$m`r`n")
+            $logBox.SelectionStart = $logBox.Text.Length
+            $logBox.ScrollToCaret()
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    } catch {}
+    try { Add-Content -LiteralPath $script:LogFile -Value $m -Encoding utf8 } catch {}
+    try { Write-Host $m } catch {}
 }
 function Set-Step([string]$s, [int]$percent) {
     $lblStep.Text = $s
@@ -400,5 +438,18 @@ $btnStart.Add_Click({
     }
 })
 $btnClose.Add_Click({ $form.Close() })
-Apply-Lang
-[void]$form.ShowDialog()
+try {
+    Apply-Lang
+    Write-InstallLog "showing installer window"
+    [void]$form.ShowDialog()
+    Write-InstallLog "installer window closed"
+    exit 0
+} catch {
+    Write-InstallLog "GUI crash: $_"
+    try {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Installer window failed:`r`n$_`r`n`r`nLog: $script:LogFile",
+            "Khajavy Lead", "OK", "Error") | Out-Null
+    } catch {}
+    exit 1
+}

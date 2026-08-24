@@ -14,16 +14,37 @@ import sys
 if getattr(sys, "frozen", False):
     os.chdir(os.path.dirname(sys.executable))
 
-# تنظیمات/اکانت/تلگرام/ملی‌پیامک در پوشه پایدار کاربر می‌مانند
-from marketing_divar.paths import apply_runtime_paths  # noqa: E402
-_data = apply_runtime_paths()
+def _pause_on_crash(msg: str) -> None:
+    """پنجرهٔ سیاه ویندوز بعد از خطا بی‌صدا بسته نشود."""
+    print(msg)
+    if sys.platform == "win32" and "--check" not in sys.argv:
+        try:
+            input("یک کلید بزنید تا این پنجره بسته شود...")
+        except Exception:
+            pass
+
+
+try:
+    from marketing_divar.paths import apply_runtime_paths  # noqa: E402
+    _data = apply_runtime_paths()
+except Exception as e:
+    _pause_on_crash(f"شروع برنامه ناموفق بود: {e}")
+    raise
 
 if len(sys.argv) > 1 and sys.argv[1] == "--check":
     from marketing_divar.selfcheck import run
     sys.exit(run())
 
 print(f"📁 داده و تنظیمات: {_data}")
-from marketing_divar.web.__main__ import main  # noqa: E402
+try:
+    from marketing_divar.web.__main__ import main  # noqa: E402
+except Exception as e:
+    _pause_on_crash(f"بارگذاری رابط وب ناموفق بود: {e}")
+    raise
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        _pause_on_crash(f"برنامه متوقف شد: {e}")
+        raise

@@ -25,14 +25,24 @@ def _check_windows_installer() -> None:
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
     ps1 = (root / "installer" / "installer.ps1").read_text(encoding="utf-8-sig")
-    bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8", errors="replace")
+    console = (root / "installer" / "install-console.ps1").read_text(encoding="utf-8-sig")
+    bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8-sig", errors="replace")
+    raw_ps1 = (root / "installer" / "installer.ps1").read_bytes()
+    if not raw_ps1.startswith(b"\xef\xbb\xbf"):
+        raise FileNotFoundError("installer.ps1 باید UTF-8 با BOM باشد")
     for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
                    "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
-                   "KhajavyLead"):
+                   "KhajavyLead", "khajavy-lead-install.log"):
         if needle not in ps1:
             raise FileNotFoundError(f"نصب‌کننده ناقص است — «{needle}» نیست")
-    if "installer.ps1" not in bat:
-        raise FileNotFoundError("Install-and-Run.bat به installer.ps1 وصل نیست")
+    if "installer.ps1" not in bat or "install-console.ps1" not in bat:
+        raise FileNotFoundError("Install-and-Run.bat به نصب‌کننده‌ها وصل نیست")
+    if "Extract All" not in bat and "Extract the ZIP" not in bat:
+        raise FileNotFoundError("هشدار Extract در bat نیست")
+    for needle in ("Find-Python", ".venv", "requirements.txt", "main.py --check",
+                   "KhajavyLead", "localhost:8642"):
+        if needle not in console:
+            raise FileNotFoundError(f"نصب کنسولی ناقص است — «{needle}» نیست")
 
 
 def _check_static_ui() -> None:

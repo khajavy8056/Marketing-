@@ -148,7 +148,11 @@ def _migrate(con: sqlite3.Connection) -> None:
     cols = {r[1] for r in con.execute("PRAGMA table_info(leads)")}
     for name, typ in _LEAD_MIGRATIONS:
         if name not in cols:
-            con.execute(f"ALTER TABLE leads ADD COLUMN {name} {typ}")
+            try:
+                con.execute(f"ALTER TABLE leads ADD COLUMN {name} {typ}")
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
     con.commit()
 
 
