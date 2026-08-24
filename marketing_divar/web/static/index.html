@@ -456,8 +456,9 @@
 <dialog id="cap-dlg" style="width:min(920px,96vw)">
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="cap-live">پازل را <b>همین‌جا</b> روی تصویر حل کنید — پنجرهٔ جدا با ضربدر باز نمی‌شود.
-    اگر روی گوشی حل کرده باشید، همین پاپ‌آپ خودکار آزاد می‌شود.</div>
+  <div class="warn-box" id="cap-live">پازل را <b>همین‌جا روی همین صفحه</b> حل کنید.
+    فقط همان اکانتی که دکمه‌اش را زدید باز است. لاگین حساب‌ها پاک نمی‌شود —
+    فقط پنجرهٔ موقت اکانت قبلی بسته می‌شود.</div>
   <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
   <div id="cap-stage">
     <img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0">
@@ -569,6 +570,7 @@ async function refreshStatus(){
         <span>${ic}</span><b>${esc(a.name)}</b>
         <span class="tag ${m}">${esc(a.status)}</span>
         <span class="hint">امروز: ${a.phones_today}</span>
+        ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button>`:''}
         ${a.status!=='active'?`<button class="btn sm" onclick="accAction('${a.name}','release')">آزادسازی</button>`:''}
       </div>`;}).join('') : '<div class="empty">اکانتی ثبت نشده — تب اکانت‌ها</div>';
     // رخدادها
@@ -578,7 +580,7 @@ async function refreshStatus(){
     if (s.telegram) showTgStatus(s.telegram);
     showChanStatus(s.channels);
     watchPanelAlerts(s);
-    maybeCapPopup(s.captcha_needed || []);
+    /* پازل را خودکار باز نکن — فقط دکمهٔ کنار همان اکانت */
   }catch(e){ console.error(e); }
 }
 let _capShown = '';
@@ -629,52 +631,46 @@ function bindPuzzleFrame(){
     api('/api/accounts/puzzle-click',{method:'POST', body: JSON.stringify({name:_capShown, text})}).catch(()=>{});
   });
 }
+async function closePuzzleSession(){
+  stopFramePoll();
+  _puzzleLaunched = '';
+  try{ await api('/api/accounts/close-puzzle',{method:'POST', body:'{}'}); }
+  catch(e){}
+}
 async function openPuzzle(name){
   name = name || _capShown;
-  if (!name){ toast('اکانتی در انتظار نیست', false); return; }
+  if (!name){ toast('اول دکمهٔ پازل کنار همان اکانت را بزنید', false); return; }
+  _capShown = name;
+  const dlg = $('cap-dlg');
+  if (dlg && !dlg.open) dlg.showModal();
+  $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + name;
+  if ($('cap-q')) $('cap-q').textContent = '—';
+  if ($('cap-answer')) $('cap-answer').value = '';
+  try{
+    const pend = await api('/api/captcha/pending');
+    const one = (pend.pending||[]).find(p=>p.name===name);
+    if (one){
+      $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + one.name +
+        (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
+      if ($('cap-q')) $('cap-q').textContent = one.question || '—';
+    }
+  }catch(e){}
   bindPuzzleFrame();
   const msg = $('cap-stage-msg');
-  if (msg){ msg.style.display = 'flex'; msg.textContent = 'در حال آوردن پازل همین اکانت…'; }
+  if (msg){ msg.style.display = 'flex'; msg.textContent = 'در حال آوردن پازل همین اکانت… قبلی بسته شد.'; }
   try{
     const r = await api('/api/accounts/open-puzzle',{method:'POST', body: JSON.stringify({name})});
+    _puzzleLaunched = name;
     if ($('cap-live')) $('cap-live').textContent = r.message || '';
     startFramePoll(name);
-    toast(r.message||'پازل همین‌جا آمد', !!r.ok);
+    toast(r.message||'پازل همین صفحه آمد', !!r.ok);
   }catch(e){
     if (msg) msg.textContent = e.message || 'نتوانست پازل را بیاورد';
     toast('❌ '+e.message, false);
   }
 }
 async function maybeCapPopup(names){
-  if (!names || !names.length){
-    if (_capShown){ stopFramePoll(); }
-    _capShown='';
-    return;
-  }
-  const name = names[0];
-  const dlg = $('cap-dlg');
-  if (!dlg || (dlg.open && _capShown===name)) return;
-  if (_capShown===name && dlg.open) return;
-  try{
-    const r = await api('/api/captcha/pending');
-    const one = (r.pending||[]).find(p=>p.name===name) || (r.pending||[])[0];
-    if (!one) return;
-    _capShown = one.name;
-    $('cap-acc').textContent = tt('اکانت ','Account ') + one.name +
-      (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
-    $('cap-q').textContent = one.question || '—';
-    if ($('cap-answer')) $('cap-answer').value = '';
-    const im = $('cap-img');
-    if (im){
-      if (one.image_url){ im.src = one.image_url; im.style.display = 'block'; }
-      else { im.removeAttribute('src'); im.style.display = 'none'; }
-    }
-    if (!dlg.open) dlg.showModal();
-    if (_puzzleLaunched !== one.name){
-      _puzzleLaunched = one.name;
-      openPuzzle(one.name);
-    }
-  }catch(e){}
+  /* عمداً خالی: پازل فقط با دکمهٔ کنار اکانت باز می‌شود */
 }
 async function capProbe(){
   const name = _capShown;
@@ -744,8 +740,7 @@ async function accAction(name, action){
     const r = await api('/api/accounts/action',{method:'POST',body:JSON.stringify({name, action})});
     toast(r.message||'انجام شد', r.cleared!==false || action!=='release');
     if (action==='release' && r.cleared===false){
-      _capShown=''; maybeCapPopup([name]);
-    }
+      /* پازل را خودکار باز نکن — دکمهٔ کنار اکانت */ }
     accRefresh(); refreshStatus();
   }catch(e){ toast('❌ '+e.message,false); }
 }
@@ -1092,8 +1087,8 @@ applyTheme();
 (function(){
   const dlg = $('cap-dlg');
   if (dlg) dlg.addEventListener('close', ()=>{
-    stopFramePoll();
-    _puzzleLaunched = '';
+    closePuzzleSession();
+    _capShown = '';
   });
 })();
 refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();

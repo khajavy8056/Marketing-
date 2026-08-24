@@ -75,7 +75,10 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="openPuzzle"', r.text)
         self.assertIn("/api/accounts/open-puzzle", r.text)
         self.assertIn("/api/accounts/puzzle-frame", r.text)
+        self.assertIn("/api/accounts/close-puzzle", r.text)
+        self.assertIn("closePuzzleSession", r.text)
         self.assertIn('id="cap-live-frame"', r.text)
+        self.assertNotIn("_puzzleLaunched !== one.name", r.text)
         self.assertIn('id="set-bale-token"', r.text)
         self.assertIn('id="set-rubika-token"', r.text)
         self.assertIn("playAlert", r.text)
@@ -203,6 +206,9 @@ class TestAccountFlow(unittest.TestCase):
         r = client.post("/api/accounts/puzzle-click",
                         json={"name": "ghost", "x": 0.5, "y": 0.5})
         self.assertEqual(r.status_code, 404)
+        r = client.post("/api/accounts/close-puzzle")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json().get("ok"))
 
 
 class TestKeywords(unittest.TestCase):

@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -139,6 +140,22 @@ class TestCdpLocalHttp(unittest.TestCase):
                 live.start(p)
         self.assertIn("پازل", str(ctx.exception))
 
+    def test_wipe_only_temp_puzzle_dir(self):
+        d = tempfile.mkdtemp()
+        keep = os.path.join(d, "session.json")
+        with open(keep, "w", encoding="utf-8") as f:
+            json.dump({"token": "KEEP"}, f)
+        live = PuzzleLive()
+        live.profile = Path(keep)
+        live._wipe_profile()
+        self.assertTrue(os.path.exists(keep))
+        tmp = Path(d) / "puzzle-live-x"
+        tmp.mkdir()
+        (tmp / "x").write_text("z", encoding="utf-8")
+        live.profile = tmp
+        live._wipe_profile()
+        self.assertFalse(tmp.exists())
+
 
 class TestPuzzleLiveGuard(unittest.TestCase):
     def test_start_needs_session_and_browser(self):
@@ -149,7 +166,7 @@ class TestPuzzleLiveGuard(unittest.TestCase):
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
             json.dump({"token": "T"}, f)
-        with mock.patch("marketing_divar.session_view.find_browser", return_value=None):
+        with mock.patch("marketing_divar.session_view.find_browsers", return_value=[]):
             with self.assertRaises(RuntimeError):
                 live.start(p)
 

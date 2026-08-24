@@ -582,6 +582,25 @@ class PuzzleLive:
         self.cdp = None
         _kill_proc(self.proc)
         self.proc = None
+        self._wipe_profile()
+
+    def _wipe_profile(self) -> None:
+        """فقط پوشهٔ موقت puzzle-live-* را پاک می‌کند — session.json اکانت نمی‌رود."""
+        p = self.profile
+        self.profile = None
+        if not p:
+            return
+        try:
+            if "puzzle-live-" not in Path(p).name:
+                return
+        except Exception:
+            return
+        import shutil
+        time.sleep(0.15)
+        try:
+            shutil.rmtree(p, ignore_errors=True)
+        except Exception:
+            pass
 
 
 def launch_account_browser(session_path: str, name: str = "") -> Tuple[bool, str]:

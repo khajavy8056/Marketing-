@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.1")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.2")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -60,6 +60,17 @@ _state: Dict[str, Any] = {
     "puzzles": {},           # name -> PuzzleLive
 }
 _puzzle_lock = threading.Lock()
+
+
+def _stop_all_puzzles() -> None:
+    """فقط یک پازل در هر لحظه — قبلی را می‌بندد و پروفایل/کوکی موقت را پاک می‌کند."""
+    bag = _state.get("puzzles") or {}
+    for live in list(bag.values()):
+        try:
+            live.stop()
+        except Exception:
+            pass
+    _state["puzzles"] = {}
 
 
 def mgr() -> AccountManager:
@@ -217,26 +228,32 @@ def accounts_open_puzzle(req: AccountPuzzle):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
     from ..session_view import PuzzleLive
     with _puzzle_lock:
-        old = (_state.get("puzzles") or {}).pop(req.name, None)
-        if old:
-            try:
-                old.stop()
-            except Exception:
-                pass
+        _stop_all_puzzles()
         live = PuzzleLive()
         try:
             live.start(str(m.session_path(req.name)))
         except Exception as e:
+            try:
+                live.stop()
+            except Exception:
+                pass
             msg = str(e)
             if "timed out" in msg.lower() or "CDP" in msg or "آماده نشد" in msg:
                 msg = ("مرورگر روی رایانه برای پازل آماده نشد. "
                        "پروکسی/وی‌پی‌ان ویندوز را خاموش کنید و Edge را کامل ببندید، "
                        "بعد دوباره «نمایش پازل همین‌جا» را بزنید. " + msg)
             raise HTTPException(400, msg)
-        _state.setdefault("puzzles", {})[req.name] = live
-    log("info", f"پازل دیوار اکانت «{req.name}» داخل پنل باز شد")
+        _state["puzzles"] = {req.name: live}
+    log("info", f"پازل دیوار فقط برای اکانت «{req.name}» داخل همین صفحه باز شد")
     return {"ok": True, "embed": True,
-            "message": "پازل همین اکانت داخل همین پنجره آمد — روی تصویر کلیک کنید"}
+            "message": "فقط همین اکانت — پازل داخل همین صفحه است. روی تصویر حل کنید"}
+
+
+@app.post("/api/accounts/close-puzzle")
+def accounts_close_puzzle():
+    with _puzzle_lock:
+        _stop_all_puzzles()
+    return {"ok": True, "message": "سشن پازل بسته و کوکی موقت پاک شد"}
 
 
 @app.get("/api/accounts/puzzle-frame")
