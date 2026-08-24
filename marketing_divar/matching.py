@@ -117,15 +117,23 @@ def match_keywords(haystack: str, keywords: Iterable[str]) -> List[str]:
 
 def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
                       city: str, fetch_details: bool = True,
-                      match_all: bool = False) -> bool:
+                      match_all: bool = False,
+                      price_min: int = 0, price_max: int = 0,
+                      vip: bool = False) -> bool:
     """اگر آگهی جدید و منطبق باشد در دیتابیس ذخیره می‌شود. True = درج شد.
 
     match_all: آگهی از دستهٔ دیوار آمده و فیلتر کلمه لازم نیست.
+    اگر بازه قیمت باشد و قیمت آگهی در بازه نباشد (یا خوانده نشود) ذخیره نمی‌شود.
     """
     from .db import lead_exists, upsert_lead
+    from .pricing import in_range, price_from_post
 
     token = post.get("token")
     if not token or lead_exists(con, token):
+        return False
+
+    price = price_from_post(post)
+    if not in_range(price, int(price_min or 0), int(price_max or 0)):
         return False
 
     blob = search_blob(post)
@@ -133,6 +141,8 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     if match_all:
         post = dict(post)
         post["matched_keywords"] = keyword or "دسته"
+        post["vip"] = bool(vip)
+        post["price"] = price or 0
         if not post.get("published_at"):
             post["published_at"] = post.get("bottom") or ""
         return upsert_lead(con, post, keyword or "دسته", city)
@@ -164,6 +174,8 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     post = dict(post)
     post["description"] = desc
     post["matched_keywords"] = ",".join(hits)
+    post["vip"] = bool(vip)
+    post["price"] = price or 0
     if not post.get("published_at"):
         post["published_at"] = post.get("bottom") or ""
     return upsert_lead(con, post, keyword, city)

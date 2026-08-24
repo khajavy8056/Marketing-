@@ -24,6 +24,9 @@ class TestDivarCategories(unittest.TestCase):
         self.assertEqual(normalize_slug("mobile-tablet"), "mobile-tablet")
         self.assertEqual(normalize_slug("no-such"), "")
         self.assertIn("موبایل", title_of("mobile-tablet"))
+        phones = next(c for c in public_list() if c["slug"] == "mobile-phones")
+        self.assertEqual(phones.get("parent"), "mobile-tablet")
+        self.assertIn("└", phones.get("label") or "")
 
     def test_store_category_and_match_all(self):
         db = os.path.join(tempfile.mkdtemp(), "c.db")

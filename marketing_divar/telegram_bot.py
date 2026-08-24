@@ -176,6 +176,33 @@ def handle_update(text: str, db_path: str, cfg: Dict[str, Any],
             "document": None, "filename": ""}
 
 
+def vip_alert_text(title: str, city: str = "", category: str = "",
+                   price: Any = 0, url: str = "", phone: str = "") -> str:
+    """هشدار ویژه — آگهی داخل بازه / تیک VIP."""
+    lines = ["⭐ ویژه — آگهی منطبق"]
+    if phone:
+        lines.append(f"شماره: {phone}")
+    if city:
+        lines.append(f"شهر: {city}")
+    if category:
+        lines.append(f"دسته: {category}")
+    try:
+        n = int(price or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n > 0:
+        if n >= 1_000_000:
+            lines.append(f"قیمت: {n / 1_000_000:g} میلیون تومان")
+        else:
+            lines.append(f"قیمت: {n} تومان")
+    if title:
+        lines.append(f"آگهی: {(title or '')[:80]}")
+    if url:
+        lines.append(url)
+    lines.append(f"زمان: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    return "\n".join(lines)
+
+
 def found_alert_text(title: str, phone: str, extracted_at: str,
                      phones_today: int, sms_note: str = "") -> str:
     lines = [

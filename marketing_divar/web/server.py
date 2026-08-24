@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="1.9.2")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -78,6 +78,9 @@ class KeywordAdd(BaseModel):
     keyword: str = ""            # می‌تواند «a,b,c» باشد؛ با دسته می‌تواند خالی باشد
     cities: Optional[List[int]] = None
     category: str = ""           # اسلاگ دسته دیوار (mobile-tablet, light, …)
+    price_min: float = 0         # میلیون تومان
+    price_max: float = 0
+    vip: bool = False
 
 
 class SettingsUpdate(BaseModel):
@@ -177,6 +180,12 @@ def categories_get():
     return {"categories": public_list()}
 
 
+@app.get("/api/cities")
+def cities_get():
+    from ..cities import public_list
+    return {"cities": public_list()}
+
+
 @app.get("/api/keywords")
 def keywords_get():
     return {"keywords": store.keywords_list(DB_PATH)}
@@ -186,7 +195,12 @@ def keywords_get():
 def keywords_add(req: KeywordAdd):
     if not (req.keyword or "").strip() and not (req.category or "").strip():
         raise HTTPException(400, "کلمه کلیدی یا دسته‌بندی دیوار را انتخاب کنید")
-    added = store.keywords_add(DB_PATH, req.keyword, req.cities, req.category)
+    from ..pricing import million_to_toman
+    added = store.keywords_add(
+        DB_PATH, req.keyword, req.cities, req.category,
+        price_min=million_to_toman(req.price_min),
+        price_max=million_to_toman(req.price_max),
+        vip=bool(req.vip))
     log("info", f"پایش اضافه شد: {req.keyword or req.category}")
     return {"ok": added, "message": "اضافه شد" if added else "از قبل موجود بود"}
 

@@ -140,6 +140,8 @@ _LEAD_MIGRATIONS = (
     ("last_error", "TEXT"),
     ("sms_status", "TEXT DEFAULT ''"),
     ("sms_sent_at", "TEXT"),
+    ("vip", "INTEGER DEFAULT 0"),
+    ("price", "INTEGER DEFAULT 0"),
 )
 
 
@@ -200,17 +202,21 @@ def upsert_lead(con: sqlite3.Connection, post: Dict[str, Any],
                 keyword: str, city: str) -> bool:
     """درج سرنخ جدید؛ اگر توکن قبلاً بوده، چیزی تغییر نمی‌کند. True = جدید."""
     chat_st = "available" if post.get("has_chat") else "not_available"
+    try:
+        price = int(post.get("price") or 0)
+    except (TypeError, ValueError):
+        price = 0
     cur = con.execute(
         "INSERT OR IGNORE INTO leads "
         "(token, title, subtitle, url, keyword, city, has_chat, first_seen_at, "
-        " description, matched_keywords, published_at, chat_status) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        " description, matched_keywords, published_at, chat_status, vip, price) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (post["token"], post.get("title"), post.get("subtitle"),
          post.get("url"), keyword, str(city), int(bool(post.get("has_chat"))), now(),
          post.get("description") or "",
          post.get("matched_keywords") or keyword,
          post.get("published_at") or post.get("bottom") or "",
-         chat_st))
+         chat_st, int(bool(post.get("vip"))), price))
     return cur.rowcount > 0
 
 

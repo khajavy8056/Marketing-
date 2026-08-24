@@ -156,24 +156,17 @@ def default_base() -> str:
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
-CITY_SLUGS = {
-    1: "tehran", 2: "karaj", 3: "mashhad", 4: "isfahan",
-    5: "shiraz", 6: "ahvaz", 7: "tabriz", 8: "qom",
-    "1": "tehran", "2": "karaj", "3": "mashhad", "4": "isfahan",
-    "5": "shiraz", "6": "ahvaz", "7": "tabriz", "8": "qom",
-}
+from .cities import CITIES as _CITIES, slug_of as _slug_of
+
+CITY_SLUGS = {c["id"]: c["slug"] for c in _CITIES if c["slug"]}
+CITY_SLUGS.update({str(k): v for k, v in list(CITY_SLUGS.items())})
 
 
 def city_slug(cities: Optional[List[Any]]) -> str:
     """اسلاگ شهر برای HTML سایت؛ بدون شهر = iran."""
     if not cities:
         return "iran"
-    c = cities[0]
-    mapped = CITY_SLUGS.get(c) or CITY_SLUGS.get(str(c))
-    if mapped:
-        return mapped
-    s = str(c).strip().lower()
-    return s if s and not s.isdigit() else "iran"
+    return _slug_of(cities[0])
 
 
 HIDDEN_MARKER = "شماره مخفی شده است"
@@ -562,7 +555,30 @@ class DivarClient:
             _keep(token, "")
         for token in DivarClient._HTML_JSON_TOKEN.findall(html or ""):
             _keep(token, "")
+        DivarClient._enrich_html_prices(html or "", posts)
         return posts[:80]
+
+    _HTML_OFFER_PRICE = re.compile(r'"price"\s*:\s*"?(\d{4,})"?' )
+
+    @staticmethod
+    def _enrich_html_prices(html: str, posts: List[Dict[str, Any]]) -> None:
+        """قیمت JSON-LD نزدیک توکن (اسکیما دیوار معمولاً ریال است)."""
+        from .pricing import parse_toman
+        for p in posts:
+            tok = p.get("token") or ""
+            if not tok:
+                continue
+            i = html.find(tok)
+            window = html[max(0, i - 500): i + 900] if i >= 0 else html[:2000]
+            m = DivarClient._HTML_OFFER_PRICE.search(window)
+            if m:
+                rial = int(m.group(1))
+                p["price"] = rial // 10 if rial >= 1000 else rial
+                p["price_text"] = m.group(1)
+                continue
+            t = parse_toman(window)
+            if t:
+                p["price"] = t
 
     def _search_html(self, query: str, cities=None, page: int = 1,
                      category: str = ""):
@@ -630,6 +646,8 @@ class DivarClient:
         posts: List[Dict[str, Any]] = []
         seen = set()
 
+        from .pricing import parse_toman
+
         def _add(d: Dict[str, Any]) -> None:
             tok = d.get("token")
             if not tok and isinstance(d.get("action"), dict):
@@ -637,6 +655,9 @@ class DivarClient:
             if not tok or tok in seen:
                 return
             seen.add(tok)
+            price_blob = " ".join(str(x) for x in (
+                d.get("middle_description_text"), d.get("bottom_description_text"),
+                d.get("top_description_text"), d.get("title")) if x)
             posts.append({
                 "token": tok,
                 "title": d.get("title") or "",
@@ -645,6 +666,8 @@ class DivarClient:
                 "bottom": d.get("bottom_description_text") or "",
                 "has_chat": bool(d.get("has_chat", False)),
                 "url": f"https://divar.ir/v/{tok}",
+                "price": parse_toman(price_blob),
+                "price_text": d.get("middle_description_text") or "",
             })
 
         for item in raw or []:

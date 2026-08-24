@@ -227,17 +227,31 @@
       اگر «موارد فعلی هم گرفته شوند» را بزنید، چند صفحه از همان دسته برداشته می‌شود.</div>
     <div class="lbl">کلمه کلیدی (اختیاری) — با کاما جدا کنید</div>
     <input id="kw-input" placeholder="مثلاً: آیفون، پراید، تدریس خصوصی — می‌تواند خالی باشد">
-    <div class="lbl">محدوده جستجو</div>
-    <div class="row">
-      <label class="checkline"><input type="radio" name="kw-city" value="" checked> همه کشور</label>
-      <input id="kw-cities" style="max-width:220px" placeholder="کد شهرها مثل 1,3" dir="ltr">
-      <span class="hint">تهران=۱، کرج=۲، مشهد=۳، اصفهان=۴</span>
+    <div class="lbl">شهر دیوار</div>
+    <select id="kw-city">
+      <option value="0">همه ایران</option>
+    </select>
+    <div class="hint">همان شهر صفحهٔ دیوار: /s/<b>tehran</b>/mobile-phones</div>
+    <div class="grid g2" style="margin-top:8px">
+      <div>
+        <div class="lbl">حداقل قیمت (میلیون تومان) — اختیاری</div>
+        <input id="kw-price-min" type="number" min="0" step="0.1" dir="ltr" placeholder="مثلاً 20">
+      </div>
+      <div>
+        <div class="lbl">حداکثر قیمت (میلیون تومان) — اختیاری</div>
+        <input id="kw-price-max" type="number" min="0" step="0.1" dir="ltr" placeholder="مثلاً 80">
+      </div>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="kw-vip">
+      <label for="kw-vip"><b>هشدار ویژه (VIP)</b> — اگر آگهی در بازه باشد، همان لحظه تلگرام + صف شماره</label>
     </div>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="kwAdd()">➕ افزودن</button>
     </div>
     <div class="hint" style="margin-top:8px">هر مورد فعال، دوره‌ای پایش می‌شود.
-      می‌توانید فقط دسته، فقط کلمه، یا هر دو را با هم بگذارید.</div>
+      می‌توانید فقط دسته، فقط کلمه، یا هر دو را با هم بگذارید.
+      اگر بازه قیمت بگذارید و قیمت آگهی خوانده نشود، آن آگهی رد می‌شود.</div>
   </div>
   <div class="card" style="margin-top:14px">
     <h3>فهرست کلمات</h3>
@@ -304,6 +318,15 @@
 <!-- ═══════════════════════ تنظیمات ═══════════════════════ -->
 <section id="tab-settings" class="tab">
   <div class="grid g2">
+    <div class="card">
+      <h3>⭐ هشدار ویژه (VIP)</h3>
+      <div class="checkline">
+        <input type="checkbox" id="set-vip-tg" checked>
+        <label for="set-vip-tg">آگهی‌های تیک‌خوردهٔ ویژه را فوری در تلگرام اعلام کن (و بعد شماره را بگیر)</label>
+      </div>
+      <div class="hint">روی هر پایش در تب کلمات می‌توانید «هشدار ویژه» را بزنید.
+        اگر بازه قیمت هم بگذارید فقط آگهی داخل همان بازه هشدار می‌گیرد.</div>
+    </div>
     <div class="card">
       <h3>📢 اتصال تلگرام (اعلان‌ها)</h3>
       <div class="lbl">توکن ربات — از <b>@BotFather</b> بگیرید</div>
@@ -378,7 +401,7 @@
 
 </main>
 
-<footer>طراحی و توسعه توسط خواجوی · خواجوی لید<br>
+<footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار<br>
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
 
@@ -540,21 +563,43 @@ async function catsLoad(){
     const s = await api('/api/categories');
     const sel = $('kw-category'); if(!sel) return;
     const cur = sel.value;
-    sel.innerHTML = (s.categories||[]).map(c =>
-      `<option value="${esc(c.slug)}">${esc(c.group? (c.group+' — '+c.title): c.title)}</option>`
+    sel.innerHTML = (s.categories||[]).map(c => {
+      const t = c.label || c.title;
+      return `<option value="${esc(c.slug)}">${esc(c.group? (c.group+' — '+t): t)}</option>`;
+    }).join('');
+    if (cur) sel.value = cur;
+  }catch(e){}
+}
+async function citiesLoad(){
+  try{
+    const s = await api('/api/cities');
+    const sel = $('kw-city'); if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = (s.cities||[]).map(c =>
+      `<option value="${c.id}">${esc(c.title)}</option>`
     ).join('');
     if (cur) sel.value = cur;
   }catch(e){}
 }
+function _priceHint(k){
+  const a = Number(k.price_min||0), b = Number(k.price_max||0);
+  if(!a && !b) return '';
+  const fm = n => n>=1000000 ? (n/1000000)+' میلیون' : n;
+  if(a && b) return fm(a)+' تا '+fm(b);
+  if(a) return 'از '+fm(a);
+  return 'تا '+fm(b);
+}
 async function kwLoad(){
-  catsLoad();
+  catsLoad(); citiesLoad();
   try{ const s = await api('/api/keywords');
     $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
       <div class="acc"><div class="row">
         <b>${esc(k.keyword)}</b>
         ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}${k.browse?' — کل دسته':''}</span>`:''}
+        ${k.vip?`<span class="tag warn">⭐ ویژه</span>`:''}
         <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
-        <span class="hint">${k.cities?(tt('شهرهای','cities')+' '+k.cities.join('،')):tt('همه کشور','All country')}</span>
+        <span class="hint">${esc(k.city_title|| (k.cities?k.cities.join('،'):tt('همه کشور','All country')))}</span>
+        ${_priceHint(k)?`<span class="hint">${esc(_priceHint(k))}</span>`:''}
       </div><div class="row">
         <button class="btn sm gray" onclick="kwToggle(${k.id},${!k.active})">${k.active?'غیرفعال‌کردن':'فعال‌کردن'}</button>
         <button class="btn sm err" onclick="kwDel(${k.id})">حذف</button>
@@ -566,9 +611,16 @@ async function kwAdd(){
   const category=($('kw-category')&&$('kw-category').value)||'';
   if(!kw && !category){toast('کلمه یا دسته‌بندی را انتخاب کنید',false);return;}
   let cities=null;
-  const codes=$('kw-cities').value.trim();
-  if(codes){ cities=codes.split(',').map(x=>parseInt(x.trim())).filter(x=>!isNaN(x)); if(!cities.length)cities=null; }
-  if (await act('/api/keywords',{keyword:kw, cities, category})) { $('kw-input').value=''; kwLoad(); }
+  const cid = $('kw-city') ? parseInt($('kw-city').value) : 0;
+  if(cid) cities=[cid];
+  const price_min=parseFloat(($('kw-price-min')||{}).value)||0;
+  const price_max=parseFloat(($('kw-price-max')||{}).value)||0;
+  const vip=!!($('kw-vip')&&$('kw-vip').checked);
+  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip})) {
+    $('kw-input').value=''; if($('kw-price-min'))$('kw-price-min').value='';
+    if($('kw-price-max'))$('kw-price-max').value=''; if($('kw-vip'))$('kw-vip').checked=false;
+    kwLoad();
+  }
 }
 async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
 async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwLoad(); }
@@ -671,6 +723,7 @@ async function settingsLoad(){
     $('set-sms-line').value=s.sms_line_number||'';
     $('set-sms-limit').value=s.sms_daily_limit||40;
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
+    if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
   }catch(e){}
 }
 async function settingsSave(){
@@ -690,6 +743,7 @@ async function settingsSave(){
     sms_line_number:$('set-sms-line').value.trim(),
     sms_daily_limit:parseInt($('set-sms-limit').value)||40,
     sms_auto_on_new:!!$('set-sms-auto').checked,
+    vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
 }

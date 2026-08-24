@@ -117,6 +117,34 @@ class Monitor:
         except Exception:
             pass
 
+    def _vip_on(self) -> bool:
+        try:
+            from . import store
+            return bool(store.settings_all(self.db_path).get("vip_telegram", True))
+        except Exception:
+            return True
+
+    def _vip_found(self, post: Dict[str, Any], spec: Dict[str, Any], city: str,
+                   phone: str = "") -> None:
+        if not self._vip_on():
+            return
+        try:
+            from .telegram_bot import vip_alert_text
+            from .cities import title_of_city
+            from .categories import title_of
+            cities = spec.get("cities") or []
+            city_name = title_of_city(cities[0]) if cities else (city or "همه ایران")
+            self._tg(vip_alert_text(
+                title=str(post.get("title") or ""),
+                city=city_name,
+                category=title_of(spec.get("category") or "") or "",
+                price=post.get("price") or 0,
+                url=str(post.get("url") or ""),
+                phone=phone or "",
+            ))
+        except Exception:
+            pass
+
     # ------------------------------------------------------------ کلاینت‌ها --
     def client_for(self, name: str) -> DivarClient:
         if name not in self._clients:
@@ -176,14 +204,20 @@ class Monitor:
                                  + f": {len(posts)} آگهی")
                     for p in posts:
                         if consider_new_lead(con, self.anon, p, kw, city,
-                                             match_all=browse):
+                                             match_all=browse,
+                                             price_min=int(spec.get("price_min") or 0),
+                                             price_max=int(spec.get("price_max") or 0),
+                                             vip=bool(spec.get("vip"))):
                             new_total += 1
                             new_here += 1
                             t = str(p.get("title") or "")
                             where = ("دسته" if browse else
                                      ("عنوان" if kw in t else "متن"))
-                            self._ev("info", f"🆕 سرنخ جدید: «{t[:40]}» "
+                            mark = "⭐ ویژه " if spec.get("vip") else ""
+                            self._ev("info", f"🆕 {mark}سرنخ جدید: «{t[:40]}» "
                                              f"({where})")
+                            if spec.get("vip"):
+                                self._vip_found(p, spec, city)
                     con.commit()
                     if new_here == 0:
                         break  # صفحه بعدی تکراری
@@ -366,6 +400,18 @@ class Monitor:
                 from .telegram_bot import found_alert_text
                 self._tg(found_alert_text(row["title"] or "", res.get("phone") or "",
                                           extracted, int(qn.get("phones") or 0)))
+                is_vip = False
+                try:
+                    is_vip = bool(row["vip"]) if "vip" in row.keys() else False
+                except Exception:
+                    is_vip = False
+                if is_vip:
+                    self._vip_found({"title": row["title"] if "title" in row.keys() else "",
+                                     "url": row["url"] if "url" in row.keys() else "",
+                                     "price": row["price"] if "price" in row.keys() else 0},
+                                    {"cities": None, "category": ""},
+                                    row["city"] if "city" in row.keys() else "",
+                                    phone=res.get("phone") or "")
                 self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")

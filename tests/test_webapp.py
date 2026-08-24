@@ -63,7 +63,11 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('dir="rtl"', r.text)
         self.assertIn("کلمات کلیدی", r.text)
         self.assertIn('id="kw-category"', r.text)
+        self.assertIn('id="kw-city"', r.text)
+        self.assertIn('id="kw-price-min"', r.text)
+        self.assertIn('id="kw-vip"', r.text)
         self.assertIn("/api/categories", r.text)
+        self.assertIn("/api/cities", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
@@ -153,11 +157,23 @@ class TestKeywords(unittest.TestCase):
         self.assertEqual(one["cities"], [1])
         cats = client.get("/api/categories").json()["categories"]
         self.assertTrue(any(c["slug"] == "mobile-tablet" for c in cats))
+        self.assertTrue(any(c.get("parent") == "vehicles" for c in cats if c["slug"] == "light"))
+        cities = client.get("/api/cities").json()["cities"]
+        self.assertTrue(any(c["slug"] == "tehran" for c in cities))
         r = client.post("/api/keywords",
                         json={"keyword": "", "cities": None, "category": "light"})
         self.assertEqual(r.status_code, 200, r.text)
         kws = client.get("/api/keywords").json()["keywords"]
         self.assertTrue(any(k.get("category") == "light" for k in kws))
+        r = client.post("/api/keywords", json={
+            "keyword": "آیفون ویژه", "cities": [1], "category": "mobile-phones",
+            "price_min": 20, "price_max": 80, "vip": True})
+        self.assertEqual(r.status_code, 200, r.text)
+        one = next(k for k in client.get("/api/keywords").json()["keywords"]
+                   if k["keyword"] == "آیفون ویژه")
+        self.assertTrue(one["vip"])
+        self.assertEqual(one["price_min"], 20_000_000)
+        self.assertEqual(one["cities"], [1])
 
     def test_toggle_and_delete(self):
         kws = client.get("/api/keywords").json()["keywords"]

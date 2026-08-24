@@ -55,6 +55,7 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "sms_line_number": "",
     "sms_auto_on_new": False,        # پیش‌فرض خاموش
     "sms_daily_limit": 40,
+    "vip_telegram": True,            # هشدار ویژه در تلگرام
 }
 
 
@@ -81,6 +82,16 @@ def _con(db_path: str) -> sqlite3.Connection:
             con.commit()
         except Exception:
             pass
+        cols = {r[1] for r in con.execute("PRAGMA table_info(keywords)")}
+    if "price_min" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN price_min INTEGER DEFAULT 0")
+        con.commit()
+    if "price_max" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN price_max INTEGER DEFAULT 0")
+        con.commit()
+    if "vip" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN vip INTEGER DEFAULT 0")
+        con.commit()
     return con
 
 
@@ -89,30 +100,47 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
     from .categories import title_of
     with _con(db_path) as con:
         rows = con.execute(
-            "SELECT id, keyword, cities, active, created_at, category, browse FROM keywords "
+            "SELECT id, keyword, cities, active, created_at, category, browse, "
+            "price_min, price_max, vip FROM keywords "
             "ORDER BY id DESC").fetchall()
+    from .cities import title_of_city
     out = []
     for r in rows:
         cat = ""
         browse = 0
+        pmin = pmax = vip = 0
         try:
             if "category" in r.keys():
                 cat = r["category"] or ""
             if "browse" in r.keys():
                 browse = int(r["browse"] or 0)
+            if "price_min" in r.keys():
+                pmin = int(r["price_min"] or 0)
+            if "price_max" in r.keys():
+                pmax = int(r["price_max"] or 0)
+            if "vip" in r.keys():
+                vip = int(r["vip"] or 0)
         except Exception:
             cat, browse = cat, 0
+        cities = json.loads(r["cities"]) if r["cities"] else None
+        city_title = ""
+        if cities:
+            city_title = "، ".join(title_of_city(c) for c in cities)
         out.append({"id": r["id"], "keyword": r["keyword"],
-                    "cities": json.loads(r["cities"]) if r["cities"] else None,
+                    "cities": cities,
+                    "city_title": city_title or "همه ایران",
                     "active": bool(r["active"]), "created_at": r["created_at"],
                     "category": cat, "category_title": title_of(cat),
-                    "browse": bool(browse)})
+                    "browse": bool(browse),
+                    "price_min": pmin, "price_max": pmax, "vip": bool(vip)})
     return out
 
 
 def keywords_add(db_path: str, keyword: str,
                  cities: Optional[List[int]] = None,
-                 category: str = "") -> bool:
+                 category: str = "",
+                 price_min: int = 0, price_max: int = 0,
+                 vip: bool = False) -> bool:
     """افزودن کلمه و/یا دستهٔ دیوار.
 
     بدون کلمه + دسته = مرور کل دسته (عنوان آگهی مهم نیست).
@@ -128,18 +156,24 @@ def keywords_add(db_path: str, keyword: str,
         parts = [title_of(cat)]
         browse = 1
     added = False
+    pmin = int(price_min or 0)
+    pmax = int(price_max or 0)
+    vip_i = int(bool(vip))
     with _con(db_path) as con:
         for label in parts:
             cur = con.execute(
                 "INSERT OR IGNORE INTO keywords "
-                "(keyword, cities, created_at, category, browse) "
-                "VALUES (?,?,?,?,?)",
+                "(keyword, cities, created_at, category, browse, price_min, price_max, vip) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 (label, json.dumps(cities) if cities else None,
-                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse))
+                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse, pmin, pmax, vip_i))
             added = added or cur.rowcount > 0
             if cur.rowcount == 0:
-                con.execute("UPDATE keywords SET category=?, browse=? WHERE keyword=?",
-                            (cat, browse, label))
+                con.execute(
+                    "UPDATE keywords SET category=?, browse=?, cities=?, "
+                    "price_min=?, price_max=?, vip=? WHERE keyword=?",
+                    (cat, browse, json.dumps(cities) if cities else None,
+                     pmin, pmax, vip_i, label))
                 added = True
     return added
 
@@ -169,7 +203,10 @@ def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
             bool(cat) and (not k["keyword"] or k["keyword"] in titles
                            or k["keyword"] == title_of(cat)))
         specs.append({"keyword": k["keyword"], "cities": k["cities"], "pages": 1,
-                      "category": cat, "match_all": match_all})
+                      "category": cat, "match_all": match_all,
+                      "price_min": int(k.get("price_min") or 0),
+                      "price_max": int(k.get("price_max") or 0),
+                      "vip": bool(k.get("vip"))})
     return specs
 
 
