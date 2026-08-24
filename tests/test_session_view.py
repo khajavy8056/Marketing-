@@ -16,7 +16,8 @@ sys.path.insert(0, ROOT)
 from marketing_divar.client import parse_block_body  # noqa: E402
 from marketing_divar.session_view import (  # noqa: E402
     PuzzleLive, _http_get_local, _wait_cdp, cookies_from_session,
-    find_browser, launch_account_browser)
+    find_browser, launch_account_browser, merge_session_cookies,
+    persistent_profile_dir)
 
 
 class TestCookiesFromSession(unittest.TestCase):
@@ -139,6 +140,43 @@ class TestCdpLocalHttp(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 live.start(p)
         self.assertIn("پازل", str(ctx.exception))
+
+    def test_merge_session_cookies_keeps_token(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "KEEP", "cookies": {"old": "1"}}, f)
+        n = merge_session_cookies(p, [
+            {"name": "sAccessToken", "value": "NEW", "domain": ".divar.ir"},
+            {"name": "skip", "value": "x", "domain": ".google.com"},
+        ])
+        self.assertEqual(n, 1)
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        self.assertEqual(data["token"], "KEEP")
+        self.assertEqual(data["cookies"]["sAccessToken"], "NEW")
+        self.assertEqual(data["cookies"]["old"], "1")
+        self.assertNotIn("skip", data["cookies"])
+
+    def test_persistent_profile_next_to_session(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        self.assertEqual(persistent_profile_dir(p).name, "browser-profile")
+        self.assertEqual(persistent_profile_dir(p).parent, Path(d))
+
+    def test_stop_does_not_wipe_persistent_profile(self):
+        d = tempfile.mkdtemp()
+        keep = os.path.join(d, "session.json")
+        with open(keep, "w", encoding="utf-8") as f:
+            json.dump({"token": "KEEP"}, f)
+        prof = Path(d) / "browser-profile"
+        prof.mkdir()
+        (prof / "x").write_text("stay", encoding="utf-8")
+        live = PuzzleLive()
+        live.profile = prof
+        live.session_path = keep
+        live.stop()
+        self.assertTrue(prof.exists())
+        self.assertTrue(os.path.exists(keep))
 
     def test_wipe_only_temp_puzzle_dir(self):
         d = tempfile.mkdtemp()

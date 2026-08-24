@@ -457,8 +457,8 @@
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
   <div class="warn-box" id="cap-live">پازل را <b>همین‌جا روی همین صفحه</b> حل کنید.
-    فقط همان اکانتی که دکمه‌اش را زدید باز است. لاگین حساب‌ها پاک نمی‌شود —
-    فقط پنجرهٔ موقت اکانت قبلی بسته می‌شود.</div>
+    صفحهٔ همان آگهی مسدود باز می‌شود — «نمایش شماره» را بزنید.
+    لاگین پاک نمی‌شود. پروفایل همین اکانت می‌ماند؛ کوکی حل‌شده برمی‌گردد به برنامه.</div>
   <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
   <div id="cap-stage">
     <img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0">
@@ -653,6 +653,10 @@ async function openPuzzle(name){
       $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + one.name +
         (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
       if ($('cap-q')) $('cap-q').textContent = one.question || '—';
+      if (one.image_url && $('cap-img')){
+        $('cap-img').src = one.image_url;
+        $('cap-img').style.display = 'block';
+      }
     }
   }catch(e){}
   bindPuzzleFrame();

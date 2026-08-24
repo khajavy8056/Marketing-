@@ -87,6 +87,7 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="set-tg-base"', r.text)
         self.assertIn("requeueHidden", r.text)
         self.assertIn("/api/leads/requeue-hidden", r.text)
+        self.assertIn("نمایش شماره", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
@@ -171,12 +172,15 @@ class TestAccountFlow(unittest.TestCase):
         from marketing_divar.config import DEFAULTS
         m = AccountManager(DEFAULTS, os.environ["DIVAR_ACCOUNTS_DIR"])
         m.set_status("web1", "captcha", note="captcha_required")
+        m.record_block("web1", "captcha_required", token="adtok",
+                       url="https://divar.ir/v/adtok")
         r = client.get("/api/captcha/pending")
         self.assertEqual(r.status_code, 200, r.text)
         pend = r.json()["pending"]
         self.assertTrue(any(p["name"] == "web1" for p in pend))
         one = next(p for p in pend if p["name"] == "web1")
         self.assertTrue(one["question"])
+        self.assertEqual(one.get("last_ad_url"), "https://divar.ir/v/adtok")
         from marketing_divar.web import server as srv
         expect = srv._state["gates"]["web1"]["expect"]
         r = client.post("/api/captcha/solve", json={"name": "web1", "answer": "0"})

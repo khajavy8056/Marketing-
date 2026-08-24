@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.2")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.3")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -212,6 +212,12 @@ def accounts_probe(req: AccountProbe):
     m = mgr()
     if not m.has_token(req.name):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    live = (_state.get("puzzles") or {}).get(req.name)
+    if live:
+        try:
+            live.harvest_cookies()
+        except Exception:
+            pass
     res = _do_unlock(req.name, "بررسی دستی")
     return res
 
@@ -227,11 +233,19 @@ def accounts_open_puzzle(req: AccountPuzzle):
     if not m.has_token(req.name):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
     from ..session_view import PuzzleLive
+    start_url = "https://divar.ir"
+    try:
+        rec = next((a for a in m.snapshot(DB_PATH) if a.get("name") == req.name), {})
+        start_url = rec.get("last_ad_url") or start_url
+        if not rec.get("last_ad_url") and rec.get("last_ad_token"):
+            start_url = f"https://divar.ir/v/{rec['last_ad_token']}"
+    except Exception:
+        pass
     with _puzzle_lock:
         _stop_all_puzzles()
         live = PuzzleLive()
         try:
-            live.start(str(m.session_path(req.name)))
+            live.start(str(m.session_path(req.name)), start_url=start_url)
         except Exception as e:
             try:
                 live.stop()
@@ -245,15 +259,18 @@ def accounts_open_puzzle(req: AccountPuzzle):
             raise HTTPException(400, msg)
         _state["puzzles"] = {req.name: live}
     log("info", f"پازل دیوار فقط برای اکانت «{req.name}» داخل همین صفحه باز شد")
-    return {"ok": True, "embed": True,
-            "message": "فقط همین اکانت — پازل داخل همین صفحه است. روی تصویر حل کنید"}
+    hint = "روی تصویر «نمایش شماره» را بزنید و پازل را حل کنید. لاگین پاک نمی‌شود."
+    if start_url and start_url != "https://divar.ir":
+        hint = "صفحهٔ همان آگهی مسدود باز است — «نمایش شماره» را بزنید و پازل را حل کنید."
+    return {"ok": True, "embed": True, "url": start_url,
+            "message": hint}
 
 
 @app.post("/api/accounts/close-puzzle")
 def accounts_close_puzzle():
     with _puzzle_lock:
         _stop_all_puzzles()
-    return {"ok": True, "message": "سشن پازل بسته و کوکی موقت پاک شد"}
+    return {"ok": True, "message": "پنجره بسته شد؛ لاگین و پروفایل همین اکانت ماند"}
 
 
 @app.get("/api/accounts/puzzle-frame")
@@ -287,6 +304,10 @@ def accounts_puzzle_click(req: PuzzleClick):
             live.type_text(req.text)
         else:
             live.click(req.x, req.y)
+        try:
+            live.harvest_cookies()
+        except Exception:
+            pass
     except Exception as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
@@ -849,7 +870,8 @@ def captcha_pending():
                         "last_probe_state": a.get("last_probe_state") or "",
                         "image_url": parsed.get("image_url") or "",
                         "has_widget": bool(parsed.get("has_widget")),
-                        "divar_url": "https://divar.ir"})
+                        "last_ad_url": a.get("last_ad_url") or "",
+                        "divar_url": a.get("last_ad_url") or "https://divar.ir"})
     return {"pending": pending}
 
 

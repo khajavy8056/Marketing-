@@ -98,12 +98,19 @@ class AccountManager:
         st[name] = rec
         self._save_states(st)
 
-    def record_block(self, name: str, body: str = "") -> None:
+    def record_block(self, name: str, body: str = "",
+                     token: str = "", url: str = "") -> None:
         st = self._load_states()
         rec = st.get(name) or {}
         rec["last_block_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         rec["last_block_body"] = (body or "")[:800]
         rec["updated_at"] = rec["last_block_at"]
+        if token:
+            rec["last_ad_token"] = str(token)
+        if url:
+            rec["last_ad_url"] = str(url)
+        elif token:
+            rec["last_ad_url"] = f"https://divar.ir/v/{token}"
         st[name] = rec
         self._save_states(st)
 
@@ -161,7 +168,9 @@ class AccountManager:
                             "last_probe_at": rec.get("last_probe_at") or "",
                             "last_probe_state": rec.get("last_probe_state") or "",
                             "last_block_body": rec.get("last_block_body") or "",
-                            "last_block_at": rec.get("last_block_at") or ""})
+                            "last_block_at": rec.get("last_block_at") or "",
+                            "last_ad_token": rec.get("last_ad_token") or "",
+                            "last_ad_url": rec.get("last_ad_url") or ""})
             return out
         finally:
             con.close()

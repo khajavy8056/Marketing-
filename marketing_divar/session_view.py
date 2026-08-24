@@ -21,6 +21,60 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 
+def persistent_profile_dir(session_path: str) -> Path:
+    """یک پروفایل مرورگر دائمی کنار session.json همین اکانت — پاک نمی‌شود."""
+    return Path(session_path).resolve().parent / "browser-profile"
+
+
+def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> int:
+    """کوکی‌های حل‌شدهٔ دیوار را از مرورگر به session.json برمی‌گرداند.
+
+    پروفایل موقت بی‌فایده بود چون پاسخ پازل هرگز به کلاینت HTTP نمی‌رسید.
+    """
+    p = Path(session_path)
+    data: Dict[str, Any] = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    jar = data.get("cookies") or {}
+    if not isinstance(jar, dict):
+        jar = {}
+    n = 0
+    for ck in cookies or []:
+        if not isinstance(ck, dict):
+            continue
+        name = str(ck.get("name") or "")
+        val = ck.get("value")
+        domain = str(ck.get("domain") or "")
+        if not name or val is None:
+            continue
+        if domain and "divar.ir" not in domain.lower():
+            continue
+        jar[name] = str(val)
+        n += 1
+    data["cookies"] = jar
+    if not data.get("token"):
+        data["token"] = jar.get("sAccessToken") or jar.get("token") or ""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                 encoding="utf-8")
+    return n
+
+
+def _cleanup_old_temp_profiles(session_path: str) -> None:
+    parent = Path(session_path).resolve().parent
+    import shutil
+    try:
+        for p in parent.glob("puzzle-live-*"):
+            shutil.rmtree(p, ignore_errors=True)
+    except Exception:
+        pass
+
+
 def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
     """کوکی‌هایی که باید روی divar.ir ست شوند تا همان لاگین برنامه باشد."""
     p = Path(session_path)
@@ -415,6 +469,7 @@ class PuzzleLive:
         self.proc: Optional[subprocess.Popen] = None
         self.cdp: Optional[CdpClient] = None
         self.profile: Optional[Path] = None
+        self.session_path: str = ""
         self.last_jpeg = b""
         self.last_err = ""
         self.lock = __import__("threading").Lock()
@@ -426,12 +481,14 @@ class PuzzleLive:
         cookies = cookies_from_session(session_path)
         if not cookies:
             raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
-        # پروفایل جدا — اگر Edge قبلی همان edge-profile را گرفته باشد
-        # --remote-debugging-port نادیده گرفته می‌شود و CDP timeout می‌شود.
-        stamp = str(os.getpid()) + "-" + str(int(time.time()))
-        profile = Path(session_path).resolve().parent / f"puzzle-live-{stamp}"
+        self.session_path = session_path
+        _cleanup_old_temp_profiles(session_path)
+        # همان پروفایل دائمی اکانت — نه پوشهٔ موقت puzzle-live.
+        # کوکی حل‌شده اینجا می‌ماند و بعد به session.json برمی‌گردد.
+        profile = persistent_profile_dir(session_path)
         profile.mkdir(parents=True, exist_ok=True)
         self.profile = profile
+        reuse = (profile / "Default").exists()
         last = ""
         for browser in browsers:
             port = _free_port()
@@ -467,14 +524,15 @@ class PuzzleLive:
                     self.cdp.call("Runtime.enable")
                 except Exception:
                     pass
-                for ck in cookies:
-                    self.cdp.call("Network.setCookie", {
-                        "name": ck["name"], "value": ck["value"],
-                        "domain": ck.get("domain") or ".divar.ir",
-                        "path": ck.get("path") or "/",
-                        "secure": True,
-                        "httpOnly": ck["name"] != "sFrontToken",
-                    })
+                if not reuse:
+                    for ck in cookies:
+                        self.cdp.call("Network.setCookie", {
+                            "name": ck["name"], "value": ck["value"],
+                            "domain": ck.get("domain") or ".divar.ir",
+                            "path": ck.get("path") or "/",
+                            "secure": True,
+                            "httpOnly": ck["name"] != "sFrontToken",
+                        })
                 self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
                 self._wait_ready()
                 self._nudge_window()
@@ -526,6 +584,27 @@ class PuzzleLive:
                 }, timeout=3)
         except Exception:
             pass
+
+    def harvest_cookies(self) -> int:
+        """کوکی دیوار همین پروفایل را به session.json برمی‌گرداند."""
+        if not self.cdp or not self.session_path:
+            return 0
+        cookies: List[Dict[str, Any]] = []
+        try:
+            r = self.cdp.call("Network.getCookies", {
+                "urls": ["https://divar.ir", "https://api.divar.ir",
+                         "https://www.divar.ir"],
+            }, timeout=5)
+            cookies = list(r.get("cookies") or [])
+        except Exception:
+            cookies = []
+        if not cookies:
+            try:
+                r = self.cdp.call("Network.getAllCookies", timeout=5)
+                cookies = list(r.get("cookies") or [])
+            except Exception:
+                return 0
+        return merge_session_cookies(self.session_path, cookies)
 
     def screenshot(self) -> bytes:
         if not self.cdp:
