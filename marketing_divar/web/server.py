@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.4")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -57,7 +57,9 @@ _state: Dict[str, Any] = {
     "pending_logins": {},   # name -> phone (بین دو مرحله OTP)
     "include_existing": False,
     "gates": {},             # name -> چالش جمع ساده برای پاپ‌آپ پنل
+    "puzzles": {},           # name -> PuzzleLive
 }
+_puzzle_lock = threading.Lock()
 
 
 def mgr() -> AccountManager:
@@ -209,16 +211,63 @@ class AccountPuzzle(BaseModel):
 
 @app.post("/api/accounts/open-puzzle")
 def accounts_open_puzzle(req: AccountPuzzle):
-    """Edge/Chrome را با کوکی همان اکانت باز می‌کند — نه تب مهمان."""
+    """پازل همان اکانت را داخل پاپ‌آپ پنل باز می‌کند (نه iframe، نه تب مهمان)."""
     m = mgr()
     if not m.has_token(req.name):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
-    from ..session_view import launch_account_browser
-    ok, msg = launch_account_browser(str(m.session_path(req.name)), req.name)
-    if not ok:
-        raise HTTPException(400, msg)
-    log("info", f"پنجرهٔ پازل دیوار با اکانت «{req.name}» باز شد")
-    return {"ok": True, "message": msg}
+    from ..session_view import PuzzleLive
+    with _puzzle_lock:
+        old = (_state.get("puzzles") or {}).pop(req.name, None)
+        if old:
+            try:
+                old.stop()
+            except Exception:
+                pass
+        live = PuzzleLive()
+        try:
+            live.start(str(m.session_path(req.name)))
+        except Exception as e:
+            raise HTTPException(400, str(e))
+        _state.setdefault("puzzles", {})[req.name] = live
+    log("info", f"پازل دیوار اکانت «{req.name}» داخل پنل باز شد")
+    return {"ok": True, "embed": True,
+            "message": "پازل همین اکانت داخل همین پنجره آمد — روی تصویر کلیک کنید"}
+
+
+@app.get("/api/accounts/puzzle-frame")
+def accounts_puzzle_frame(name: str):
+    from fastapi.responses import Response
+    live = (_state.get("puzzles") or {}).get(name)
+    if not live:
+        raise HTTPException(404, "پازل این اکانت باز نیست")
+    try:
+        data = live.screenshot()
+    except Exception as e:
+        raise HTTPException(400, str(e))
+    return Response(content=data, media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+class PuzzleClick(BaseModel):
+    name: str
+    x: float = 0.5
+    y: float = 0.5
+    text: str = ""
+
+
+@app.post("/api/accounts/puzzle-click")
+def accounts_puzzle_click(req: PuzzleClick):
+    live = (_state.get("puzzles") or {}).get(req.name)
+    if not live:
+        raise HTTPException(404, "پازل این اکانت باز نیست")
+    try:
+        if req.text:
+            live.type_text(req.text)
+        else:
+            live.click(req.x, req.y)
+    except Exception as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
 
 
 # --------------------------------------------------------- API کلمات کلیدی --
@@ -408,6 +457,11 @@ def _telegram_status() -> Dict[str, Any]:
     return last
 
 
+def _channels_status() -> Dict[str, Any]:
+    from ..notifier import channels_status
+    return channels_status(store.effective_config(DB_PATH, load_config()))
+
+
 @app.get("/api/status")
 def status():
     mon = _state.get("monitor")
@@ -422,6 +476,10 @@ def status():
             return con.execute(f"SELECT COUNT(*) c FROM leads WHERE {where}").fetchone()["c"]
         total_leads = con.execute("SELECT COUNT(*) c FROM leads").fetchone()["c"]
         found = _cnt("phone_status='found'")
+        try:
+            vip_found = _cnt("vip=1")
+        except Exception:
+            vip_found = 0
         breakdown = {
             "total": total_leads,
             "new": _cnt("phone_status='pending'"),
@@ -472,6 +530,8 @@ def status():
         "adaptive_until_captcha": bool(store.settings_all(DB_PATH).get(
             "adaptive_until_captcha", True)),
         "telegram": _telegram_status(),
+        "channels": _channels_status(),
+        "vip_found": vip_found,
     }
 
 
@@ -722,18 +782,24 @@ def sms_test(req: SmsTest):
 
 @app.post("/api/telegram/test")
 def telegram_test():
-    from ..notifier import notify, telegram_configured, telegram_last
+    from ..notifier import (bale_configured, channels_status, notify,
+                            rubika_configured, telegram_configured,
+                            telegram_last)
     from ..telegram_bot import build_status_text
     cfg = store.effective_config(DB_PATH, load_config())
     mon = _state.get("monitor")
     running = bool(_state.get("thread") and _state["thread"].is_alive())
     text = build_status_text(DB_PATH, cfg, running=running,
                              tick=mon.tick if mon else 0)
-    if telegram_configured(cfg):
-        notify(cfg, text)
+    any_ch = (telegram_configured(cfg) or bale_configured(cfg)
+              or rubika_configured(cfg))
+    if any_ch:
+        notify(cfg, text, important=False)
     last = telegram_last()
-    return {"ok": last.get("ok") or not telegram_configured(cfg),
-            "preview": text, "telegram": last}
+    ch = channels_status(cfg)
+    return {"ok": last.get("ok") or ch["bale"]["ok"] or ch["rubika"]["ok"]
+            or not any_ch,
+            "preview": text, "telegram": last, "channels": ch}
 
 
 class CaptchaSolve(BaseModel):

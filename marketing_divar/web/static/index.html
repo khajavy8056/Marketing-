@@ -83,6 +83,20 @@
          padding:12px 18px; border-radius:10px; font-size:13.5px; opacity:0;
          transition:.3s; z-index:99; max-width:340px}
   .toast.show{opacity:1}
+  #notify-stack{position:fixed; top:18px; left:18px; z-index:120; display:flex;
+                flex-direction:column; gap:8px; max-width:min(360px,92vw)}
+  .note{background:#1e2a3a; color:#fff; padding:11px 14px; border-radius:12px;
+        font-size:13px; line-height:1.7; box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .note.vip{background:#6b3fa0}
+  .note.help{background:#b42318}
+  .note.soft{background:#1a5c38}
+  #cap-stage{position:relative; margin:10px 0; border:1px solid var(--line);
+             border-radius:12px; min-height:300px; background:#111; overflow:hidden}
+  #cap-live-frame{width:100%; display:block; cursor:crosshair; min-height:280px;
+                  background:#111}
+  #cap-stage-msg{position:absolute; inset:0; display:flex; align-items:center;
+                 justify-content:center; color:#ddd; padding:16px; text-align:center;
+                 pointer-events:none}
   footer{text-align:center; color:var(--mut); font-size:12.5px; padding:28px 16px 36px}
   #theme-btn{background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
              padding:6px 12px; border-radius:99px; font-size:16px; cursor:pointer; font-family:inherit}
@@ -346,6 +360,30 @@
       </div>
     </div>
     <div class="card">
+      <h3>💬 بله (جایگزین تلگرام فیلترشده)</h3>
+      <div class="hint">API رسمی بله مثل تلگرام است.
+        در پیام‌رسان <b>بله</b> به <b dir="ltr">@botfather</b> بروید → ساخت بازوی جدید →
+        توکن شبیه <code dir="ltr">123456:abcd…</code> را اینجا بگذارید.
+        بازو را استارت کنید، یک پیام بفرستید؛ <b>Chat ID</b> همان گفتگو است.</div>
+      <div class="lbl">توکن بازوی بله</div>
+      <input id="set-bale-token" dir="ltr" placeholder="123456:abcd…">
+      <div class="lbl">Chat ID بله</div>
+      <input id="set-bale-chat" dir="ltr" placeholder="مثلاً 123456789">
+      <div class="hint" id="bale-status">وضعیت بله: هنوز ذخیره نشده</div>
+    </div>
+    <div class="card">
+      <h3>🟣 روبیکا (جایگزین رسمی)</h3>
+      <div class="hint">روبیکا از ۱۴۰۴ API رسمی بات دارد.
+        در روبیکا به <b dir="ltr">@BotFather</b> بروید → ساخت بات → توکن را کپی کنید.
+        Chat ID گفتگوی خودتان با بات را بگذارید.
+        ارسال: <code dir="ltr">https://botapi.rubika.ir/v3/TOKEN/sendMessage</code></div>
+      <div class="lbl">توکن بات روبیکا</div>
+      <input id="set-rubika-token" dir="ltr" placeholder="توکن BotFather روبیکا">
+      <div class="lbl">Chat ID روبیکا</div>
+      <input id="set-rubika-chat" dir="ltr" placeholder="شناسه گفتگو">
+      <div class="hint" id="rubika-status">وضعیت روبیکا: هنوز ذخیره نشده</div>
+    </div>
+    <div class="card">
       <h3>🛡️ پارامترهای ضد بلاک و سهمیه IP</h3>
       <div class="grid g2">
         <div><div class="lbl">فاصله دورهای اسکن (ثانیه)</div><input id="set-watch" type="number" dir="ltr"></div>
@@ -415,23 +453,28 @@
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
 
-<dialog id="cap-dlg" style="width:min(560px,96vw)">
+<dialog id="cap-dlg" style="width:min(920px,96vw)">
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="cap-live">دیوار داخل این پنل باز نمی‌شود.
-    پنجرهٔ جدا با <b>همان سشن اکانت برنامه</b> باز می‌شود تا پازل واقعی همان حساب را حل کنید.
-    اگر روی گوشی حل کرده باشید، همین‌جا خودکار آزاد می‌شود.</div>
+  <div class="warn-box" id="cap-live">پازل را <b>همین‌جا</b> روی تصویر حل کنید — پنجرهٔ جدا با ضربدر باز نمی‌شود.
+    اگر روی گوشی حل کرده باشید، همین پاپ‌آپ خودکار آزاد می‌شود.</div>
   <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
-  <div class="hint">تب معمولی دیوار با این اکانت لاگین نیست. دکمهٔ پایین Edge/Chrome را با کوکی همین حساب باز می‌کند.</div>
+  <div id="cap-stage">
+    <img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0">
+    <div id="cap-stage-msg">در حال آوردن پازل همین اکانت…</div>
+  </div>
+  <div class="hint">کلیک روی تصویر = کلیک روی دیوار همان اکانت. برای تایپ، روی تصویر کلیک کنید و بنویسید.</div>
   <div class="lbl">تأیید حضور (اختیاری): <b id="cap-q" dir="ltr">—</b></div>
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">باز کردن پازل همین اکانت</button>
+    <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">نمایش پازل همین‌جا</button>
     <button class="btn gray" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
     <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
   </div>
 </dialog>
+
+<div id="notify-stack" aria-live="polite"></div>
 
 <dialog id="chat-dlg">
   <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
@@ -533,22 +576,80 @@ async function refreshStatus(){
       `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
       || `<div class="empty">${tt('رخدادی نیست','No events yet')}</div>`;
     if (s.telegram) showTgStatus(s.telegram);
+    showChanStatus(s.channels);
+    watchPanelAlerts(s);
     maybeCapPopup(s.captcha_needed || []);
   }catch(e){ console.error(e); }
 }
 let _capShown = '';
 let _puzzleLaunched = '';
+let _frameTimer = null;
+function stopFramePoll(){
+  if (_frameTimer){ clearInterval(_frameTimer); _frameTimer = null; }
+}
+function startFramePoll(name){
+  stopFramePoll();
+  const tick = ()=>{
+    const dlg = $('cap-dlg');
+    const im = $('cap-live-frame');
+    if (!dlg || !dlg.open || !im || !name){ stopFramePoll(); return; }
+    im.src = '/api/accounts/puzzle-frame?name='+encodeURIComponent(name)+'&t='+Date.now();
+  };
+  _frameTimer = setInterval(tick, 900);
+  tick();
+}
+function bindPuzzleFrame(){
+  const im = $('cap-live-frame');
+  if (!im || im.dataset.bound) return;
+  im.dataset.bound = '1';
+  im.addEventListener('load', ()=>{
+    const msg = $('cap-stage-msg');
+    if (msg) msg.style.display = 'none';
+  });
+  im.addEventListener('error', ()=>{
+    const msg = $('cap-stage-msg');
+    if (msg){ msg.style.display = 'flex'; msg.textContent = 'پازل هنوز نیامد — دکمهٔ نمایش را بزنید'; }
+  });
+  im.addEventListener('click', ev=>{
+    if (!_capShown) return;
+    const r = im.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / Math.max(r.width, 1);
+    const y = (ev.clientY - r.top) / Math.max(r.height, 1);
+    api('/api/accounts/puzzle-click',{method:'POST', body: JSON.stringify({name:_capShown, x, y})})
+      .then(()=>setTimeout(()=>startFramePoll(_capShown), 200))
+      .catch(()=>{});
+  });
+  im.addEventListener('keydown', ev=>{
+    if (!_capShown) return;
+    if (ev.key === 'Tab') return;
+    ev.preventDefault();
+    const text = ev.key === 'Enter' ? '\n' : (ev.key.length===1 ? ev.key : '');
+    if (!text) return;
+    api('/api/accounts/puzzle-click',{method:'POST', body: JSON.stringify({name:_capShown, text})}).catch(()=>{});
+  });
+}
 async function openPuzzle(name){
   name = name || _capShown;
   if (!name){ toast('اکانتی در انتظار نیست', false); return; }
+  bindPuzzleFrame();
+  const msg = $('cap-stage-msg');
+  if (msg){ msg.style.display = 'flex'; msg.textContent = 'در حال آوردن پازل همین اکانت…'; }
   try{
     const r = await api('/api/accounts/open-puzzle',{method:'POST', body: JSON.stringify({name})});
     if ($('cap-live')) $('cap-live').textContent = r.message || '';
-    toast(r.message||'پنجره باز شد', !!r.ok);
-  }catch(e){ toast('❌ '+e.message, false); }
+    startFramePoll(name);
+    toast(r.message||'پازل همین‌جا آمد', !!r.ok);
+  }catch(e){
+    if (msg) msg.textContent = e.message || 'نتوانست پازل را بیاورد';
+    toast('❌ '+e.message, false);
+  }
 }
 async function maybeCapPopup(names){
-  if (!names || !names.length){ _capShown=''; return; }
+  if (!names || !names.length){
+    if (_capShown){ stopFramePoll(); }
+    _capShown='';
+    return;
+  }
   const name = names[0];
   const dlg = $('cap-dlg');
   if (!dlg || (dlg.open && _capShown===name)) return;
@@ -582,8 +683,10 @@ async function capProbe(){
     if ($('cap-live')) $('cap-live').textContent = r.message || '';
     if (r.cleared){
       toast(r.message||'آزاد شد');
+      stopFramePoll();
       $('cap-dlg').close();
       _capShown = '';
+      _puzzleLaunched = '';
       accRefresh(); refreshStatus();
     } else {
       toast(r.message||'هنوز پازل می‌خواهد — خودکار چک می‌شود', false);
@@ -617,8 +720,7 @@ async function accRefresh(){
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
       const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
           <b>کپچای انسانی — خودتان حل کنید</b><br>
-          دیوار داخل این پنل باز نمی‌شود. تب معمولی هم با این اکانت لاگین نیست.<br>
-          دکمهٔ زیر همان سشن شماره‌گیری را در Edge/Chrome باز می‌کند.
+          پازل را داخل همین پنل، کنار دکمه حل کنید — پنجرهٔ جدا لازم نیست.<br>
           <div class="row" style="margin-top:8px">
             <button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>
             <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
@@ -833,6 +935,10 @@ async function settingsLoad(){
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
+    if($('set-bale-token')) $('set-bale-token').value = s.bale_bot_token||'';
+    if($('set-bale-chat')) $('set-bale-chat').value = s.bale_chat_id||'';
+    if($('set-rubika-token')) $('set-rubika-token').value = s.rubika_bot_token||'';
+    if($('set-rubika-chat')) $('set-rubika-chat').value = s.rubika_chat_id||'';
   }catch(e){}
 }
 async function settingsSave(){
@@ -856,6 +962,10 @@ async function settingsSave(){
     sms_daily_limit:parseInt($('set-sms-limit').value)||40,
     sms_auto_on_new:!!$('set-sms-auto').checked,
     vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
+    bale_bot_token:$('set-bale-token')?$('set-bale-token').value.trim():'',
+    bale_chat_id:$('set-bale-chat')?$('set-bale-chat').value.trim():'',
+    rubika_bot_token:$('set-rubika-token')?$('set-rubika-token').value.trim():'',
+    rubika_chat_id:$('set-rubika-chat')?$('set-rubika-chat').value.trim():'',
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
 }
@@ -886,12 +996,65 @@ function showTgStatus(tg){
     ? (tg.ok ? ('تلگرام وصل: '+(tg.path||'')) : (tg.message||'تلگرام قطع است'))
     : 'تلگرام پیکربندی نشده — پنل بدون ربات کار می‌کند');
 }
+function showChanStatus(ch){
+  if (!ch) return;
+  if (ch.telegram) showTgStatus(ch.telegram);
+  const b = $('bale-status');
+  if (b && ch.bale) b.textContent = ch.bale.configured
+    ? (ch.bale.ok ? 'بله وصل شد' : (ch.bale.message||'بله قطع است'))
+    : 'بله پیکربندی نشده — توکن را از @botfather در بله بگیرید';
+  const r = $('rubika-status');
+  if (r && ch.rubika) r.textContent = ch.rubika.configured
+    ? (ch.rubika.ok ? 'روبیکا وصل شد' : (ch.rubika.message||'روبیکا قطع است'))
+    : 'روبیکا پیکربندی نشده — توکن را از @BotFather در روبیکا بگیرید';
+}
+function playAlert(kind){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    const beep = (t, freq, dur, vol)=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = kind==='vip' ? 'triangle' : (kind==='help' ? 'sawtooth' : 'sine');
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, now+t);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+t+dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(now+t); o.stop(now+t+dur+0.02);
+    };
+    if (kind==='vip'){ beep(0, 660, .22, .12); beep(.24, 880, .28, .14); beep(.54, 990, .2, .1); }
+    else if (kind==='help'){ beep(0, 420, .16, .16); beep(.2, 320, .16, .16); beep(.4, 420, .22, .16); }
+    else { beep(0, 740, .09, .05); }
+  }catch(e){}
+}
+function pushNote(kind, title, body){
+  playAlert(kind);
+  const stack = $('notify-stack'); if (!stack) return;
+  const el = document.createElement('div');
+  el.className = 'note '+kind;
+  el.innerHTML = '<b>'+esc(title)+'</b><br>'+esc(body||'');
+  stack.prepend(el);
+  setTimeout(()=>{ el.remove(); }, kind==='help' ? 14000 : 7000);
+}
+let _seenPhones = null, _seenVip = null, _seenCap = '';
+function watchPanelAlerts(s){
+  const phones = s.phones_found ?? ((s.breakdown||{}).contact_found) ?? 0;
+  const vip = s.vip_found ?? 0;
+  const cap = (s.captcha_needed||[])[0] || '';
+  if (_seenPhones !== null && phones > _seenPhones)
+    pushNote('soft', 'شماره جدید', 'یک شماره تازه پیدا شد');
+  if (_seenVip !== null && vip > _seenVip)
+    pushNote('vip', 'هشدار ویژه', 'آگهی VIP منطبق شد');
+  if (cap && cap !== _seenCap)
+    pushNote('help', 'اکانت نیاز به واکنش', 'پازل/آزادسازی: '+cap);
+  _seenPhones = phones; _seenVip = vip; _seenCap = cap;
+}
 async function tgTest(){
   try{
     const r = await api('/api/telegram/test',{method:'POST',body:'{}'});
     if (r.telegram) showTgStatus(r.telegram);
-    toast(r.ok ? (r.telegram && r.telegram.ok ? 'گزارش به تلگرام فرستاده شد' : 'پیش‌نمایش آماده (تلگرام پیکربندی نشده)')
-               : (r.telegram && r.telegram.message) || 'تلگرام نرسید — برنامه ادامه دارد', !!r.ok);
+    if (r.channels) showChanStatus(r.channels);
+    toast(r.ok ? (r.telegram && r.telegram.ok ? 'گزارش به کانال‌ها فرستاده شد' : 'پیش‌نمایش آماده')
+               : (r.telegram && r.telegram.message) || 'تلگرام نرسید — بله/روبیکا را هم امتحان کنید', !!r.ok);
   }catch(e){ toast('❌ '+e.message,false); }
 }
 async function requeueHidden(){
@@ -925,6 +1088,13 @@ function cycleTheme(){
 applyTheme();
 
 /* ───────────────────────── حلقه تازه‌سازی ───────────────────────── */
+(function(){
+  const dlg = $('cap-dlg');
+  if (dlg) dlg.addEventListener('close', ()=>{
+    stopFramePoll();
+    _puzzleLaunched = '';
+  });
+})();
 refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();
 setInterval(()=>{ refreshStatus();
   if(document.querySelector('#tab-leads.active')) leadsLoad();

@@ -109,6 +109,10 @@ class Monitor:
                 "telegram_chat_id": s.get("telegram_chat_id") or "",
                 "telegram_api_base": s.get("telegram_api_base") or "",
                 "telegram_proxy": s.get("telegram_proxy") or "",
+                "bale_bot_token": s.get("bale_bot_token") or "",
+                "bale_chat_id": s.get("bale_chat_id") or "",
+                "rubika_bot_token": s.get("rubika_bot_token") or "",
+                "rubika_chat_id": s.get("rubika_chat_id") or "",
             }
         except Exception:
             pass

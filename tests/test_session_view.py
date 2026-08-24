@@ -14,7 +14,7 @@ sys.path.insert(0, ROOT)
 
 from marketing_divar.client import parse_block_body  # noqa: E402
 from marketing_divar.session_view import (  # noqa: E402
-    cookies_from_session, find_browser, launch_account_browser)
+    PuzzleLive, cookies_from_session, find_browser, launch_account_browser)
 
 
 class TestCookiesFromSession(unittest.TestCase):
@@ -74,6 +74,20 @@ class TestLaunchGuard(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("ac1", msg)
         self.assertTrue(pop.called)
+
+
+class TestPuzzleLiveGuard(unittest.TestCase):
+    def test_start_needs_session_and_browser(self):
+        live = PuzzleLive()
+        with self.assertRaises(RuntimeError):
+            live.start("/tmp/no-session-here.json")
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T"}, f)
+        with mock.patch("marketing_divar.session_view.find_browser", return_value=None):
+            with self.assertRaises(RuntimeError):
+                live.start(p)
 
 
 class TestFindBrowserEnv(unittest.TestCase):

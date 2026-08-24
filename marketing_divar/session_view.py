@@ -200,6 +200,187 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
     return f"opened {browser} as session {Path(session_path).parent.name}"
 
 
+def _recv_n(sock: socket.socket, n: int) -> bytes:
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise RuntimeError("CDP socket closed")
+        buf += chunk
+    return buf
+
+
+def _ws_recv(sock: socket.socket, timeout: float = 8.0) -> Optional[str]:
+    sock.settimeout(timeout)
+    hdr = _recv_n(sock, 2)
+    opcode = hdr[0] & 0x0F
+    ln = hdr[1] & 0x7F
+    masked = bool(hdr[1] & 0x80)
+    if ln == 126:
+        ln = struct.unpack("!H", _recv_n(sock, 2))[0]
+    elif ln == 127:
+        ln = struct.unpack("!Q", _recv_n(sock, 8))[0]
+    mask = _recv_n(sock, 4) if masked else b""
+    data = _recv_n(sock, ln)
+    if mask:
+        data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+    if opcode == 0x9:
+        _ws_send(sock, "")  # ignore empty; ping handled loosely
+        return None
+    if opcode in (0x8, 0xA):
+        return None
+    if opcode != 0x1:
+        return None
+    return data.decode("utf-8", errors="replace")
+
+
+class CdpClient:
+    def __init__(self, ws_url: str):
+        self.sock = _ws_connect(ws_url)
+        self._n = 0
+
+    def call(self, method: str, params: Optional[Dict[str, Any]] = None,
+             timeout: float = 10.0) -> Dict[str, Any]:
+        self._n += 1
+        mid = self._n
+        _ws_send(self.sock, json.dumps(
+            {"id": mid, "method": method, "params": params or {}}))
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            left = timeout - (time.time() - t0)
+            try:
+                raw = _ws_recv(self.sock, timeout=max(0.2, left))
+            except socket.timeout:
+                continue
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except ValueError:
+                continue
+            if data.get("id") != mid:
+                continue
+            if data.get("error"):
+                raise RuntimeError(str(data["error"])[:180])
+            return data.get("result") or {}
+        raise TimeoutError(method)
+
+    def close(self) -> None:
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+
+
+class PuzzleLive:
+    """سشن دیوار همین اکانت — تصویر داخل پاپ‌آپ پنل، بدون iframe."""
+
+    def __init__(self) -> None:
+        self.proc: Optional[subprocess.Popen] = None
+        self.cdp: Optional[CdpClient] = None
+        self.last_jpeg = b""
+        self.last_err = ""
+        self.lock = __import__("threading").Lock()
+
+    def start(self, session_path: str, start_url: str = "https://divar.ir") -> None:
+        browser = find_browser()
+        if not browser:
+            raise RuntimeError("Edge یا Chrome روی این رایانه پیدا نشد")
+        cookies = cookies_from_session(session_path)
+        if not cookies:
+            raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
+        profile = Path(session_path).resolve().parent / "edge-profile"
+        profile.mkdir(parents=True, exist_ok=True)
+        port = _free_port()
+        cmd = [
+            browser,
+            f"--user-data-dir={profile}",
+            f"--remote-debugging-port={port}",
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-size=900,720",
+            "--window-position=-2400,-2400",
+            "--app=about:blank",
+        ]
+        self.proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ws = _wait_cdp(port)
+        self.cdp = CdpClient(ws)
+        self.cdp.call("Network.enable")
+        self.cdp.call("Page.enable")
+        for ck in cookies:
+            self.cdp.call("Network.setCookie", {
+                "name": ck["name"], "value": ck["value"],
+                "domain": ck.get("domain") or ".divar.ir",
+                "path": ck.get("path") or "/",
+                "secure": True,
+                "httpOnly": ck["name"] != "sFrontToken",
+            })
+        self.cdp.call("Page.navigate", {"url": start_url})
+        time.sleep(0.6)
+
+    def screenshot(self) -> bytes:
+        if not self.cdp:
+            raise RuntimeError("پازل باز نیست")
+        with self.lock:
+            r = self.cdp.call("Page.captureScreenshot",
+                              {"format": "jpeg", "quality": 72})
+        raw = r.get("data") or ""
+        import base64
+        self.last_jpeg = base64.b64decode(raw)
+        return self.last_jpeg
+
+    def click(self, nx: float, ny: float) -> None:
+        if not self.cdp:
+            raise RuntimeError("پازل باز نیست")
+        nx = min(max(float(nx), 0.0), 1.0)
+        ny = min(max(float(ny), 0.0), 1.0)
+        with self.lock:
+            met = self.cdp.call("Page.getLayoutMetrics")
+            box = (met.get("cssVisualViewport")
+                   or met.get("layoutViewport") or {})
+            w = float(box.get("clientWidth") or 900)
+            h = float(box.get("clientHeight") or 700)
+            x, y = nx * w, ny * h
+            for typ in ("mousePressed", "mouseReleased"):
+                self.cdp.call("Input.dispatchMouseEvent", {
+                    "type": typ, "x": x, "y": y,
+                    "button": "left", "clickCount": 1})
+
+    def type_text(self, text: str) -> None:
+        if not self.cdp:
+            raise RuntimeError("پازل باز نیست")
+        with self.lock:
+            if text == "\n" or text == "Enter":
+                self.cdp.call("Input.dispatchKeyEvent",
+                              {"type": "keyDown", "key": "Enter", "code": "Enter",
+                               "windowsVirtualKeyCode": 13})
+                self.cdp.call("Input.dispatchKeyEvent",
+                              {"type": "keyUp", "key": "Enter", "code": "Enter",
+                               "windowsVirtualKeyCode": 13})
+                return
+            for ch in str(text)[:80]:
+                self.cdp.call("Input.dispatchKeyEvent",
+                              {"type": "keyDown", "text": ch})
+                self.cdp.call("Input.dispatchKeyEvent",
+                              {"type": "keyUp", "text": ch})
+
+    def stop(self) -> None:
+        try:
+            if self.cdp:
+                self.cdp.close()
+        except Exception:
+            pass
+        self.cdp = None
+        if self.proc and self.proc.poll() is None:
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+        self.proc = None
+
+
 def launch_account_browser(session_path: str, name: str = "") -> Tuple[bool, str]:
     """از پنل صدا زده می‌شود — فرآیند جدا تا GUI گیر نکند."""
     session_path = str(session_path)

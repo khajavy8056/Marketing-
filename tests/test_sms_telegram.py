@@ -15,6 +15,8 @@ from marketing_divar.sms import (  # noqa: E402
     send_for_lead, send_melipayamak)
 from marketing_divar.telegram_bot import (  # noqa: E402
     found_alert_text, handle_command, handle_update)
+from marketing_divar.notifier import (  # noqa: E402
+    bale_configured, notify, rubika_configured, send_bale, send_rubika)
 from marketing_divar.db import connect, upsert_lead  # noqa: E402
 
 
@@ -135,6 +137,44 @@ class TestTelegramCommands(unittest.TestCase):
         self.assertIn("سرنخ جدید پیدا شد", t)
         self.assertIn("شماره امروز تا الان: 4", t)
         self.assertIn("2026-08-23 18:00:00", t)
+
+
+class TestBaleRubika(unittest.TestCase):
+    def test_configured(self):
+        cfg = {"notify": {"bale_bot_token": "t", "bale_chat_id": "1",
+                          "rubika_bot_token": "r", "rubika_chat_id": "2"}}
+        self.assertTrue(bale_configured(cfg))
+        self.assertTrue(rubika_configured(cfg))
+        self.assertFalse(bale_configured({"notify": {}}))
+
+    def test_send_official_urls(self):
+        seen = []
+
+        class R:
+            status_code = 200
+            def json(self):
+                return {"ok": True, "status": "OK"}
+
+        def poster(url, json=None, timeout=12):
+            seen.append((url, json))
+            return R()
+
+        import marketing_divar.notifier as n
+        old = n.requests
+        class Fake:
+            post = staticmethod(poster)
+        n.requests = Fake
+        try:
+            cfg = {"notify": {"bale_bot_token": "BT", "bale_chat_id": "9",
+                              "rubika_bot_token": "RT", "rubika_chat_id": "8"}}
+            self.assertTrue(send_bale(cfg, "سلام"))
+            self.assertTrue(send_rubika(cfg, "سلام"))
+            notify(cfg, "آزمایش", important=False)
+        finally:
+            n.requests = old
+        urls = [u for u, _ in seen]
+        self.assertTrue(any("tapi.bale.ai/botBT/sendMessage" in u for u in urls))
+        self.assertTrue(any("botapi.rubika.ir/v3/RT/sendMessage" in u for u in urls))
 
 
 if __name__ == "__main__":

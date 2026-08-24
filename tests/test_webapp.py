@@ -74,6 +74,11 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("capProbe", r.text)
         self.assertIn('id="openPuzzle"', r.text)
         self.assertIn("/api/accounts/open-puzzle", r.text)
+        self.assertIn("/api/accounts/puzzle-frame", r.text)
+        self.assertIn('id="cap-live-frame"', r.text)
+        self.assertIn('id="set-bale-token"', r.text)
+        self.assertIn('id="set-rubika-token"', r.text)
+        self.assertIn("playAlert", r.text)
         self.assertNotIn('id="cap-frame"', r.text)
         self.assertIn("/api/accounts/probe", r.text)
         self.assertIn('id="set-tg-base"', r.text)
@@ -95,8 +100,11 @@ class TestUIBasics(unittest.TestCase):
         r = client.get("/api/status")
         self.assertEqual(r.status_code, 200)
         for key in ("running", "queue", "chat_queue", "accounts", "keywords", "logs",
-                    "breakdown", "accounts_breakdown", "data_dir", "listen"):
+                    "breakdown", "accounts_breakdown", "data_dir", "listen",
+                    "channels", "vip_found"):
             self.assertIn(key, r.json())
+        self.assertIn("bale", r.json()["channels"])
+        self.assertIn("rubika", r.json()["channels"])
         self.assertIn("contact_found", r.json()["breakdown"])
         self.assertEqual(r.json()["listen"]["port"], 8642)
         self.assertEqual(r.json()["listen"]["bind"], "0.0.0.0")
@@ -187,8 +195,14 @@ class TestAccountFlow(unittest.TestCase):
         self.assertIn(r.status_code, (200, 400))
         if r.status_code == 200:
             self.assertTrue(r.json().get("ok"))
+            self.assertTrue(r.json().get("embed"))
         else:
             self.assertTrue(r.json().get("detail"))
+        r = client.get("/api/accounts/puzzle-frame?name=ghost")
+        self.assertEqual(r.status_code, 404)
+        r = client.post("/api/accounts/puzzle-click",
+                        json={"name": "ghost", "x": 0.5, "y": 0.5})
+        self.assertEqual(r.status_code, 404)
 
 
 class TestKeywords(unittest.TestCase):
@@ -290,6 +304,16 @@ class TestTemplatesAndSettings(unittest.TestCase):
         eff = store.effective_config(os.environ["DIVAR_DB_PATH"], DEFAULTS)
         self.assertEqual(eff["phone_delay_sec"], 12)
         self.assertEqual(eff["notify"]["telegram_bot_token"], "TT")
+        r = client.post("/api/settings", json={"values": {
+            "bale_bot_token": "bale-tok", "bale_chat_id": "11",
+            "rubika_bot_token": "rub-tok", "rubika_chat_id": "22"}})
+        self.assertEqual(r.status_code, 200)
+        s = client.get("/api/settings").json()
+        self.assertEqual(s["bale_bot_token"], "bale-tok")
+        self.assertEqual(s["rubika_chat_id"], "22")
+        eff = store.effective_config(os.environ["DIVAR_DB_PATH"], DEFAULTS)
+        self.assertEqual(eff["notify"]["bale_bot_token"], "bale-tok")
+        self.assertEqual(eff["notify"]["rubika_bot_token"], "rub-tok")
         r = client.post("/api/sms/test", json={"to": ""})
         self.assertEqual(r.status_code, 400)
         r = client.post("/api/settings", json={"values": {
