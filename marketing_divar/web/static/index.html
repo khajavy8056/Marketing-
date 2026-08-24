@@ -415,17 +415,21 @@
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
 
-<dialog id="cap-dlg" style="width:min(460px,94vw)">
-  <h3>🧩 دیوار محدودیت گذاشت</h3>
+<dialog id="cap-dlg" style="width:min(560px,96vw)">
+  <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box">کپچای دیوار داخل سایت خودش است و اینجا حل‌کننده نداریم.
-    این جمع ساده فقط تأیید می‌کند خودتان پشت سیستمید؛ بعد اکانت آزاد می‌شود و درخواست بعدی می‌رود.
-    اگر دیوار هنوز چالش بخواهد، یک‌بار دیوار را با همان شماره باز کنید.</div>
-  <div class="lbl">حل کنید: <b id="cap-q" dir="ltr">—</b></div>
+  <div class="warn-box" id="cap-live">با همان اکانت به دیوار زده می‌شود.
+    اگر پازل را روی گوشی حل کرده باشید، همین‌جا خودکار آزاد می‌شود.
+    پازل واقعی دیوار روی خود سایت است (اینجا حل‌کننده نداریم).</div>
+  <iframe id="cap-frame" title="Divar" src="about:blank"
+          style="width:100%;height:280px;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0"></iframe>
+  <div class="hint">اگر کادر بالا خالی است، دیوار داخل پنل باز نمی‌شود — دکمهٔ پایین را بزنید یا روی گوشی با همان شماره وارد دیوار شوید.</div>
+  <div class="lbl">تأیید حضور (اختیاری): <b id="cap-q" dir="ltr">—</b></div>
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" onclick="capSolve()">تأیید و ادامه</button>
-    <a class="btn gray" href="https://divar.ir" target="_blank" rel="noopener">باز کردن دیوار</a>
+    <button class="btn ok" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
+    <a class="btn gray" id="cap-open" href="https://divar.ir" target="_blank" rel="noopener">باز کردن پازل دیوار</a>
+    <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
   </div>
 </dialog>
@@ -545,11 +549,34 @@ async function maybeCapPopup(names){
     const one = (r.pending||[]).find(p=>p.name===name) || (r.pending||[])[0];
     if (!one) return;
     _capShown = one.name;
-    $('cap-acc').textContent = tt('اکانت ','Account ') + one.name;
+    $('cap-acc').textContent = tt('اکانت ','Account ') + one.name +
+      (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
     $('cap-q').textContent = one.question || '—';
     if ($('cap-answer')) $('cap-answer').value = '';
+    const fr = $('cap-frame');
+    if (fr && fr.getAttribute('data-src') !== 'https://divar.ir'){
+      fr.setAttribute('data-src','https://divar.ir');
+      fr.src = 'https://divar.ir';
+    }
+    if ($('cap-open')) $('cap-open').href = one.divar_url || 'https://divar.ir';
     if (!dlg.open) dlg.showModal();
   }catch(e){}
+}
+async function capProbe(){
+  const name = _capShown;
+  if (!name){ toast('اکانتی در انتظار نیست', false); return; }
+  try{
+    const r = await api('/api/accounts/probe',{method:'POST', body: JSON.stringify({name})});
+    if ($('cap-live')) $('cap-live').textContent = r.message || '';
+    if (r.cleared){
+      toast(r.message||'آزاد شد');
+      $('cap-dlg').close();
+      _capShown = '';
+      accRefresh(); refreshStatus();
+    } else {
+      toast(r.message||'هنوز پازل می‌خواهد — خودکار چک می‌شود', false);
+    }
+  }catch(e){ toast('❌ '+e.message, false); }
 }
 async function capSolve(){
   const name = _capShown;
@@ -599,7 +626,16 @@ async function accRefresh(){
         </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز اکانتی لاگین نشده</div>';
   }catch(e){}
 }
-async function accAction(name, action){ if (await act('/api/accounts/action',{name, action})) accRefresh(); }
+async function accAction(name, action){
+  try{
+    const r = await api('/api/accounts/action',{method:'POST',body:JSON.stringify({name, action})});
+    toast(r.message||'انجام شد', r.cleared!==false || action!=='release');
+    if (action==='release' && r.cleared===false){
+      _capShown=''; maybeCapPopup([name]);
+    }
+    accRefresh(); refreshStatus();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 async function sendOtp(){
   const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
   if(!name){ toast('نام اکانت را وارد کنید',false); return; }

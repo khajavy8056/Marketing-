@@ -84,6 +84,16 @@ class AccountManager:
         """اپراتور کپچا را حل کرد → اکانت آزاد می‌شود (حتی از ترمینال دیگر)."""
         self.set_status(name, "active", note="released by operator")
 
+    def record_probe(self, name: str, res: Dict[str, Any]) -> None:
+        st = self._load_states()
+        rec = st.get(name) or {}
+        rec["last_probe_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        rec["last_probe_state"] = res.get("state") or ""
+        rec["last_probe_http"] = res.get("http") or 0
+        rec["updated_at"] = rec["last_probe_at"]
+        st[name] = rec
+        self._save_states(st)
+
     # ------------------------------------------------------------- چرخش --
     def pick(self, db_path: str) -> Optional[str]:
         """بهترین اکانت فعال برای درخواست بعدی:
@@ -134,7 +144,9 @@ class AccountManager:
                 out.append({"name": name, "status": status,
                             "note": rec.get("note", ""),
                             "has_token": self.has_token(name),
-                            "phones_today": account_quota_today(con, name)})
+                            "phones_today": account_quota_today(con, name),
+                            "last_probe_at": rec.get("last_probe_at") or "",
+                            "last_probe_state": rec.get("last_probe_state") or ""})
             return out
         finally:
             con.close()

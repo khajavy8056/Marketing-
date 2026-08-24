@@ -184,6 +184,11 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path.startswith("/v8/postcontact/web/contact_info/"):
             token = u.path.rsplit("/", 1)[-1]
             acct = MockDivar.account_of(self.headers.get("Authorization", ""))
+            if token == "_probe":
+                cap_n = MockDivar.captcha_after.get(acct)
+                if cap_n is not None and acct not in MockDivar.released:
+                    return self._json(403, {"error": "captcha_required"})
+                return self._json(404, {"error": "probe"})
             with MockDivar.lock:
                 MockDivar.contact_calls.append((token, acct))
                 n = MockDivar.counters.get(acct, 0)

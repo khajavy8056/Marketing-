@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.2")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.3")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -158,21 +158,49 @@ def accounts_confirm(req: OtpConfirm):
     return {"ok": True, "message": "لاگین موفق"}
 
 
+def _do_unlock(name: str, reason: str = "operator") -> Dict[str, Any]:
+    from ..unlock import try_release_account
+    res = try_release_account(mgr(), name, base_url=_base_url(), reason=reason)
+    if res.get("cleared"):
+        _state.get("gates", {}).pop(name, None)
+        log("success", f"اکانت «{name}» با زدن دیوار باز شد ({reason})")
+    elif res.get("state") == "captcha":
+        log("warning", f"اکانت «{name}» هنوز پازل دیوار می‌خواهد — خودکار چک می‌شود")
+    elif res.get("state") == "relogin":
+        log("error", f"اکانت «{name}» نیاز به لاگین مجدد دارد")
+    return res
+
+
 @app.post("/api/accounts/action")
 def accounts_action(req: AccountAction):
     m = mgr()
     if not m.has_token(req.name):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
     if req.action == "release":
-        m.release(req.name)
-        _state.get("gates", {}).pop(req.name, None)
-        log("info", f"اکانت «{req.name}» آزاد شد")
-    elif req.action == "disable":
+        res = _do_unlock(req.name, "آزادسازی پنل")
+        return {"ok": True, **res,
+                "message": res.get("message") or ("آزاد شد" if res.get("cleared")
+                                                  else "هنوز پازل می‌خواهد")}
+    if req.action == "disable":
         m.set_status(req.name, "disabled")
         log("info", f"اکانت «{req.name}» غیرفعال شد")
     elif req.action == "enable":
         m.set_status(req.name, "active", note="")
     return {"ok": True}
+
+
+class AccountProbe(BaseModel):
+    name: str
+
+
+@app.post("/api/accounts/probe")
+def accounts_probe(req: AccountProbe):
+    """با همان اکانت مسدود به دیوار بزن — اگر پازل رفته بود خودکار آزاد شود."""
+    m = mgr()
+    if not m.has_token(req.name):
+        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    res = _do_unlock(req.name, "بررسی دستی")
+    return res
 
 
 # --------------------------------------------------------- API کلمات کلیدی --
@@ -624,8 +652,9 @@ _STATIC = _static_dir()
 
 
 def start_background() -> None:
-    """ربات تلگرام ادمین — فقط اگر توکن ذخیره شده باشد درخواست می‌زند."""
+    """ربات تلگرام + چک دوره‌ای پازل دیوار برای اکانت‌های مسدود."""
     from ..telegram_bot import start_bot
+    from ..unlock import start_watch
 
     def _cfg():
         return store.effective_config(DB_PATH, load_config())
@@ -636,6 +665,18 @@ def start_background() -> None:
                 "tick": mon.tick if mon else 0}
 
     start_bot(_cfg, DB_PATH, _st)
+
+    def _cleared(name: str, res: Dict[str, Any]) -> None:
+        log("success", f"اکانت «{name}» خودکار آزاد شد — دیوار دیگر پازل نمی‌خواهد")
+        try:
+            from ..notifier import notify
+            notify(_cfg(), f"اکانت {name} آزاد شد — پازل دیوار دیگر لازم نیست. شماره‌گیری ادامه می‌یابد.",
+                   account=name, problem="captcha_cleared", operation="contact",
+                   action="نیازی به کار شما نیست")
+        except Exception:
+            pass
+
+    start_watch(mgr, lambda: DB_PATH, _base_url, _cleared)
 
 
 @app.post("/api/sms/test")
@@ -695,7 +736,10 @@ def captcha_pending():
         ch = gates.get(a["name"]) or new_challenge(a["name"])
         gates[a["name"]] = ch
         pending.append({"name": a["name"], "question": ch["question"],
-                        "note": a.get("note") or ""})
+                        "note": a.get("note") or "",
+                        "last_probe_at": a.get("last_probe_at") or "",
+                        "last_probe_state": a.get("last_probe_state") or "",
+                        "divar_url": "https://divar.ir"})
     return {"pending": pending}
 
 

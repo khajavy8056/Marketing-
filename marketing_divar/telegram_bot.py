@@ -156,11 +156,15 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
     if (raw.split()[0].lower() if raw else "") == "/release" and len(raw.split()) > 1:
         name = raw.split()[1]
         from .accounts import AccountManager
+        from .unlock import try_release_account
         mgr = AccountManager(cfg)
         if not mgr.has_token(name):
             return f"اکانت «{name}» پیدا نشد"
-        mgr.release(name)
-        return f"اکانت {name} آزاد شد"
+        res = try_release_account(mgr, name, reason="تلگرام")
+        if res.get("cleared"):
+            return f"اکانت {name} آزاد شد — دیوار دیگر پازل نمی‌خواهد"
+        return (f"اکانت {name} هنوز پازل می‌خواهد. "
+                "با همان شماره در دیوار گوشی حل کنید؛ برنامه خودش دوباره چک می‌کند.")
     return "فرمان ناشناخته. دکمهٔ راهنما را بزنید."
 
 

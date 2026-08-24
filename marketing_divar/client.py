@@ -812,6 +812,35 @@ class DivarClient:
         """فقط وقتی دیوار صریحاً بگوید مخفی → hidden؛ وگرنه error تا در صف بماند."""
         return classify_contact_widgets(widgets)
 
+    def probe_gate(self) -> Dict[str, Any]:
+        """آیا این سشن هنوز برای تماس محدود است؟ سهمیهٔ شماره را نمی‌سوزاند.
+
+        توکن جعلی `_probe`: ۴۰۴ یعنی سشن قبول شد؛ ۴۰۳/۴۲۹ یعنی هنوز پازل/محدودیت.
+        """
+        if not self.token:
+            return {"ok": False, "state": "relogin", "http": 0,
+                    "message": "توکن لاگین نیست", "divar_url": "https://divar.ir"}
+        try:
+            r = self._fetch(
+                "GET", f"{self.base}/v8/postcontact/web/contact_info/_probe",
+                headers=self._auth_headers(), timeout=20)
+        except Exception as e:
+            return {"ok": False, "state": "error", "http": 0,
+                    "message": f"{type(e).__name__}: {str(e)[:120]}",
+                    "divar_url": "https://divar.ir"}
+        body = (getattr(r, "text", "") or "")[:400]
+        if r.status_code == 401:
+            return {"ok": False, "state": "relogin", "http": 401,
+                    "message": "توکن رد شد — دوباره لاگین کنید",
+                    "divar_url": "https://divar.ir"}
+        if r.status_code in (403, 429) or looks_like_captcha(body):
+            return {"ok": False, "state": "captcha", "http": r.status_code,
+                    "message": "دیوار هنوز پازل/محدودیت می‌خواهد",
+                    "divar_url": "https://divar.ir", "body": body}
+        return {"ok": True, "state": "clear", "http": r.status_code,
+                "message": "محدودیت این اکانت روی دیوار برداشته شده",
+                "divar_url": "https://divar.ir"}
+
     def _get_phone_v1(self, token: str) -> Dict[str, Any]:
         """فلوی قدیمی (پشتیبان): GET contact_info با Basic."""
         r = self._fetch("GET", f"{self.base}/v8/postcontact/web/contact_info/{token}",
