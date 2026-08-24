@@ -169,10 +169,9 @@
       <button class="btn gray" id="btn-pause" onclick="monitorPause()" disabled>⏸ مکث</button>
       <button class="btn err" onclick="monitorStop()">⏹ توقف</button>
     </div>
-    <div class="warn-box">💡 <b>نکته ضد بلاک:</b> سیستم خودش تاخیرها و سهمیه‌ها را رعایت می‌کند
-      (پیش‌فرض: هر ۱۰ ثانیه یک شماره، سقف هر اکانت ۶۰ در روز، سقف کل ۲۴۰ از همین IP).
-      اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛
-      در تب اکانت‌ها کارت حل دستی را باز کنید و بعد «آزادسازی» را بزنید.</div>
+    <div class="warn-box">💡 <b>سقف هوشمند:</b> ۶۰ عدد دیوار نبود — سقف نرم خود برنامه بود.
+      پیش‌فرض حالا ۱۲۹ شماره برای هر اکانت است. بعد از ۱۲۹ اگر دیوار کپچا ندهد با فاصلهٔ بیشتر ادامه می‌دهد؛
+      اگر کپچا بخواهد همین‌جا پاپ‌آپ می‌آید. سقف کل IP هنوز ۲۴۰ است (از همین اینترنت).</div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -348,6 +347,10 @@
         <div><div class="lbl">سقف روزانه کل (IP)</div><input id="set-iplimit" type="number" dir="ltr"></div>
         <div><div class="lbl">سرد شدن بعد از بلاک (دقیقه)</div><input id="set-cooldown" type="number" dir="ltr"></div>
       </div>
+      <div class="checkline">
+        <input type="checkbox" id="set-adaptive" checked>
+        <label for="set-adaptive">بعد از سقف نرم (۱۲۹) تا وقتی دیوار کپچا ندهد ادامه بده — اگر کپچا خواست پاپ‌آپ همین پنل</label>
+      </div>
       <div class="warn-box">سقف روزانه IP یعنی چند شماره از <b>همین رایانه / همین اینترنت</b> در روز گرفته شود.
         زیاد کردن این عدد محدودیت دیوار را دور نمی‌زند — فقط حد نرم‌افزاری خودتان را شل می‌کند و ریسک بلاک را بالا می‌برد.
         برای ظرفیت بیشتر: رایانه یا اینترنت جدا (IP جدا) با نصب جداگانه همین برنامه.
@@ -404,6 +407,21 @@
 <footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار<br>
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
+
+<dialog id="cap-dlg" style="width:min(460px,94vw)">
+  <h3>🧩 دیوار محدودیت گذاشت</h3>
+  <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
+  <div class="warn-box">کپچای دیوار داخل سایت خودش است و اینجا حل‌کننده نداریم.
+    این جمع ساده فقط تأیید می‌کند خودتان پشت سیستمید؛ بعد اکانت آزاد می‌شود و درخواست بعدی می‌رود.
+    اگر دیوار هنوز چالش بخواهد، یک‌بار دیوار را با همان شماره باز کنید.</div>
+  <div class="lbl">حل کنید: <b id="cap-q" dir="ltr">—</b></div>
+  <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
+  <div class="row" style="margin-top:14px">
+    <button class="btn ok" type="button" onclick="capSolve()">تأیید و ادامه</button>
+    <a class="btn gray" href="https://divar.ir" target="_blank" rel="noopener">باز کردن دیوار</a>
+    <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
+  </div>
+</dialog>
 
 <dialog id="chat-dlg">
   <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
@@ -504,7 +522,38 @@ async function refreshStatus(){
     $('feed').innerHTML = s.logs.slice().reverse().map(l =>
       `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
       || `<div class="empty">${tt('رخدادی نیست','No events yet')}</div>`;
+    maybeCapPopup(s.captcha_needed || []);
   }catch(e){ console.error(e); }
+}
+let _capShown = '';
+async function maybeCapPopup(names){
+  if (!names || !names.length){ _capShown=''; return; }
+  const name = names[0];
+  const dlg = $('cap-dlg');
+  if (!dlg || (dlg.open && _capShown===name)) return;
+  if (_capShown===name && dlg.open) return;
+  try{
+    const r = await api('/api/captcha/pending');
+    const one = (r.pending||[]).find(p=>p.name===name) || (r.pending||[])[0];
+    if (!one) return;
+    _capShown = one.name;
+    $('cap-acc').textContent = tt('اکانت ','Account ') + one.name;
+    $('cap-q').textContent = one.question || '—';
+    if ($('cap-answer')) $('cap-answer').value = '';
+    if (!dlg.open) dlg.showModal();
+  }catch(e){}
+}
+async function capSolve(){
+  const name = _capShown;
+  if (!name){ toast('اکانتی در انتظار نیست', false); return; }
+  try{
+    const r = await api('/api/captcha/solve',{
+      method:'POST', body: JSON.stringify({name, answer: ($('cap-answer')||{}).value||''})});
+    toast(r.message||'حل شد');
+    $('cap-dlg').close();
+    _capShown = '';
+    accRefresh(); refreshStatus();
+  }catch(e){ toast('❌ '+e.message, false); }
 }
 async function monitorStart(){
   if (!await act('/api/monitor/start', {include_existing: $('include-existing').checked})) return;
@@ -724,6 +773,7 @@ async function settingsLoad(){
     $('set-sms-limit').value=s.sms_daily_limit||40;
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
+    if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
   }catch(e){}
 }
 async function settingsSave(){
@@ -733,7 +783,8 @@ async function settingsSave(){
     telegram_chat_id:$('set-tg-chat').value.trim(),
     watch_interval_sec:parseInt($('set-watch').value)||300,
     phone_delay_sec:parseFloat($('set-delay').value)||10,
-    per_account_daily_limit:parseInt($('set-peracc').value)||60,
+    per_account_daily_limit:parseInt($('set-peracc').value)||129,
+    adaptive_until_captcha:!$('set-adaptive') || !!$('set-adaptive').checked,
     ip_daily_limit:parseInt($('set-iplimit').value)||240,
     cooldown_on_block_min:parseInt($('set-cooldown').value)||30,
     sms_provider:$('set-sms-provider').value,

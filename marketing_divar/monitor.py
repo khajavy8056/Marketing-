@@ -22,8 +22,9 @@ from typing import Any, Dict, List, Optional
 
 from .accounts import AccountManager
 from .client import DivarAuthError, DivarBlockedError, DivarClient
-from .db import (bump_quota, chat_queue, connect, log_operation, mark_processing,
-                 pending_phone, quota_today, reclaim_stuck_processing, set_phone)
+from .db import (account_quota_today, bump_quota, chat_queue, connect,
+                 log_operation, mark_processing, pending_phone, quota_today,
+                 reclaim_stuck_processing, set_phone)
 from .matching import consider_new_lead
 from .notifier import notify
 from .rate import RateLimiter
@@ -325,6 +326,13 @@ class Monitor:
                 return "wait"
             self._notified_all_stuck = False
             row = rows[0]
+            soft = int(self.cfg.get("per_account_daily_limit", 129) or 129)
+            used = account_quota_today(con, name)
+            if used >= soft and self.cfg.get("adaptive_until_captcha", True):
+                extra = float(self.cfg.get("phone_delay_sec", 10) or 10)
+                self._ev("info",
+                         f"سقف نرم {soft} برای {name} رد شد — با فاصله بیشتر ادامه تا دیوار کپچا بخواهد")
+                time.sleep(max(extra, 0))
             cl = self.client_for(name)
             started = time.strftime("%Y-%m-%d %H:%M:%S")
             mark_processing(con, row["token"])

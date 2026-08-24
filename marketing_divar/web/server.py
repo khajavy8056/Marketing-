@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.0")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.0.1")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -56,6 +56,7 @@ _state: Dict[str, Any] = {
     "started_at": None,
     "pending_logins": {},   # name -> phone (بین دو مرحله OTP)
     "include_existing": False,
+    "gates": {},             # name -> چالش جمع ساده برای پاپ‌آپ پنل
 }
 
 
@@ -164,6 +165,7 @@ def accounts_action(req: AccountAction):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
     if req.action == "release":
         m.release(req.name)
+        _state.get("gates", {}).pop(req.name, None)
         log("info", f"اکانت «{req.name}» آزاد شد")
     elif req.action == "disable":
         m.set_status(req.name, "disabled")
@@ -246,7 +248,9 @@ def _apply_sms_to_monitor() -> None:
         return
     s = store.settings_all(DB_PATH)
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
-              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "per_account_daily_limit", "adaptive_until_captcha",
+              "ip_daily_limit", "phone_delay_sec"):
         mon.cfg[k] = s[k]
 
 
@@ -406,6 +410,11 @@ def status():
         "keywords": store.keywords_list(DB_PATH),
         "logs": logging_util.recent(50),
         "stats_by_keyword": st,
+        "captcha_needed": [a["name"] for a in acc_snap if a.get("status") == "captcha"],
+        "per_account_daily_limit": store.settings_all(DB_PATH).get(
+            "per_account_daily_limit", 129),
+        "adaptive_until_captcha": bool(store.settings_all(DB_PATH).get(
+            "adaptive_until_captcha", True)),
     }
 
 
@@ -615,6 +624,47 @@ def telegram_test():
     if ":" in tok:
         notify(cfg, text)
     return {"ok": True, "preview": text}
+
+
+class CaptchaSolve(BaseModel):
+    name: str
+    answer: str
+
+
+@app.get("/api/captcha/pending")
+def captcha_pending():
+    """اکانت‌هایی که دیوار کپچا خواسته + سؤال ساده برای پاپ‌آپ پنل."""
+    from ..gate import new_challenge
+    gates = _state.setdefault("gates", {})
+    pending = []
+    for a in mgr().snapshot(DB_PATH):
+        if a.get("status") != "captcha":
+            gates.pop(a["name"], None)
+            continue
+        ch = gates.get(a["name"]) or new_challenge(a["name"])
+        gates[a["name"]] = ch
+        pending.append({"name": a["name"], "question": ch["question"],
+                        "note": a.get("note") or ""})
+    return {"pending": pending}
+
+
+@app.post("/api/captcha/solve")
+def captcha_solve(req: CaptchaSolve):
+    """حل کپچای پنل → آزادسازی اکانت (ادامهٔ درخواست به دیوار)."""
+    from ..gate import check_answer
+    name = req.name.strip().lower().replace(" ", "-")
+    ch = (_state.get("gates") or {}).get(name)
+    if not ch:
+        raise HTTPException(400, "چالشی برای این اکانت نیست")
+    if not check_answer(ch, req.answer):
+        raise HTTPException(400, "پاسخ نادرست است")
+    m = mgr()
+    if not m.has_token(name):
+        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    m.release(name)
+    _state.get("gates", {}).pop(name, None)
+    log("success", f"کپچای پنل برای «{name}» حل شد — اکانت آزاد")
+    return {"ok": True, "message": "حل شد — شماره‌گیری ادامه می‌یابد"}
 
 
 @app.post("/api/diag")

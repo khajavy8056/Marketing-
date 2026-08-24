@@ -62,6 +62,8 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("city picker missing from panel")
     if "kw-price-min" not in html or "kw-vip" not in html:
         raise FileNotFoundError("price range / VIP missing from panel")
+    if "cap-dlg" not in html or "cap-answer" not in html:
+        raise FileNotFoundError("in-panel captcha popup missing")
     logo = Path(__file__).parent / "web" / "static" / "logo.png"
     if not logo.exists() or logo.stat().st_size < 1000:
         raise FileNotFoundError("app logo missing")

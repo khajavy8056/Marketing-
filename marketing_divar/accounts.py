@@ -91,7 +91,8 @@ class AccountManager:
         now = time.time()
         con = connect(db_path)
         try:
-            per_limit = self.cfg.get("per_account_daily_limit", 60)
+            per_limit = int(self.cfg.get("per_account_daily_limit", 129) or 129)
+            adaptive = bool(self.cfg.get("adaptive_until_captcha", True))
             best, best_used = None, None
             for name in self.list_accounts():
                 rec = self._load_states().get(name) or {}
@@ -103,7 +104,8 @@ class AccountManager:
                 if not self.has_token(name):
                     continue
                 used = account_quota_today(con, name)
-                if used >= per_limit:
+                # سقف نرم: اگر حالت هوشمند روشن باشد تا کپچای واقعی دیوار ادامه می‌دهد
+                if used >= per_limit and not adaptive:
                     continue
                 if best_used is None or used < best_used:
                     best, best_used = name, used

@@ -45,7 +45,8 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "search_delay_sec": 5,
     "search_page_delay_sec": 8,
     "jitter_sec": 4,
-    "per_account_daily_limit": 60,
+    "per_account_daily_limit": 129,
+    "adaptive_until_captcha": True,
     "ip_daily_limit": 240,
     "cooldown_on_block_min": 30,
     "sms_provider": "none",          # none | melipayamak
@@ -92,7 +93,28 @@ def _con(db_path: str) -> sqlite3.Connection:
     if "vip" not in cols:
         con.execute("ALTER TABLE keywords ADD COLUMN vip INTEGER DEFAULT 0")
         con.commit()
+    _bump_legacy_quota60(con)
     return con
+
+
+def _bump_legacy_quota60(con: sqlite3.Connection) -> None:
+    """نصب‌های قدیمی سقف ۶۰ را ذخیره کرده‌اند — یک‌بار به ۱۲۹."""
+    try:
+        if con.execute("SELECT 1 FROM settings WHERE key='quota_soft_129'").fetchone():
+            return
+        row = con.execute(
+            "SELECT value FROM settings WHERE key='per_account_daily_limit'").fetchone()
+        raw = (row["value"] if row else "") or ""
+        if row is None or str(raw).strip().strip('"') in ("60", "60.0"):
+            con.execute(
+                "INSERT INTO settings (key, value) VALUES ('per_account_daily_limit', '129') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        con.execute(
+            "INSERT INTO settings (key, value) VALUES ('quota_soft_129', '1') "
+            "ON CONFLICT(key) DO NOTHING")
+        con.commit()
+    except Exception:
+        pass
 
 
 # ------------------------------------------------------------ کلمات کلیدی --
@@ -273,6 +295,7 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
     cfg["notify"] = {"telegram_bot_token": s["telegram_bot_token"],
                      "telegram_chat_id": s["telegram_chat_id"]}
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
-              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "adaptive_until_captcha"):
         cfg[k] = s[k]
     return cfg
