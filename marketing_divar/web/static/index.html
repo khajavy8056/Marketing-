@@ -608,7 +608,8 @@ function bindPuzzleFrame(){
   });
   im.addEventListener('error', ()=>{
     const msg = $('cap-stage-msg');
-    if (msg){ msg.style.display = 'flex'; msg.textContent = 'پازل هنوز نیامد — دکمهٔ نمایش را بزنید'; }
+    if (msg){ msg.style.display = 'flex';
+      msg.textContent = 'پازل هنوز نیامد — «نمایش پازل همین‌جا» را بزنید. اگر timeout دیدید پروکسی ویندوز را خاموش کنید.'; }
   });
   im.addEventListener('click', ev=>{
     if (!_capShown) return;

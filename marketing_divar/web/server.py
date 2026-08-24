@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.0")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.1")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -227,7 +227,12 @@ def accounts_open_puzzle(req: AccountPuzzle):
         try:
             live.start(str(m.session_path(req.name)))
         except Exception as e:
-            raise HTTPException(400, str(e))
+            msg = str(e)
+            if "timed out" in msg.lower() or "CDP" in msg or "آماده نشد" in msg:
+                msg = ("مرورگر روی رایانه برای پازل آماده نشد. "
+                       "پروکسی/وی‌پی‌ان ویندوز را خاموش کنید و Edge را کامل ببندید، "
+                       "بعد دوباره «نمایش پازل همین‌جا» را بزنید. " + msg)
+            raise HTTPException(400, msg)
         _state.setdefault("puzzles", {})[req.name] = live
     log("info", f"پازل دیوار اکانت «{req.name}» داخل پنل باز شد")
     return {"ok": True, "embed": True,

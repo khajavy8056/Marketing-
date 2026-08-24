@@ -19,7 +19,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
-from urllib.request import urlopen
 
 
 def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
@@ -53,7 +52,7 @@ def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
     return out
 
 
-def find_browser() -> Optional[str]:
+def find_browsers() -> List[str]:
     env = os.environ.get("DIVAR_BROWSER") or ""
     cands = [env] if env else []
     if sys.platform == "win32":
@@ -66,20 +65,31 @@ def find_browser() -> Optional[str]:
             os.path.join(local, r"Microsoft\Edge\Application\msedge.exe"),
             os.path.join(pf, r"Google\Chrome\Application\chrome.exe"),
             os.path.join(pfx, r"Google\Chrome\Application\chrome.exe"),
+            os.path.join(local, r"Google\Chrome\Application\chrome.exe"),
         ]
     else:
         cands += ["microsoft-edge", "msedge", "google-chrome", "chromium",
-                  "chromium-browser"]
+                  "chromium-browser", "google-chrome-stable"]
+    out: List[str] = []
+    seen = set()
+    from shutil import which
     for c in cands:
         if not c:
             continue
-        if os.path.isfile(c):
-            return c
-        from shutil import which
-        w = which(c)
-        if w:
-            return w
-    return None
+        path = c if os.path.isfile(c) else which(c)
+        if not path:
+            continue
+        key = os.path.normcase(os.path.abspath(path))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return out
+
+
+def find_browser() -> Optional[str]:
+    found = find_browsers()
+    return found[0] if found else None
 
 
 def _free_port() -> int:
@@ -158,20 +168,146 @@ def _cdp_set_cookies(ws_url: str, cookies: List[Dict[str, Any]],
             pass
 
 
-def _wait_cdp(port: int, tries: int = 40) -> str:
-    url = f"http://127.0.0.1:{port}/json/version"
-    last = ""
-    for _ in range(tries):
+def _http_get_local(port: int, path: str, timeout: float = 1.2) -> str:
+    """GET روی 127.0.0.1 — هرگز از پروکسی سیستم استفاده نمی‌کند.
+
+    urlopen در ویندوز اگر HTTP_PROXY ست باشد به 127.0.0.1 هم از پروکسی
+    می‌رود و با «timed out» می‌میرد (خطای زندهٔ پازل).
+    """
+    sock = socket.create_connection(("127.0.0.1", int(port)), timeout=timeout)
+    try:
+        req = (f"GET {path} HTTP/1.1\r\n"
+               f"Host: 127.0.0.1:{int(port)}\r\n"
+               "Connection: close\r\n\r\n")
+        sock.sendall(req.encode("ascii"))
+        sock.settimeout(timeout)
+        buf = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+            if len(buf) > 2_000_000:
+                break
+    finally:
         try:
-            with urlopen(url, timeout=1.0) as r:
-                data = json.loads(r.read().decode())
-            ws = data.get("webSocketDebuggerUrl") or ""
+            sock.close()
+        except Exception:
+            pass
+    if b"\r\n\r\n" not in buf:
+        raise RuntimeError("پاسخ خالی از CDP")
+    head, body = buf.split(b"\r\n\r\n", 1)
+    status = head.split(b"\r\n", 1)[0]
+    if b"200" not in status:
+        raise RuntimeError(status.decode("ascii", errors="replace")[:80])
+    return body.decode("utf-8", errors="replace")
+
+
+def _devtools_port_file(profile: Path) -> int:
+    p = Path(profile) / "DevToolsActivePort"
+    if not p.exists():
+        return 0
+    try:
+        line = p.read_text(encoding="utf-8", errors="replace").splitlines()[0]
+        return int(line.strip())
+    except Exception:
+        return 0
+
+
+def _page_ws_from_list(port: int) -> str:
+    body = _http_get_local(port, "/json/list")
+    tabs = json.loads(body or "[]")
+    if not isinstance(tabs, list):
+        return ""
+    for t in tabs:
+        if not isinstance(t, dict):
+            continue
+        if t.get("type") not in ("page", "webview", None):
+            continue
+        ws = t.get("webSocketDebuggerUrl") or ""
+        if ws:
+            return str(ws)
+    for t in tabs:
+        if isinstance(t, dict) and t.get("webSocketDebuggerUrl"):
+            return str(t["webSocketDebuggerUrl"])
+    return ""
+
+
+def _wait_cdp(port: int, tries: int = 80, profile: Optional[Path] = None) -> str:
+    last = ""
+    use_port = int(port)
+    for _ in range(tries):
+        if profile:
+            file_port = _devtools_port_file(profile)
+            if file_port:
+                use_port = file_port
+        try:
+            ws = _page_ws_from_list(use_port)
             if ws:
                 return ws
         except Exception as e:
             last = str(e)
+        try:
+            data = json.loads(_http_get_local(use_port, "/json/version"))
+            ws = data.get("webSocketDebuggerUrl") or ""
+            if ws:
+                return str(ws)
+        except Exception as e:
+            last = str(e)
         time.sleep(0.25)
-    raise RuntimeError(f"browser CDP not ready: {last}")
+    raise RuntimeError(
+        "مرورگر روی رایانه برای پازل آماده نشد"
+        + (f" ({last})" if last else "")
+    )
+
+
+def _kill_proc(proc: Optional[subprocess.Popen]) -> None:
+    if not proc or proc.poll() is not None:
+        return
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=8)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=2)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _browser_cmd(browser: str, profile: Path, port: int) -> List[str]:
+    return [
+        browser,
+        f"--user-data-dir={profile}",
+        f"--remote-debugging-port={port}",
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-allow-origins=*",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-sync",
+        "--disable-popup-blocking",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-features=Translate,MediaRouter",
+        "--disable-hang-monitor",
+        "--metrics-recording-only",
+        "--force-device-scale-factor=1",
+        "--window-size=900,720",
+        "--window-position=60,40",
+        "about:blank",
+    ]
 
 
 def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir") -> str:
@@ -195,7 +331,7 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
         f"--app={start_url}",
     ]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    ws = _wait_cdp(port)
+    ws = _wait_cdp(port, profile=profile)
     _cdp_set_cookies(ws, cookies, start_url)
     return f"opened {browser} as session {Path(session_path).parent.name}"
 
@@ -278,47 +414,118 @@ class PuzzleLive:
     def __init__(self) -> None:
         self.proc: Optional[subprocess.Popen] = None
         self.cdp: Optional[CdpClient] = None
+        self.profile: Optional[Path] = None
         self.last_jpeg = b""
         self.last_err = ""
         self.lock = __import__("threading").Lock()
 
     def start(self, session_path: str, start_url: str = "https://divar.ir") -> None:
-        browser = find_browser()
-        if not browser:
+        browsers = find_browsers()
+        if not browsers:
             raise RuntimeError("Edge یا Chrome روی این رایانه پیدا نشد")
         cookies = cookies_from_session(session_path)
         if not cookies:
             raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
-        profile = Path(session_path).resolve().parent / "edge-profile"
+        # پروفایل جدا — اگر Edge قبلی همان edge-profile را گرفته باشد
+        # --remote-debugging-port نادیده گرفته می‌شود و CDP timeout می‌شود.
+        stamp = str(os.getpid()) + "-" + str(int(time.time()))
+        profile = Path(session_path).resolve().parent / f"puzzle-live-{stamp}"
         profile.mkdir(parents=True, exist_ok=True)
-        port = _free_port()
-        cmd = [
-            browser,
-            f"--user-data-dir={profile}",
-            f"--remote-debugging-port={port}",
-            "--remote-allow-origins=*",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--window-size=900,720",
-            "--window-position=-2400,-2400",
-            "--app=about:blank",
-        ]
-        self.proc = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        ws = _wait_cdp(port)
-        self.cdp = CdpClient(ws)
-        self.cdp.call("Network.enable")
-        self.cdp.call("Page.enable")
-        for ck in cookies:
-            self.cdp.call("Network.setCookie", {
-                "name": ck["name"], "value": ck["value"],
-                "domain": ck.get("domain") or ".divar.ir",
-                "path": ck.get("path") or "/",
-                "secure": True,
-                "httpOnly": ck["name"] != "sFrontToken",
-            })
-        self.cdp.call("Page.navigate", {"url": start_url})
-        time.sleep(0.6)
+        self.profile = profile
+        last = ""
+        for browser in browsers:
+            port = _free_port()
+            cmd = _browser_cmd(browser, profile, port)
+            err_log = profile / "browser.err"
+            err_f = open(err_log, "wb")
+            try:
+                self.proc = subprocess.Popen(
+                    cmd, stdout=subprocess.DEVNULL, stderr=err_f)
+            except Exception as e:
+                try:
+                    err_f.close()
+                except Exception:
+                    pass
+                last = str(e)
+                continue
+            try:
+                err_f.close()
+            except Exception:
+                pass
+            try:
+                ws = _wait_cdp(port, tries=90, profile=profile)
+            except Exception as e:
+                last = str(e)
+                _kill_proc(self.proc)
+                self.proc = None
+                continue
+            self.cdp = CdpClient(ws)
+            try:
+                self.cdp.call("Network.enable")
+                self.cdp.call("Page.enable")
+                try:
+                    self.cdp.call("Runtime.enable")
+                except Exception:
+                    pass
+                for ck in cookies:
+                    self.cdp.call("Network.setCookie", {
+                        "name": ck["name"], "value": ck["value"],
+                        "domain": ck.get("domain") or ".divar.ir",
+                        "path": ck.get("path") or "/",
+                        "secure": True,
+                        "httpOnly": ck["name"] != "sFrontToken",
+                    })
+                self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
+                self._wait_ready()
+                self._nudge_window()
+            except Exception as e:
+                last = str(e)
+                try:
+                    self.cdp.close()
+                except Exception:
+                    pass
+                self.cdp = None
+                _kill_proc(self.proc)
+                self.proc = None
+                continue
+            return
+        raise RuntimeError(
+            "پازل روی رایانه باز نشد. پروکسی/وی‌پی‌ان سیستم را برای این برنامه "
+            "خاموش کنید، Edge/Chrome را ببندید و دوباره «نمایش پازل» را بزنید"
+            + (f" — {last}" if last else "")
+        )
+
+    def _wait_ready(self) -> None:
+        if not self.cdp:
+            return
+        for _ in range(25):
+            try:
+                r = self.cdp.call("Runtime.evaluate", {
+                    "expression": "document.readyState",
+                    "returnByValue": True,
+                }, timeout=2)
+                if (r.get("result") or {}).get("value") == "complete":
+                    break
+            except Exception:
+                pass
+            time.sleep(0.25)
+        time.sleep(0.8)
+
+    def _nudge_window(self) -> None:
+        """پنجره را کوچک نگه می‌دارد تا صفحه رنگ شود (مینیمایز = تصویر سیاه)."""
+        if not self.cdp:
+            return
+        try:
+            win = self.cdp.call("Browser.getWindowForTarget", timeout=3)
+            wid = win.get("windowId")
+            if wid:
+                self.cdp.call("Browser.setWindowBounds", {
+                    "windowId": wid,
+                    "bounds": {"left": 40, "top": 40, "width": 900, "height": 720,
+                               "windowState": "normal"},
+                }, timeout=3)
+        except Exception:
+            pass
 
     def screenshot(self) -> bytes:
         if not self.cdp:
@@ -373,11 +580,7 @@ class PuzzleLive:
         except Exception:
             pass
         self.cdp = None
-        if self.proc and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
+        _kill_proc(self.proc)
         self.proc = None
 
 

@@ -14,7 +14,8 @@ sys.path.insert(0, ROOT)
 
 from marketing_divar.client import parse_block_body  # noqa: E402
 from marketing_divar.session_view import (  # noqa: E402
-    PuzzleLive, cookies_from_session, find_browser, launch_account_browser)
+    PuzzleLive, _http_get_local, _wait_cdp, cookies_from_session,
+    find_browser, launch_account_browser)
 
 
 class TestCookiesFromSession(unittest.TestCase):
@@ -74,6 +75,69 @@ class TestLaunchGuard(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("ac1", msg)
         self.assertTrue(pop.called)
+
+
+class TestCdpLocalHttp(unittest.TestCase):
+    def test_wait_cdp_ignores_http_proxy(self):
+        """باگ زنده: urlopen با پروکسی سیستم به 127.0.0.1 timeout می‌شد."""
+        import json
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = json.dumps({
+                    "webSocketDebuggerUrl": "ws://127.0.0.1:9/devtools/browser/x",
+                }).encode()
+                if self.path.startswith("/json/list"):
+                    body = json.dumps([{
+                        "type": "page",
+                        "webSocketDebuggerUrl": "ws://127.0.0.1:9/devtools/page/x",
+                    }]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, fmt, *args):
+                return
+
+        srv = HTTPServer(("127.0.0.1", 0), H)
+        port = srv.server_address[1]
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        old = {k: os.environ.get(k) for k in (
+            "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")}
+        try:
+            os.environ["HTTP_PROXY"] = "http://127.0.0.1:1"
+            os.environ["http_proxy"] = "http://127.0.0.1:1"
+            os.environ["HTTPS_PROXY"] = "http://127.0.0.1:1"
+            body = _http_get_local(port, "/json/version")
+            self.assertIn("webSocketDebuggerUrl", body)
+            ws = _wait_cdp(port, tries=8)
+            self.assertIn("/devtools/page/", ws)
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            srv.shutdown()
+
+    def test_start_uses_isolated_profile(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T"}, f)
+        live = PuzzleLive()
+        with mock.patch("marketing_divar.session_view.find_browsers",
+                        return_value=["/usr/bin/no-such-browser"]), \
+             mock.patch("marketing_divar.session_view.subprocess.Popen",
+                        side_effect=OSError("nope")):
+            with self.assertRaises(RuntimeError) as ctx:
+                live.start(p)
+        self.assertIn("پازل", str(ctx.exception))
 
 
 class TestPuzzleLiveGuard(unittest.TestCase):
