@@ -26,7 +26,8 @@ class TestCookiesFromSession(unittest.TestCase):
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
             json.dump({"token": "TOK123",
-                       "cookies": {"sAccessToken": "SAT", "sFrontToken": "SFT"}}, f)
+                       "cookies": {"sAccessToken": "SAT", "sFrontToken": "SFT",
+                                   "sRefreshToken": "SRT"}}, f)
         cks = cookies_from_session(p)
         by = {}
         for c in cks:
@@ -72,7 +73,8 @@ class TestLaunchGuard(unittest.TestCase):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
-            json.dump({"token": "T", "cookies": {"sFrontToken": "F"}}, f)
+            json.dump({"token": "T", "cookies": {"sFrontToken": "F",
+                                                "sRefreshToken": "R"}}, f)
         with mock.patch("marketing_divar.session_view.find_browser",
                         return_value="/usr/bin/chromium"), \
              mock.patch("marketing_divar.session_view.subprocess.Popen") as pop:
@@ -142,7 +144,8 @@ class TestCdpLocalHttp(unittest.TestCase):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
-            json.dump({"token": "T", "cookies": {"sFrontToken": "F"}}, f)
+            json.dump({"token": "T", "cookies": {"sFrontToken": "F",
+                                                "sRefreshToken": "R"}}, f)
         live = PuzzleLive()
         with mock.patch("marketing_divar.session_view.find_browsers",
                         return_value=["/usr/bin/no-such-browser"]), \

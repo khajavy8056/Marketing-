@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.11")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.12")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -58,6 +58,7 @@ _state: Dict[str, Any] = {
     "include_existing": False,
     "gates": {},             # name -> چالش جمع ساده برای پاپ‌آپ پنل
     "puzzles": {},           # name -> PuzzleLive
+    "collectors": {},        # name -> {ok, message, running}
 }
 _puzzle_lock = threading.Lock()
 
@@ -128,7 +129,7 @@ class LeadStatusUpdate(BaseModel):
 # ------------------------------------------------------------ API اکانت‌ها --
 @app.get("/api/accounts")
 def accounts_list():
-    return {"accounts": mgr().snapshot(DB_PATH, complete_only=True)}
+    return {"accounts": mgr().snapshot(DB_PATH, complete_only=False)}
 
 
 @app.post("/api/accounts/otp")
@@ -166,17 +167,73 @@ def accounts_confirm(req: OtpConfirm):
     except DivarAuthError as e:
         _state["pending_logins"][name] = phone  # فرصت دوباره برای کد
         raise HTTPException(400, f"کد نامعتبر: {e}")
-    if cl.token:
-        try:
-            from ..auth_session import ensure_site_cookies_from_token
-            ensure_site_cookies_from_token(str(cl.session_path), cl.token, phone)
-        except Exception:
-            pass
     if not cl.token:
         raise HTTPException(400, "کد قبول شد ولی توکن نیامد — دوباره کد بگیرید")
-    mgr().set_status(name, "active", note="")
-    log("success", f"اکانت «{name}» لاگین شد ({phone})")
-    return {"ok": True, "message": "لاگین موفق — سشن همین اکانت ذخیره شد"}
+    mgr().set_status(name, "active", note="نیاز به سشن سایت")
+    mgr().set_site_verified(name, False)
+    log("success", f"اکانت «{name}» توکن گرفت ({phone}) — سشن سایت جدا جمع شود")
+    return {"ok": True,
+            "message": "لاگین API شد. حالا «جمع‌آوری سشن سایت» را بزنید و در مرورگر دیوار وارد شوید."}
+
+
+class AccountCollect(BaseModel):
+    name: str
+
+
+@app.post("/api/accounts/collect-site")
+def accounts_collect_site(req: AccountCollect):
+    """گام ۳: صفحهٔ لاگین دیوار در مرورگر — کاربر وارد می‌شود، کوکی‌ها ذخیره می‌شوند."""
+    name = req.name.strip().lower().replace(" ", "-")
+    m = mgr()
+    if not m.has_token(name):
+        raise HTTPException(404, "اول با کد پیامک لاگین کنید")
+    bag = _state.setdefault("collectors", {})
+    prev = bag.get(name) or {}
+    if prev.get("running"):
+        return {"ok": True, "running": True,
+                "message": prev.get("message") or "صفحهٔ لاگین باز است — همان‌جا وارد شوید"}
+
+    bag[name] = {"ok": None, "running": True,
+                 "message": "صفحهٔ لاگین دیوار باز شد — همان‌جا با همین شماره وارد شوید"}
+
+    def _work() -> None:
+        try:
+            from ..session_view import collect_site_login
+            res = collect_site_login(str(m.session_path(name)), timeout_sec=180)
+            if res.get("ok"):
+                m.set_site_verified(name, True, note="سشن سایت تأیید شد")
+                log("success", f"سشن سایت اکانت «{name}» ذخیره و تأیید شد")
+            else:
+                m.set_site_verified(name, False)
+                log("warning", f"جمع‌آوری سشن «{name}»: {res.get('message')}")
+            bag[name] = {"ok": bool(res.get("ok")), "running": False,
+                         "message": res.get("message") or ""}
+        except Exception as e:
+            bag[name] = {"ok": False, "running": False, "message": str(e)}
+            log("error", f"جمع‌آوری سشن «{name}» ناموفق: {e}")
+
+    threading.Thread(target=_work, daemon=True).start()
+    log("info", f"جمع‌آوری سشن سایت برای «{name}» شروع شد")
+    return {"ok": True, "running": True,
+            "message": "صفحهٔ دیوار باز می‌شود. همان‌جا لاگین کنید تا کوکی‌ها ذخیره شوند."}
+
+
+@app.get("/api/accounts/collect-site")
+def accounts_collect_status(name: str):
+    name = (name or "").strip().lower().replace(" ", "-")
+    rec = (_state.get("collectors") or {}).get(name) or {}
+    m = mgr()
+    verified = False
+    try:
+        verified = bool(next((a.get("site_verified") for a in
+                              m.snapshot(DB_PATH) if a.get("name") == name), False))
+    except Exception:
+        verified = False
+    if verified:
+        return {"ok": True, "running": False, "verified": True,
+                "message": rec.get("message") or "سشن سایت تأیید شد"}
+    return {"ok": rec.get("ok"), "running": bool(rec.get("running")),
+            "verified": False, "message": rec.get("message") or "هنوز شروع نشده"}
 
 
 def _do_unlock(name: str, reason: str = "operator") -> Dict[str, Any]:
@@ -550,7 +607,7 @@ def status():
             "no_contact": _cnt("phone_status='hidden'"),
             "failed": _cnt("phone_status='error'"),
         }
-        acc_snap = mgr().snapshot(DB_PATH, complete_only=True)
+        acc_snap = mgr().snapshot(DB_PATH, complete_only=False)
         acc_break = {"active": 0, "busy": 0, "rate_limited": 0,
                      "captcha": 0, "error": 0, "disabled": 0}
         for a in acc_snap:
@@ -874,7 +931,7 @@ def captcha_pending():
     from ..gate import new_challenge
     gates = _state.setdefault("gates", {})
     pending = []
-    for a in mgr().snapshot(DB_PATH, complete_only=True):
+    for a in mgr().snapshot(DB_PATH, complete_only=False):
         if a.get("status") != "captcha":
             gates.pop(a["name"], None)
             continue

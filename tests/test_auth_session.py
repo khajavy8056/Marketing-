@@ -91,6 +91,8 @@ class TestPersistAndInject(unittest.TestCase):
         p = os.path.join(d, "session.json")
         merge_into_session_file(p, "09120000000", "TOK", {
             "cookies_full": [{"name": "sFrontToken", "value": "F",
+                              "domain": ".divar.ir", "path": "/"},
+                             {"name": "sRefreshToken", "value": "REF",
                               "domain": ".divar.ir", "path": "/"}],
             "auth_headers": {"st-access-token": "SAT"},
         })
@@ -141,7 +143,7 @@ class TestPersistAndInject(unittest.TestCase):
         self.assertEqual(data["cookies"].get("sFrontToken"), "FRONT1")
         self.assertTrue(any(x.get("name") == "sRefreshToken" for x in data["cookies_full"]))
 
-    def test_request_otp_persists_device_and_consume_uses_it(self):
+    def test_otp_uses_v5_only(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         c = DivarClient(session_path=p)
@@ -151,102 +153,31 @@ class TestPersistAndInject(unittest.TestCase):
             name = "fake"
 
             def request(self, method, url, **kw):
-                seen.append({"url": url, "json": kw.get("json") or {},
-                             "headers": kw.get("headers") or {}})
+                seen.append(url)
                 class R:
                     status_code = 200
-                    text = "{}"
+                    text = '{"token":"JWT-V5"}'
                     cookies = []
                     headers = {}
 
                     def json(self):
-                        if url.endswith("/code") and not url.endswith("/consume"):
-                            return {"status": "OK", "deviceId": "DEV9",
-                                    "preAuthSessionId": "PRE9"}
-                        return {"token": "JWT-ST"}
+                        return {"token": "JWT-V5"}
                 return R()
 
         c._custom_transports = [Fake()]
         self.assertTrue(c.request_otp("09123334444"))
-        pending = json.loads((Path(d) / "otp_pending.json").read_text(encoding="utf-8"))
-        self.assertEqual(pending["deviceId"], "DEV9")
-        self.assertEqual(pending["preAuthSessionId"], "PRE9")
+        self.assertTrue(any("/v5/auth/authenticate" in u for u in seen))
+        self.assertFalse(any("signinup" in u for u in seen))
         tok = c.confirm_otp("09123334444", "654321")
-        self.assertEqual(tok, "JWT-ST")
-        consume = next(x for x in seen if str(x["url"]).endswith("/consume"))
-        self.assertEqual(consume["json"].get("userInputCode"), "654321")
-        self.assertEqual(consume["json"].get("deviceId"), "DEV9")
-        self.assertEqual(consume["json"].get("preAuthSessionId"), "PRE9")
-        self.assertEqual(consume["headers"].get("rid"), "passwordless")
+        self.assertEqual(tok, "JWT-V5")
+        self.assertTrue(any("/v5/auth/confirm" in u for u in seen))
+        self.assertFalse(any("/consume" in u for u in seen))
         data = json.loads(Path(p).read_text(encoding="utf-8"))
-        self.assertTrue(data["cookies"].get("sFrontToken"))
+        self.assertEqual(data["token"], "JWT-V5")
+        from marketing_divar.auth_session import session_is_complete
+        self.assertFalse(session_is_complete(p))
 
-    def test_consume_json_session_becomes_site_cookies(self):
-        d = tempfile.mkdtemp()
-        p = os.path.join(d, "session.json")
-        c = DivarClient(session_path=p)
-
-        class Fake:
-            name = "fake"
-
-            def request(self, method, url, **kw):
-                class R:
-                    status_code = 200
-                    text = "{}"
-                    cookies = []
-                    headers = {}
-
-                    def json(self):
-                        if url.endswith("/consume"):
-                            return {"status": "OK", "session": {
-                                "accessToken": {"token": "ST-ACCESS"},
-                                "refreshToken": {"token": "ST-REFRESH"},
-                            }, "frontToken": "ST-FRONT"}
-                        return {"token": "V5-API"}
-                return R()
-
-        c._custom_transports = [Fake()]
-        tok = c.confirm_otp("09120002222", "222222")
-        self.assertEqual(tok, "V5-API")
-        data = json.loads(Path(p).read_text(encoding="utf-8"))
-        self.assertEqual(data["token"], "V5-API")
-        self.assertEqual(data["cookies"].get("sAccessToken"), "ST-ACCESS")
-        self.assertEqual(data["cookies"].get("sRefreshToken"), "ST-REFRESH")
-        self.assertEqual(data["cookies"].get("sFrontToken"), "ST-FRONT")
-        script = localstorage_script(p)
-        self.assertIn("V5-API", script)
-        self.assertIn("ST-FRONT", script)
-
-    def test_consume_incorrect_status_falls_to_v5(self):
-        d = tempfile.mkdtemp()
-        p = os.path.join(d, "session.json")
-        c = DivarClient(session_path=p)
-
-        class Fake:
-            name = "fake"
-
-            def request(self, method, url, **kw):
-                class R:
-                    cookies = []
-                    headers = {}
-
-                    def __init__(self):
-                        self.status_code = 200
-                        if url.endswith("/consume"):
-                            self.text = '{"status":"INCORRECT_USER_INPUT_CODE_ERROR"}'
-                        else:
-                            self.text = '{"token":"V5-OK"}'
-
-                    def json(self):
-                        if url.endswith("/consume"):
-                            return {"status": "INCORRECT_USER_INPUT_CODE_ERROR"}
-                        return {"token": "V5-OK"}
-                return R()
-
-        c._custom_transports = [Fake()]
-        self.assertEqual(c.confirm_otp("09120003333", "333333"), "V5-OK")
-
-    def test_v5_token_promoted_to_site_session(self):
+    def test_v5_token_is_not_fake_site_session(self):
         from marketing_divar.auth_session import session_is_complete
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
@@ -259,30 +190,19 @@ class TestPersistAndInject(unittest.TestCase):
                 class R:
                     cookies = []
                     headers = {}
-
-                    def __init__(self):
-                        if url.endswith("/consume"):
-                            self.status_code = 400
-                            self.text = '{"error":"bad body"}'
-                        else:
-                            self.status_code = 200
-                            self.text = '{"token":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1MSIsImV4cCI6OTk5OTk5OTk5OX0.x"}'
+                    status_code = 200
+                    text = '{"token":"eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1MSIsImV4cCI6OTk5OTk5OTk5OX0.x"}'
 
                     def json(self):
-                        if self.status_code != 200:
-                            return {"error": "bad"}
                         return {"token": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1MSIsImV4cCI6OTk5OTk5OTk5OX0.x"}
                 return R()
 
         c._custom_transports = [Fake()]
         tok = c.confirm_otp("09120001111", "111111")
         self.assertTrue(tok.startswith("eyJ"))
-        self.assertTrue(session_is_complete(p))
-        data = json.loads(Path(p).read_text(encoding="utf-8"))
-        self.assertTrue(data["cookies"].get("sFrontToken"))
-        self.assertEqual(data["cookies"].get("sAccessToken"), tok)
+        self.assertFalse(session_is_complete(p))
 
-    def test_incomplete_token_only_hidden(self):
+    def test_token_accounts_listed_until_site_verified(self):
         from marketing_divar.accounts import AccountManager
         from marketing_divar.auth_session import session_is_complete
         from marketing_divar.config import DEFAULTS
@@ -293,16 +213,32 @@ class TestPersistAndInject(unittest.TestCase):
         good = Path(d) / "good" / "session.json"
         good.parent.mkdir(parents=True)
         good.write_text(json.dumps({
-            "token": "JWT2", "cookies": {"sFrontToken": "FRONT"}}), encoding="utf-8")
+            "token": "JWT2", "cookies": {"sRefreshToken": "RR", "sFrontToken": "FRONT"}}),
+            encoding="utf-8")
         self.assertFalse(session_is_complete(str(old)))
         self.assertTrue(session_is_complete(str(good)))
         m = AccountManager(DEFAULTS, d)
         db = os.path.join(d, "x.db")
         from marketing_divar.db import connect
         connect(db).close()
-        names = [a["name"] for a in m.snapshot(db, complete_only=True)]
-        self.assertEqual(names, ["good"])
-        self.assertNotIn("old", names)
+        names_all = [a["name"] for a in m.snapshot(db, complete_only=False)]
+        self.assertEqual(set(names_all), {"old", "good"})
+        names_full = [a["name"] for a in m.snapshot(db, complete_only=True)]
+        self.assertEqual(names_full, ["good"])
+
+    def test_harvest_storage_makes_complete(self):
+        from marketing_divar.auth_session import (
+            merge_storage_into_session, session_is_complete)
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        merge_into_session_file(p, "09120000000", "TOK", {})
+        self.assertFalse(session_is_complete(p))
+        n = merge_storage_into_session(p, {
+            "sRefreshToken": "RR", "sFrontToken": "FF", "sAccessToken": "AA",
+            "token": "TOK",
+        })
+        self.assertGreater(n, 0)
+        self.assertTrue(session_is_complete(p))
 
     def test_inject_cookies_and_script_before_navigate(self):
         d = tempfile.mkdtemp()
@@ -361,57 +297,6 @@ class TestPersistAndInject(unittest.TestCase):
         script = localstorage_script(p)
         self.assertIn("st-access-token", script)
         self.assertIn("st-refresh-token", script)
-
-    def test_consume_fallback_after_deviceid_400(self):
-        d = tempfile.mkdtemp()
-        p = os.path.join(d, "session.json")
-        c = DivarClient(session_path=p)
-        seen = []
-
-        class Fake:
-            name = "fake"
-
-            def request(self, method, url, **kw):
-                body = kw.get("json") or {}
-                seen.append(body)
-                class R:
-                    cookies = []
-                    headers = {}
-
-                    def __init__(self):
-                        if url.endswith("/consume") and body.get("deviceId"):
-                            self.status_code = 400
-                            self.text = '{"error":"bad"}'
-                        elif url.endswith("/consume"):
-                            self.status_code = 200
-                            self.text = '{"status":"OK"}'
-                            self.headers = {
-                                "st-access-token": "SAT-FB",
-                                "front-token": "FRONT-FB",
-                                "st-refresh-token": "REF-FB",
-                            }
-                        else:
-                            self.status_code = 200
-                            self.text = '{"token":"V5-FB"}'
-
-                    def json(self):
-                        if self.status_code != 200:
-                            return {"error": "bad"}
-                        if url.endswith("/consume"):
-                            return {"status": "OK"}
-                        return {"token": "V5-FB"}
-                return R()
-
-        c._custom_transports = [Fake()]
-        c._save_otp_pending("09124445555", {
-            "deviceId": "DEV-BAD", "preAuthSessionId": "PRE-BAD"})
-        tok = c.confirm_otp("09124445555", "444444")
-        self.assertEqual(tok, "V5-FB")
-        self.assertTrue(any(x.get("deviceId") == "DEV-BAD" for x in seen))
-        self.assertTrue(any(x.get("phoneNumber") == "09124445555" for x in seen))
-        data = json.loads(Path(p).read_text(encoding="utf-8"))
-        self.assertEqual(data["cookies"].get("sAccessToken"), "SAT-FB")
-        self.assertEqual(data["cookies"].get("sFrontToken"), "FRONT-FB")
 
 
 if __name__ == "__main__":

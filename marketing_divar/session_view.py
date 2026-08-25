@@ -510,12 +510,13 @@ class PuzzleLive:
         self.last_err = ""
         self.lock = __import__("threading").Lock()
 
-    def start(self, session_path: str, start_url: str = "https://divar.ir") -> None:
+    def start(self, session_path: str, start_url: str = "https://divar.ir",
+              inject: bool = True) -> None:
         browsers = find_browsers()
         if not browsers:
             raise RuntimeError("Edge یا Chrome روی این رایانه پیدا نشد")
-        cookies = cookies_from_session(session_path)
-        if not cookies:
+        cookies = cookies_from_session(session_path) if inject else []
+        if inject and not cookies:
             raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
         self.session_path = session_path
         _cleanup_old_temp_profiles(session_path)
@@ -559,7 +560,16 @@ class PuzzleLive:
                 continue
             self.cdp = CdpClient(ws)
             try:
-                self._inject_login_then_open(cookies, start_url)
+                if inject:
+                    self._inject_login_then_open(cookies, start_url)
+                else:
+                    self.cdp.call("Network.enable")
+                    self.cdp.call("Page.enable")
+                    try:
+                        self.cdp.call("Runtime.enable")
+                    except Exception:
+                        pass
+                    self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
                 self._wait_ready()
                 self._nudge_window()
             except Exception as e:
@@ -743,6 +753,60 @@ class PuzzleLive:
         time.sleep(0.15)
         try:
             shutil.rmtree(p, ignore_errors=True)
+        except Exception:
+            pass
+
+
+def collect_site_login(session_path: str, timeout_sec: int = 180) -> Dict[str, Any]:
+    """مرورگر همین اکانت را روی صفحهٔ لاگین دیوار باز می‌کند؛ بعد از ورود کاربر
+    کوکی و localStorage را برمی‌دارد، صفحه را چک می‌کند و می‌بندد."""
+    from .auth_session import session_is_complete
+    live = PuzzleLive()
+    try:
+        live.start(session_path, start_url="https://divar.ir", inject=False)
+    except Exception as e:
+        try:
+            live.stop()
+        except Exception:
+            pass
+        return {"ok": False, "message": f"مرورگر باز نشد: {e}"}
+    t0 = time.time()
+    last = "منتظر لاگین شما در صفحهٔ دیوار"
+    try:
+        while time.time() - t0 < max(30, int(timeout_sec)):
+            try:
+                live.harvest_cookies()
+            except Exception:
+                pass
+            try:
+                live.harvest_storage()
+            except Exception:
+                pass
+            if session_is_complete(session_path):
+                try:
+                    live.cdp.call("Page.navigate", {"url": "https://divar.ir/"},
+                                  timeout=15)
+                    live._wait_ready()
+                except Exception:
+                    pass
+                page_ok = False
+                try:
+                    page_ok = live.page_looks_logged_in()
+                except Exception:
+                    page_ok = False
+                if page_ok or session_is_complete(session_path):
+                    last = "سشن سایت ذخیره شد و صفحهٔ لاگین‌شده تأیید شد"
+                    return {"ok": True, "message": last, "page_ok": bool(page_ok)}
+            time.sleep(2)
+        return {"ok": False, "message": "در زمان مقرر لاگین سایت دیده نشد — دوباره تلاش کنید"}
+    finally:
+        try:
+            live.harvest_cookies()
+            live.harvest_storage()
+        except Exception:
+            pass
+        try:
+            live.stop()
         except Exception:
             pass
 

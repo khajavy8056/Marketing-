@@ -638,110 +638,44 @@ class DivarClient:
         return ""
 
     def _finish_login(self, phone: str, token: str = "") -> str:
+        """فقط توکن API. سشن سایت از مرورگر واقعی جمع می‌شود — اینجا جعل نمی‌شود."""
         if token:
             self.token = token
-        sat = (_cookie_value(self.http.cookies, "sAccessToken")
-               or _cookie_value(self.http.cookies, "token") or "")
         if not self.token:
-            self.token = sat
+            self.token = (_cookie_value(self.http.cookies, "token") or "")
         self._save_session(phone)
-        try:
-            from .auth_session import (ensure_site_cookies_from_token,
-                                       looks_like_supertokens_jwt)
-            seed = sat if looks_like_supertokens_jwt(sat) else (self.token or sat)
-            if seed:
-                ensure_site_cookies_from_token(
-                    str(self.session_path), seed, phone)
-        except Exception:
-            pass
         self._clear_otp_pending()
         return self.token or ""
 
     def request_otp(self, phone: str) -> bool:
-        """گام ۱: اول مسیر سایت (v8/SuperTokens)، بعد v5."""
-        r2 = None
-        try:
-            r2 = self._fetch(
-                "POST", f"{self.base}/v8/authenticate/signinup/code",
-                json={"phoneNumber": str(phone)},
-                headers=self._st_headers(), timeout=25)
-            if r2.status_code in (200, 201):
-                body = None
-                try:
-                    body = r2.json()
-                except ValueError:
-                    body = {}
-                rec = self._save_otp_pending(phone, body)
-                _log("info", "OTP v8 ثبت شد"
-                     + (f" (deviceId={'هست' if rec.get('deviceId') else 'نیست'})"))
-                return True
-            if r2.status_code in (403, 429) or looks_like_captcha(r2.text):
-                raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
-                                        r2.status_code, r2.text)
-        except DivarBlockedError:
-            raise
-        except Exception:
-            pass
+        """گام ۱: همان مسیر قدیمی v5 — SuperTokens را اینجا صدا نمی‌زنیم (کد را می‌سوزاند)."""
         r = self._fetch("POST", f"{self.base}/v5/auth/authenticate",
-                           json={"phone": str(phone)}, timeout=25)
+                        json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
             self._save_otp_pending(phone, {})
+            _log("info", "OTP v5 ارسال شد")
             return True
         if r.status_code in (403, 429) or looks_like_captcha(r.text):
             raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
                                     r.status_code, r.text)
         raise RuntimeError(
-            f"ارسال کد ناموفق: v8→HTTP {getattr(r2, 'status_code', '—')}؛ "
-            f"v5→HTTP {r.status_code} — {r.text[:150]}")
+            f"ارسال کد ناموفق: HTTP {r.status_code} — {r.text[:150]}")
 
     def confirm_otp(self, phone: str, code: str) -> str:
-        """گام ۲: consume سایت با deviceId/preAuthSessionId، بعد توکن API."""
-        pending = self._load_otp_pending(phone)
-        payloads: List[Dict[str, str]] = []
-        dev = str(pending.get("deviceId") or "")
-        pre = str(pending.get("preAuthSessionId") or "")
-        if dev and pre:
-            payloads.append({"userInputCode": str(code), "deviceId": dev,
-                             "preAuthSessionId": pre})
-        e164 = _phone_e164(phone)
-        for pn in (str(phone), e164):
-            payloads.append({"userInputCode": str(code), "phoneNumber": pn})
-            payloads.append({"code": str(code), "phoneNumber": pn})
-        last_consume = None
-        site_ok = False
-        consume_api_tok = ""
-        for pl in payloads:
-            try:
-                last_consume = self._fetch(
-                    "POST", f"{self.base}/v8/authenticate/signinup/code/consume",
-                    json=pl, headers=self._st_headers(), timeout=25)
-            except requests.exceptions.RequestException:
-                last_consume = None
-                continue
-            body_st = _safe_json(last_consume)
-            st = body_st.get("status") if isinstance(body_st, dict) else ""
-            if st in ("INCORRECT_USER_INPUT_CODE_ERROR",
-                      "EXPIRED_USER_INPUT_CODE_ERROR",
-                      "RESTART_FLOW_ERROR"):
-                break
-            if not self._st_consume_ok(last_consume):
-                continue
-            self._apply_login_body(last_consume)
-            body = _safe_json(last_consume)
-            if isinstance(body, dict) and isinstance(body.get("token"), str):
-                consume_api_tok = body.get("token") or ""
-            site_ok = True
-            break
-        api_tok = consume_api_tok
-        if not api_tok:
-            api_tok = self._try_v5_confirm(phone, code)
-        site_tok = _cookie_value(self.http.cookies, "sAccessToken") or ""
-        if api_tok or site_tok or site_ok or self.token:
-            return self._finish_login(phone, api_tok or site_tok or (self.token or ""))
+        """گام ۲: تأیید کد v5 → JWT برای شماره‌گیری. سشن سایت جدا جمع می‌شود."""
+        try:
+            r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
+                            json={"phone": str(phone), "code": str(code)},
+                            timeout=25)
+        except requests.exceptions.RequestException as e:
+            raise DivarAuthError(f"ارتباط برای تأیید کد قطع شد: {e}") from e
+        if r.status_code in (200, 201):
+            tok = _token_from_payload(_safe_json(r)) or ""
+            if tok:
+                return self._finish_login(phone, tok)
+            raise DivarAuthError("کد قبول شد ولی توکن نیامد — دوباره کد بگیرید")
         raise DivarAuthError(
-            f"کد تأیید نامعتبر یا منقضی (v8→HTTP "
-            f"{getattr(last_consume, 'status_code', '—')}؛ "
-            f"v5→HTTP —)")
+            f"کد نامعتبر یا منقضی (HTTP {r.status_code})")
 
     def login_interactive(self, phone: Optional[str] = None) -> None:
         """جریان کامل لاگین: شماره → کد پیامکی → ذخیره توکن."""

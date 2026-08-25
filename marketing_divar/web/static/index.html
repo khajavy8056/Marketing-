@@ -199,7 +199,9 @@
   <div class="card">
     <h3>افزودن اکانت جدید (لاگین با کد پیامکی)</h3>
     <div class="warn-box">📱 برای هر اکانت یک <b>شماره موبایل واقعی</b> لازم است
-      (دیوار شماره مجازی نمی‌پذیرد). نام اکانت دلخواه است مثل ac1.</div>
+      (دیوار شماره مجازی نمی‌پذیرد). نام اکانت دلخواه است مثل ac1.
+      <br>گام ۱–۲ کد پیامک توکن API می‌دهد. بعد دکمهٔ <b>جمع‌آوری سشن سایت</b>
+      صفحهٔ لاگین دیوار را باز می‌کند تا کوکی واقعی همان اکانت ذخیره شود.</div>
     <div class="grid g2">
       <div>
         <div class="lbl">نام اکانت (انگلیسی)</div>
@@ -720,6 +722,9 @@ async function accRefresh(){
     $('accounts-list').innerHTML = s.accounts.length ? s.accounts.map(a=>{
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
+      const siteTag = a.site_verified
+        ? '<span class="tag ok">تأییدشده · سشن سایت</span>'
+        : '<span class="tag warn">نیاز به سشن سایت</span>';
       const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
           <b>کپچای انسانی — خودتان حل کنید</b><br>
           پازل را داخل همین پنل، کنار دکمه حل کنید — پنجرهٔ جدا لازم نیست.<br>
@@ -731,14 +736,34 @@ async function accRefresh(){
       return `<div class="acc"><div class="row">
           <span>${ic}</span><b style="font-size:15px">${esc(a.name)}</b>
           <span class="tag ${m}">${esc(a.status)}</span>
+          ${siteTag}
           <span class="hint">شماره‌های امروز: ${a.phones_today}</span>
           ${a.note?`<span class="hint">${esc(a.note).slice(0,50)}</span>`:''}
         </div><div class="row">
+          ${a.has_token?`<button class="btn sm" type="button" onclick="collectSite('${a.name}')">🍪 جمع‌آوری سشن سایت</button>`:''}
+          ${a.site_verified?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>`:''}
           ${a.status!=='active'?`<button class="btn sm ok" onclick="accAction('${a.name}','release')">🔄 آزادسازی</button>`:''}
           ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
           ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
-        </div>${cap}</div>`;}).join('') : '<div class="empty">اکانت لاگین‌شدهٔ کامل نیست. حساب‌های قدیمی فقط-توکن نشان داده نمی‌شوند — دوباره با کد پیامک لاگین کنید.</div>';
+        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز اکانتی نیست. با کد پیامک لاگین کنید، بعد سشن سایت را از مرورگر جمع کنید.</div>';
   }catch(e){}
+}
+async function collectSite(name){
+  try{
+    const r = await api('/api/accounts/collect-site',{method:'POST',body:JSON.stringify({name})});
+    toast(r.message||'صفحهٔ لاگین دیوار باز شد');
+    const t0 = Date.now();
+    const tick = async ()=>{
+      try{
+        const s = await api('/api/accounts/collect-site?name='+encodeURIComponent(name));
+        if(s.verified || s.ok===true){ toast(s.message||'سشن سایت تأیید شد'); accRefresh(); return; }
+        if(s.ok===false && !s.running){ toast('❌ '+(s.message||'جمع‌آوری ناموفق'), false); accRefresh(); return; }
+      }catch(e){}
+      if(Date.now()-t0 < 190000) setTimeout(tick, 2500);
+      else { toast('زمان لاگین سایت تمام شد — دوباره بزنید', false); accRefresh(); }
+    };
+    setTimeout(tick, 2500);
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 async function accAction(name, action){
   try{
@@ -1127,7 +1152,7 @@ const FA_EN = {
   "برای هر اکانت یک":"Each account needs a","شماره موبایل واقعی":"real mobile number",
   "لازم است":" ","دیوار شماره مجازی نمی‌پذیرد)":"Divar does not accept virtual numbers).",
   "نام اکانت (انگلیسی)":"Account name (English)","شماره موبایل":"Mobile number",
-  "۱) ارسال کد تایید":"1) Send code","کد ۶ رقمی پیامک‌شده":"6-digit code from SMS",
+  "۱) ارسال کد تایید":"1) Send code","جمع‌آوری سشن سایت":"Collect site session","تأییدشده · سشن سایت":"Verified · site session","نیاز به سشن سایت":"Needs site session","کد ۶ رقمی پیامک‌شده":"6-digit code from SMS",
   "۲) تأیید و لاگین":"2) Confirm & login","اول گام ۱ را بزنید…":"Press step 1 first…",
   "اکانت‌های ثبت‌شده":"Registered accounts","آزادسازی":"Release",
   "کلمات کلیدی پایش":"Keywords to monitor",

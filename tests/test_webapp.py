@@ -74,6 +74,8 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("capProbe", r.text)
         self.assertIn('id="openPuzzle"', r.text)
         self.assertIn("/api/accounts/open-puzzle", r.text)
+        self.assertIn("/api/accounts/collect-site", r.text)
+        self.assertIn("collectSite", r.text)
         self.assertIn("/api/accounts/puzzle-frame", r.text)
         self.assertIn("/api/accounts/close-puzzle", r.text)
         self.assertIn("closePuzzleSession", r.text)
@@ -199,12 +201,9 @@ class TestAccountFlow(unittest.TestCase):
         client.post("/api/accounts/otp", json={"name": "web1", "phone": "09121110000"})
         client.post("/api/accounts/confirm", json={"name": "web1", "code": "123456"})
         r = client.post("/api/accounts/open-puzzle", json={"name": "web1"})
-        self.assertIn(r.status_code, (200, 400))
-        if r.status_code == 200:
-            self.assertTrue(r.json().get("ok"))
-            self.assertTrue(r.json().get("embed") or r.json().get("fallback"))
-        else:
-            self.assertTrue(r.json().get("detail"))
+        self.assertEqual(r.status_code, 404)
+        r = client.post("/api/accounts/collect-site", json={"name": "ghost"})
+        self.assertEqual(r.status_code, 404)
         r = client.get("/api/accounts/puzzle-frame?name=ghost")
         self.assertEqual(r.status_code, 404)
         r = client.post("/api/accounts/puzzle-click",

@@ -215,8 +215,9 @@ def merge_into_session_file(session_path: str, phone: str, token: str,
         pass
 
 
-SITE_PROOF_NAMES = ("sFrontToken", "sRefreshToken", "sAntiCsrf")
-SITE_PROOF_HEADERS = ("front-token", "st-refresh-token")
+# سشن واقعی سایت: refresh SuperTokens (از مرورگر). sFrontToken جعلی از JWT کافی نیست.
+SITE_PROOF_NAMES = ("sRefreshToken",)
+SITE_PROOF_HEADERS = ("st-refresh-token",)
 
 
 def jwt_payload(token: str) -> Dict[str, Any]:
@@ -337,17 +338,59 @@ def session_data(session_path: str) -> Dict[str, Any]:
 
 
 def session_is_complete(session_path: str) -> bool:
-    """سشن سایت کامل است؟ فقط JWT برای صفحهٔ لاگین‌شده کافی نیست."""
+    """سشن سایت کامل است؟ JWT به‌تنهایی صفحهٔ لاگین‌شده نمی‌سازد."""
     data = session_data(session_path)
-    if not data.get("token"):
-        return False
     names = _cookie_names(data)
-    if any(n in names for n in SITE_PROOF_NAMES):
-        return True
     headers = data.get("auth_headers") or {}
-    if any(headers.get(h) for h in SITE_PROOF_HEADERS):
-        return True
-    return False
+    has_refresh = any(n in names for n in SITE_PROOF_NAMES) or any(
+        headers.get(h) for h in SITE_PROOF_HEADERS)
+    if not has_refresh:
+        return False
+    return bool(data.get("token") or "sAccessToken" in names)
+
+
+STORAGE_TO_COOKIE = {
+    "sFrontToken": "sFrontToken",
+    "front-token": "sFrontToken",
+    "sAccessToken": "sAccessToken",
+    "st-access-token": "sAccessToken",
+    "sRefreshToken": "sRefreshToken",
+    "st-refresh-token": "sRefreshToken",
+    "token": "token",
+}
+
+
+def merge_storage_into_session(session_path: str, storage: Any,
+                               phone: str = "") -> int:
+    """localStorage مرورگر لاگین‌شده را به session.json می‌چسباند."""
+    if not isinstance(storage, dict):
+        return 0
+    extra: List[Dict[str, Any]] = []
+    headers: Dict[str, str] = {}
+    token = ""
+    n = 0
+    for k, v in storage.items():
+        if not isinstance(v, str) or not v.strip():
+            continue
+        mapped = STORAGE_TO_COOKIE.get(str(k))
+        if mapped:
+            extra.append(_rec(mapped, v.strip(),
+                              http_only=mapped not in (
+                                  "sFrontToken", "token")))
+            n += 1
+        lk = str(k).lower()
+        if lk in ("st-access-token", "front-token", "st-refresh-token"):
+            headers[lk] = v.strip()
+        if str(k) == "token":
+            token = v.strip()
+    if not extra and not headers and not token:
+        return 0
+    data = session_data(session_path)
+    merge_into_session_file(
+        session_path, phone or str(data.get("phone") or ""),
+        token or str(data.get("token") or ""),
+        {"cookies_full": extra, "auth_headers": headers})
+    return n
 
 
 def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:

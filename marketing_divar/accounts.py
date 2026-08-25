@@ -51,6 +51,17 @@ class AccountManager:
         from .auth_session import session_is_complete
         return session_is_complete(str(self.session_path(name)))
 
+    def set_site_verified(self, name: str, ok: bool, note: str = "") -> None:
+        st = self._load_states()
+        rec = st.get(name) or {}
+        rec["site_verified"] = bool(ok)
+        rec["site_verified_at"] = time.strftime("%Y-%m-%d %H:%M:%S") if ok else ""
+        if note:
+            rec["note"] = note
+        rec["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        st[name] = rec
+        self._save_states(st)
+
     def login_account(self, name: str) -> None:
         """لاگین تعاملی یک اکانت مشخص (شماره + کد پیامکی)."""
         from .client import DivarClient  # import داخلی برای جلوگیری از حلقه
@@ -172,6 +183,7 @@ class AccountManager:
                             "note": rec.get("note", ""),
                             "has_token": self.has_token(name),
                             "login_complete": full,
+                            "site_verified": bool(rec.get("site_verified")) and full,
                             "phones_today": account_quota_today(con, name),
                             "last_probe_at": rec.get("last_probe_at") or "",
                             "last_probe_state": rec.get("last_probe_state") or "",
