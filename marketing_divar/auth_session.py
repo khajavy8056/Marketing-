@@ -41,7 +41,22 @@ COOKIE_DOMAINS = (".divar.ir", "divar.ir", ".api.divar.ir", "api.divar.ir")
 
 
 def _http_only(name: str) -> bool:
-    return name not in ("sFrontToken", "token", "st-last-access-token-update", "did")
+    return name not in (
+        "sFrontToken", "token", "st-last-access-token-update", "did",
+        "front-token", "st-access-token", "st-refresh-token",
+    )
+
+
+def _decode_cookie_val(val: str) -> str:
+    """SuperTokens اغلب JWT را در Set-Cookie درصد-کد می‌کند."""
+    from urllib.parse import unquote
+    v = str(val or "").strip()
+    if not v or "%" not in v:
+        return v
+    try:
+        return unquote(v)
+    except Exception:
+        return v
 
 
 def _rec(name: str, value: str, domain: str = ".divar.ir",
@@ -70,15 +85,15 @@ def absorb_response(r: Any) -> Dict[str, Any]:
         if items and all(hasattr(c, "name") for c in items):
             for c in items:
                 cookies.append(_rec(
-                    c.name, getattr(c, "value", ""),
+                    c.name, _decode_cookie_val(getattr(c, "value", "")),
                     getattr(c, "domain", None) or ".divar.ir",
                     getattr(c, "path", None) or "/"))
         elif jar is not None and hasattr(jar, "items"):
             for k, v in jar.items():
-                cookies.append(_rec(str(k), str(v)))
+                cookies.append(_rec(str(k), _decode_cookie_val(str(v))))
         elif items and all(isinstance(c, str) for c in items) and hasattr(jar, "__getitem__"):
             for name in items:
-                cookies.append(_rec(str(name), str(jar[name])))
+                cookies.append(_rec(str(name), _decode_cookie_val(str(jar[name]))))
     except Exception:
         pass
     raw_headers = getattr(r, "headers", None)
@@ -134,7 +149,7 @@ def _parse_one_set_cookie(raw: str) -> Optional[Dict[str, Any]]:
         return None
     first, *rest = raw.split(";")
     name, _, val = first.partition("=")
-    name, val = name.strip(), val.strip()
+    name, val = name.strip(), _decode_cookie_val(val.strip())
     if not name:
         return None
     domain, path, http_only = ".divar.ir", "/", None
@@ -354,6 +369,14 @@ def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:
     if token:
         by_name.setdefault("token", token)
         by_name.setdefault("sAccessToken", token)
+    aliases = {
+        "sAccessToken": "st-access-token",
+        "sRefreshToken": "st-refresh-token",
+        "sFrontToken": "front-token",
+    }
+    for src, alias in aliases.items():
+        if src in by_name:
+            by_name.setdefault(alias, by_name[src])
     out: List[Dict[str, Any]] = []
     seen = set()
     for name, value in by_name.items():
@@ -379,15 +402,18 @@ def localstorage_script(session_path: str) -> str:
         token = str(data.get("token") or ck.get("sAccessToken") or "")
         front = str(ck.get("sFrontToken") or hd.get("front-token") or "")
         sat = str(ck.get("sAccessToken") or hd.get("st-access-token") or "")
+        srt = str(ck.get("sRefreshToken") or hd.get("st-refresh-token") or "")
     except Exception:
-        token = front = sat = ""
+        token = front = sat = srt = ""
     token_js, front_js, sat_js = json.dumps(token), json.dumps(front), json.dumps(sat)
+    srt_js = json.dumps(srt)
     return (
         "(function(){try{"
-        f"var t={token_js}, f={front_js}, a={sat_js};"
+        f"var t={token_js}, f={front_js}, a={sat_js}, r={srt_js};"
         "if(t){localStorage.setItem('token', t); sessionStorage.setItem('token', t);}"
         "if(f){localStorage.setItem('sFrontToken', f); localStorage.setItem('front-token', f);}"
-        "if(a){localStorage.setItem('sAccessToken', a);}"
+        "if(a){localStorage.setItem('sAccessToken', a); localStorage.setItem('st-access-token', a);}"
+        "if(r){localStorage.setItem('sRefreshToken', r); localStorage.setItem('st-refresh-token', r);}"
         "localStorage.setItem('st-last-access-token-update', String(Date.now()));"
         "}catch(e){}})();"
     )

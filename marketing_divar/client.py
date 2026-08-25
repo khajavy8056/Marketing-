@@ -218,6 +218,14 @@ def normalize_phone(raw: Any) -> Optional[str]:
     return t if t.isdigit() and len(t) == 11 else t
 
 
+def _phone_e164(phone: str) -> str:
+    """SuperTokens اغلب +98xxxxxxxxxx می‌خواهد."""
+    p = str(phone or "").strip()
+    if p.startswith("09") and len(p) == 11 and p.isdigit():
+        return "+98" + p[1:]
+    return p
+
+
 _HIDDEN_TITLES = ("مخفی", "شماره مخفی", "فقط چت", "از طریق چت")
 
 
@@ -632,17 +640,20 @@ class DivarClient:
     def _finish_login(self, phone: str, token: str = "") -> str:
         if token:
             self.token = token
+        sat = (_cookie_value(self.http.cookies, "sAccessToken")
+               or _cookie_value(self.http.cookies, "token") or "")
         if not self.token:
-            self.token = (_cookie_value(self.http.cookies, "sAccessToken")
-                          or _cookie_value(self.http.cookies, "token") or "")
+            self.token = sat
         self._save_session(phone)
-        if self.token:
-            try:
-                from .auth_session import ensure_site_cookies_from_token
+        try:
+            from .auth_session import (ensure_site_cookies_from_token,
+                                       looks_like_supertokens_jwt)
+            seed = sat if looks_like_supertokens_jwt(sat) else (self.token or sat)
+            if seed:
                 ensure_site_cookies_from_token(
-                    str(self.session_path), self.token, phone)
-            except Exception:
-                pass
+                    str(self.session_path), seed, phone)
+        except Exception:
+            pass
         self._clear_otp_pending()
         return self.token or ""
 
@@ -692,9 +703,10 @@ class DivarClient:
         if dev and pre:
             payloads.append({"userInputCode": str(code), "deviceId": dev,
                              "preAuthSessionId": pre})
-        else:
-            payloads.append({"userInputCode": str(code), "phoneNumber": str(phone)})
-            payloads.append({"code": str(code), "phoneNumber": str(phone)})
+        e164 = _phone_e164(phone)
+        for pn in (str(phone), e164):
+            payloads.append({"userInputCode": str(code), "phoneNumber": pn})
+            payloads.append({"code": str(code), "phoneNumber": pn})
         last_consume = None
         site_ok = False
         consume_api_tok = ""
@@ -706,6 +718,12 @@ class DivarClient:
             except requests.exceptions.RequestException:
                 last_consume = None
                 continue
+            body_st = _safe_json(last_consume)
+            st = body_st.get("status") if isinstance(body_st, dict) else ""
+            if st in ("INCORRECT_USER_INPUT_CODE_ERROR",
+                      "EXPIRED_USER_INPUT_CODE_ERROR",
+                      "RESTART_FLOW_ERROR"):
+                break
             if not self._st_consume_ok(last_consume):
                 continue
             self._apply_login_body(last_consume)

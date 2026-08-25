@@ -330,6 +330,89 @@ class TestPersistAndInject(unittest.TestCase):
         self.assertLess(calls.index("Page.addScriptToEvaluateOnNewDocument"),
                         calls.index("Page.navigate"))
 
+    def test_urlencoded_set_cookie_decoded(self):
+        class R:
+            cookies = []
+            headers = _Hdr({"Set-Cookie-list": [
+                "sAccessToken=eyJ.abc%2Bdef%3D; Domain=.divar.ir; Path=/; HttpOnly",
+            ]})
+        bag = absorb_response(R())
+        names = {c["name"]: c["value"] for c in bag["cookies_full"]}
+        self.assertEqual(names["sAccessToken"], "eyJ.abc+def=")
+
+    def test_browser_cookies_include_header_mode_aliases(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        merge_into_session_file(p, "09120000000", "TOK", {
+            "cookies_full": [
+                {"name": "sFrontToken", "value": "F",
+                 "domain": ".divar.ir", "path": "/"},
+                {"name": "sAccessToken", "value": "SAT",
+                 "domain": ".divar.ir", "path": "/"},
+                {"name": "sRefreshToken", "value": "REF",
+                 "domain": ".divar.ir", "path": "/"},
+            ],
+            "auth_headers": {},
+        })
+        names = {c["name"] for c in cookies_for_browser(p)}
+        self.assertIn("st-access-token", names)
+        self.assertIn("st-refresh-token", names)
+        self.assertIn("front-token", names)
+        script = localstorage_script(p)
+        self.assertIn("st-access-token", script)
+        self.assertIn("st-refresh-token", script)
+
+    def test_consume_fallback_after_deviceid_400(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        c = DivarClient(session_path=p)
+        seen = []
+
+        class Fake:
+            name = "fake"
+
+            def request(self, method, url, **kw):
+                body = kw.get("json") or {}
+                seen.append(body)
+                class R:
+                    cookies = []
+                    headers = {}
+
+                    def __init__(self):
+                        if url.endswith("/consume") and body.get("deviceId"):
+                            self.status_code = 400
+                            self.text = '{"error":"bad"}'
+                        elif url.endswith("/consume"):
+                            self.status_code = 200
+                            self.text = '{"status":"OK"}'
+                            self.headers = {
+                                "st-access-token": "SAT-FB",
+                                "front-token": "FRONT-FB",
+                                "st-refresh-token": "REF-FB",
+                            }
+                        else:
+                            self.status_code = 200
+                            self.text = '{"token":"V5-FB"}'
+
+                    def json(self):
+                        if self.status_code != 200:
+                            return {"error": "bad"}
+                        if url.endswith("/consume"):
+                            return {"status": "OK"}
+                        return {"token": "V5-FB"}
+                return R()
+
+        c._custom_transports = [Fake()]
+        c._save_otp_pending("09124445555", {
+            "deviceId": "DEV-BAD", "preAuthSessionId": "PRE-BAD"})
+        tok = c.confirm_otp("09124445555", "444444")
+        self.assertEqual(tok, "V5-FB")
+        self.assertTrue(any(x.get("deviceId") == "DEV-BAD" for x in seen))
+        self.assertTrue(any(x.get("phoneNumber") == "09124445555" for x in seen))
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        self.assertEqual(data["cookies"].get("sAccessToken"), "SAT-FB")
+        self.assertEqual(data["cookies"].get("sFrontToken"), "FRONT-FB")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
