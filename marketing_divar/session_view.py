@@ -242,6 +242,11 @@ def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
             sock.sendall(req.encode("ascii"))
             sock.settimeout(timeout)
             buf = b""
+            # پاسخ DevTools مانند /json/list بدنهٔ JSON دارد. قبلاً به‌محض
+            # رسیدنِ header از حلقه خارج می‌شدیم؛ در اتصال‌های معمول TCP، header
+            # و body جدا می‌رسند و نتیجهٔ آن JSON خالی و شکست تصادفی بازشدن
+            # مرورگر بود. بعد از header تا Content-Length کامل بخوان.
+            expected = None
             while True:
                 try:
                     chunk = sock.recv(65536)
@@ -250,8 +255,24 @@ def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
                 if not chunk:
                     break
                 buf += chunk
-                if b"\r\n\r\n" in buf or len(buf) > 2_000_000:
+                if len(buf) > 2_000_000:
                     break
+                if b"\r\n\r\n" not in buf:
+                    continue
+                head, body = buf.split(b"\r\n\r\n", 1)
+                if expected is None:
+                    expected = 0
+                    for line in head.split(b"\r\n")[1:]:
+                        if line.lower().startswith(b"content-length:"):
+                            try:
+                                expected = int(line.split(b":", 1)[1].strip())
+                            except (ValueError, IndexError):
+                                expected = 0
+                            break
+                if expected and len(body) >= expected:
+                    break
+                # DevTools پاسخ‌های chunked هم ممکن است بدهد. در آن حالت تا
+                # بسته‌شدن اتصال می‌خوانیم، نه این‌که تنها header را برگردانیم.
         except OSError as e:
             last = str(e)
             time.sleep(0.15)
