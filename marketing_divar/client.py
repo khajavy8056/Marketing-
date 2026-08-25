@@ -32,10 +32,12 @@ from .logging_util import log as _log
 class _UrllibResp:
     """پاسخ urllib را شبیه requests.Response می‌کند (status_code/json/text)."""
 
-    def __init__(self, code: int, body: bytes):
+    def __init__(self, code: int, body: bytes, headers=None):
         self.status_code = code
         self._body = body
         self.text = body.decode("utf-8", errors="replace")
+        self.headers = headers or {}
+        self.cookies = []
 
     def json(self):
         return json.loads(self._body or b"{}")
@@ -76,15 +78,21 @@ class _RequestsDirectTransport(_Transport):
         if self._sess is None:
             self._sess = requests.Session()
             self._sess.trust_env = False
-            self._sess.headers.update(self.c.http.headers)
-            for ck in self.c.http.cookies:
-                self._sess.cookies.set(ck.name, ck.value)
+        self._sess.headers.update(self.c.http.headers)
+        for ck in self.c.http.cookies:
+            self._sess.cookies.set(ck.name, ck.value)
         return self._sess
 
     def request(self, method, url, **kw):
         sess = self._session()
         fn = sess.get if method.upper() == "GET" else sess.post
-        return fn(url, **kw)
+        r = fn(url, **kw)
+        try:
+            for ck in sess.cookies:
+                self.c.http.cookies.set(ck.name, ck.value)
+        except Exception:
+            pass
+        return r
 
 
 class _HttpxDirectTransport(_Transport):
@@ -123,6 +131,7 @@ class _UrllibDirectTransport(_Transport):
         self.c = client
 
     def request(self, method, url, **kw):
+        import urllib.error
         import urllib.request
         import urllib.parse
         if kw.get("params"):
@@ -144,9 +153,9 @@ class _UrllibDirectTransport(_Transport):
             urllib.request.ProxyHandler({}))  # بدون پروکسی
         try:
             with opener.open(req, timeout=kw.get("timeout", 25)) as resp:
-                return _UrllibResp(resp.status, resp.read())
+                return _UrllibResp(resp.status, resp.read(), resp.headers)
         except urllib.error.HTTPError as e:
-            return _UrllibResp(e.code, e.read() or b"")
+            return _UrllibResp(e.code, e.read() or b"", getattr(e, "headers", None))
 
 
 def default_base() -> str:
@@ -388,6 +397,7 @@ class DivarClient:
             try:
                 r = tr.request(method, url, **kw)
                 self._winner = tr.name
+                self._absorb_auth(r)
                 ms = int((time.time() - t0) * 1000)
                 _log("info", f"⇄ {method} {url.split('?')[0][-60:]} → "
                              f"HTTP {r.status_code} ({ms}ms؛ مسیر: {tr.name})")
@@ -402,32 +412,48 @@ class DivarClient:
         raise last_err
 
     # ------------------------------------------------------------- session --
+    def _absorb_auth(self, r) -> None:
+        """کوکی و هدر SuperTokens پاسخ را در سشن HTTP همین اکانت نگه می‌دارد."""
+        from .auth_session import absorb_response
+        bag = absorb_response(r)
+        prev = getattr(self, "_last_absorbed", None) or {}
+        merged_full = list(prev.get("cookies_full") or []) + list(bag.get("cookies_full") or [])
+        merged_hdr = dict(prev.get("auth_headers") or {})
+        merged_hdr.update(bag.get("auth_headers") or {})
+        self._last_absorbed = {"cookies_full": merged_full, "auth_headers": merged_hdr}
+        for c in bag.get("cookies_full") or []:
+            try:
+                self.http.cookies.set(c["name"], c["value"])
+            except Exception:
+                pass
+
     def _load_session(self) -> None:
         if self.session_path.exists():
             try:
                 data = json.loads(self.session_path.read_text(encoding="utf-8"))
                 self.token = data.get("token")
-                # بازیابی کوکی‌های سشن (برای فلوی v8 که کوکی‌محور است)
                 for k, v in (data.get("cookies") or {}).items():
                     self.http.cookies.set(k, v)
+                for c in data.get("cookies_full") or []:
+                    if isinstance(c, dict) and c.get("name"):
+                        self.http.cookies.set(c["name"], c.get("value") or "")
             except Exception:
                 self.token = None
 
     def _save_session(self, phone: str) -> None:
-        self.session_path.parent.mkdir(parents=True, exist_ok=True)
+        from .auth_session import absorb_response, merge_into_session_file
+        extra = dict(getattr(self, "_last_absorbed", None) or {})
         try:
-            cookies = {c.name: c.value for c in self.http.cookies}
+            extra_http = absorb_response(type("R", (), {
+                "cookies": self.http.cookies, "headers": {}})())
+            extra = {
+                "cookies_full": list(extra.get("cookies_full") or [])
+                + list(extra_http.get("cookies_full") or []),
+                "auth_headers": dict(extra.get("auth_headers") or {}),
+            }
         except Exception:
-            cookies = {}
-        self.session_path.write_text(
-            json.dumps({"phone": phone, "token": self.token, "cookies": cookies,
-                        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
-                       ensure_ascii=False, indent=2),
-            encoding="utf-8")
-        try:  # فایل حاوی توکن دسترسی است
-            os.chmod(self.session_path, 0o600)
-        except OSError:
             pass
+        merge_into_session_file(str(self.session_path), phone, self.token or "", extra)
 
     def is_logged_in(self) -> bool:
         return bool(self.token)

@@ -456,9 +456,9 @@
 <dialog id="cap-dlg" style="width:min(920px,96vw)">
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="cap-live">پازل را <b>همین‌جا روی همین صفحه</b> حل کنید.
-    صفحهٔ همان آگهی مسدود باز می‌شود — «نمایش شماره» را بزنید.
-    لاگین پاک نمی‌شود. پروفایل همین اکانت می‌ماند؛ کوکی حل‌شده برمی‌گردد به برنامه.</div>
+  <div class="warn-box" id="cap-live">صفحه با <b>همین اکانت لاگین‌شده</b> باز می‌شود.
+    پازل را خودتان حل کنید (حل خودکار نداریم) — «نمایش شماره» را بزنید.
+    بعد «کپچا حل شد» را بزنید تا برنامه دوباره امتحان کند.</div>
   <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
   <div id="cap-stage">
     <img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0">
@@ -469,6 +469,7 @@
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
     <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">نمایش پازل همین‌جا</button>
+    <button class="btn ok" type="button" onclick="capProbe()">کپچا حل شد</button>
     <button class="btn gray" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
     <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>

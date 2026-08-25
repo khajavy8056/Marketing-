@@ -27,10 +27,8 @@ def persistent_profile_dir(session_path: str) -> Path:
 
 
 def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> int:
-    """کوکی‌های حل‌شدهٔ دیوار را از مرورگر به session.json برمی‌گرداند.
-
-    پروفایل موقت بی‌فایده بود چون پاسخ پازل هرگز به کلاینت HTTP نمی‌رسید.
-    """
+    """کوکی‌های حل‌شدهٔ دیوار را از مرورگر به session.json برمی‌گرداند."""
+    from .auth_session import merge_into_session_file
     p = Path(session_path)
     data: Dict[str, Any] = {}
     if p.exists():
@@ -40,9 +38,7 @@ def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> i
             data = {}
     if not isinstance(data, dict):
         data = {}
-    jar = data.get("cookies") or {}
-    if not isinstance(jar, dict):
-        jar = {}
+    full: List[Dict[str, Any]] = []
     n = 0
     for ck in cookies or []:
         if not isinstance(ck, dict):
@@ -54,14 +50,20 @@ def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> i
             continue
         if domain and "divar.ir" not in domain.lower():
             continue
-        jar[name] = str(val)
+        full.append({
+            "name": name, "value": str(val),
+            "domain": domain or ".divar.ir",
+            "path": ck.get("path") or "/",
+            "secure": True,
+            "httpOnly": bool(ck.get("httpOnly", True)),
+        })
         n += 1
-    data["cookies"] = jar
-    if not data.get("token"):
-        data["token"] = jar.get("sAccessToken") or jar.get("token") or ""
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                 encoding="utf-8")
+    merge_into_session_file(
+        session_path,
+        str(data.get("phone") or ""),
+        str(data.get("token") or ""),
+        {"cookies_full": full},
+    )
     return n
 
 
@@ -76,34 +78,9 @@ def _cleanup_old_temp_profiles(session_path: str) -> None:
 
 
 def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
-    """کوکی‌هایی که باید روی divar.ir ست شوند تا همان لاگین برنامه باشد."""
-    p = Path(session_path)
-    if not p.exists():
-        return []
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    token = str(data.get("token") or "")
-    raw = data.get("cookies") or {}
-    if not isinstance(raw, dict):
-        raw = {}
-    names_seen = set()
-    out: List[Dict[str, Any]] = []
-
-    def add(name: str, value: str) -> None:
-        if not name or value is None or name in names_seen:
-            return
-        names_seen.add(name)
-        out.append({"name": str(name), "value": str(value),
-                    "domain": ".divar.ir", "path": "/", "secure": True})
-
-    for k, v in raw.items():
-        add(str(k), str(v))
-    if token:
-        add("token", token)
-        add("sAccessToken", token)
-    return out
+    """کوکی‌هایی که باید روی divar.ir و api.divar.ir ست شوند تا سایت لاگین باشد."""
+    from .auth_session import cookies_for_browser
+    return cookies_for_browser(session_path)
 
 
 def find_browsers() -> List[str]:
@@ -197,19 +174,24 @@ def _ws_send(sock: socket.socket, text: str) -> None:
 
 
 def _cdp_set_cookies(ws_url: str, cookies: List[Dict[str, Any]],
-                     start_url: str) -> None:
+                     start_url: str, session_path: str = "") -> None:
     sock = _ws_connect(ws_url)
     try:
         i = 1
         _ws_send(sock, json.dumps({"id": i, "method": "Network.enable"}))
-        for ck in cookies:
+        i += 1
+        _ws_send(sock, json.dumps({"id": i, "method": "Page.enable"}))
+        from .auth_session import cdp_cookie_params, localstorage_script
+        if session_path:
             i += 1
-            params = {"name": ck["name"], "value": ck["value"],
-                      "domain": ck.get("domain") or ".divar.ir",
-                      "path": ck.get("path") or "/",
-                      "secure": True, "httpOnly": ck["name"] != "sFrontToken"}
-            _ws_send(sock, json.dumps({"id": i, "method": "Network.setCookie",
-                                       "params": params}))
+            _ws_send(sock, json.dumps({
+                "id": i, "method": "Page.addScriptToEvaluateOnNewDocument",
+                "params": {"source": localstorage_script(session_path)}}))
+        for ck in cookies:
+            for params in cdp_cookie_params(ck):
+                i += 1
+                _ws_send(sock, json.dumps({"id": i, "method": "Network.setCookie",
+                                           "params": params}))
         i += 1
         _ws_send(sock, json.dumps({
             "id": i, "method": "Page.navigate",
@@ -440,7 +422,7 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ws = _wait_cdp(port, tries=100, profile=profile, proc=proc)
-    _cdp_set_cookies(ws, cookies, start_url)
+    _cdp_set_cookies(ws, cookies, start_url, session_path)
     return f"opened {browser} as session {Path(session_path).parent.name}"
 
 
@@ -577,24 +559,7 @@ class PuzzleLive:
                 continue
             self.cdp = CdpClient(ws)
             try:
-                self.cdp.call("Network.enable")
-                self.cdp.call("Page.enable")
-                try:
-                    self.cdp.call("Runtime.enable")
-                except Exception:
-                    pass
-                for ck in cookies:
-                    try:
-                        self.cdp.call("Network.setCookie", {
-                            "name": ck["name"], "value": ck["value"],
-                            "domain": ck.get("domain") or ".divar.ir",
-                            "path": ck.get("path") or "/",
-                            "secure": True,
-                            "httpOnly": ck["name"] != "sFrontToken",
-                        })
-                    except Exception:
-                        pass
-                self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
+                self._inject_login_then_open(cookies, start_url)
                 self._wait_ready()
                 self._nudge_window()
             except Exception as e:
@@ -613,6 +578,39 @@ class PuzzleLive:
             "خاموش کنید، Edge/Chrome را ببندید و دوباره «نمایش پازل» را بزنید"
             + (f" — {last}" if last else "")
         )
+
+    def _inject_login_then_open(self, cookies: List[Dict[str, Any]],
+                                start_url: str) -> None:
+        """اول کوکی/localStorage، بعد Navigate — تا دیوار از اول لاگین باشد."""
+        from .auth_session import cdp_cookie_params, localstorage_script
+        if not self.cdp:
+            return
+        self.cdp.call("Network.enable")
+        self.cdp.call("Page.enable")
+        try:
+            self.cdp.call("Runtime.enable")
+        except Exception:
+            pass
+        try:
+            self.cdp.call("Page.addScriptToEvaluateOnNewDocument", {
+                "source": localstorage_script(self.session_path),
+            })
+        except Exception:
+            pass
+        for ck in cookies:
+            for params in cdp_cookie_params(ck):
+                try:
+                    self.cdp.call("Network.setCookie", params)
+                except Exception:
+                    try:
+                        self.cdp.call("Network.setCookie", {
+                            "name": params["name"], "value": params["value"],
+                            "url": params.get("url") or "https://divar.ir/",
+                            "path": "/", "secure": True,
+                        })
+                    except Exception:
+                        pass
+        self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
 
     def _wait_ready(self) -> None:
         if not self.cdp:

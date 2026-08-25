@@ -28,11 +28,16 @@ class TestCookiesFromSession(unittest.TestCase):
             json.dump({"token": "TOK123",
                        "cookies": {"sAccessToken": "SAT", "sFrontToken": "SFT"}}, f)
         cks = cookies_from_session(p)
-        by = {c["name"]: c["value"] for c in cks}
+        by = {}
+        for c in cks:
+            by.setdefault(c["name"], c["value"])
         self.assertEqual(by["sAccessToken"], "SAT")
         self.assertEqual(by["sFrontToken"], "SFT")
         self.assertEqual(by["token"], "TOK123")
-        self.assertTrue(all(c["domain"] == ".divar.ir" for c in cks))
+        self.assertTrue(any(c.get("domain") == ".divar.ir" for c in cks))
+        self.assertTrue(any("api.divar.ir" in str(c.get("domain") or "")
+                            or "api.divar.ir" in " ".join(c.get("urls") or [])
+                            for c in cks))
 
     def test_token_only_sets_access_cookie(self):
         d = tempfile.mkdtemp()
