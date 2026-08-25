@@ -197,28 +197,31 @@
 <!-- ═══════════════════════ اکانت‌ها ═══════════════════════ -->
 <section id="tab-accounts" class="tab">
   <div class="card">
-    <h3>افزودن اکانت جدید (لاگین با کد پیامکی)</h3>
-    <div class="warn-box">📱 برای هر اکانت یک <b>شماره موبایل واقعی</b> لازم است
-      (دیوار شماره مجازی نمی‌پذیرد). نام اکانت دلخواه است مثل ac1.
-      <br>گام ۱–۲ کد پیامک توکن API می‌دهد. بعد دکمهٔ <b>جمع‌آوری سشن سایت</b>
-      صفحهٔ لاگین دیوار را باز می‌کند تا کوکی واقعی همان اکانت ذخیره شود.</div>
+    <h3>افزودن پروفایل Chromium (لاگین واقعی دیوار)</h3>
+    <div class="warn-box">برای هر اکانت یک <b>پروفایل جدا</b> ساخته می‌شود
+      (<code dir="ltr">accounts/نام/chromium</code>). Chromium باز می‌شود روی
+      <b dir="ltr">divar.ir/s/tehran</b>. شما همان‌جا لاگین می‌کنید، بعد
+      <b>ذخیره پروفایل</b> را می‌زنید. دفعهٔ بعد همان پروفایل لاگین‌شده باز می‌شود —
+      کوکی تزریق نمی‌شود.</div>
     <div class="grid g2">
       <div>
-        <div class="lbl">نام اکانت (انگلیسی)</div>
-        <input id="acc-name" placeholder="مثلاً ac1" dir="ltr">
-        <div class="lbl">شماره موبایل</div>
+        <div class="lbl">نام اکانت</div>
+        <input id="acc-name" placeholder="مثلاً محمد تهران 01">
+        <div class="lbl">شماره موبایل (اختیاری — برای توکن API شماره‌گیری)</div>
         <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11">
         <div class="row" style="margin-top:12px">
-          <button class="btn" onclick="sendOtp()">۱) ارسال کد تایید</button>
+          <button class="btn ok" onclick="createProfile()">افزودن پروفایل + باز کردن تهران</button>
         </div>
+        <div class="hint" id="otp-hint" style="margin-top:10px">بعد از لاگین در Chromium، روی کارت «ذخیره پروفایل» را بزنید.</div>
       </div>
       <div>
-        <div class="lbl">کد ۶ رقمی پیامک‌شده</div>
+        <div class="lbl">توکن API (اختیاری) — کد پیامک دیوار</div>
         <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6">
         <div class="row" style="margin-top:12px">
-          <button class="btn ok" onclick="confirmOtp()">۲) تأیید و لاگین</button>
+          <button class="btn gray" onclick="sendOtp()">ارسال کد API</button>
+          <button class="btn gray" onclick="confirmOtp()">تأیید کد API</button>
         </div>
-        <div class="hint" id="otp-hint" style="margin-top:10px">اول گام ۱ را بزنید…</div>
+        <div class="hint">شماره‌گیری آگهی به JWT نیاز دارد؛ صفحهٔ لاگین‌شده از پروفایل Chromium می‌آید.</div>
       </div>
     </div>
   </div>
@@ -721,32 +724,72 @@ async function accRefresh(){
   try{ const s = await api('/api/accounts');
     $('accounts-list').innerHTML = s.accounts.length ? s.accounts.map(a=>{
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
-      const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
-      const siteTag = a.site_verified
-        ? '<span class="tag ok">تأییدشده · سشن سایت</span>'
-        : '<span class="tag warn">نیاز به سشن سایت</span>';
+      const ready = !!a.profile_ready;
+      const siteTag = ready
+        ? '<span class="tag ok">پروفایل ذخیره شده</span>'
+        : '<span class="tag warn">Login Required</span>';
+      const saved = a.profile_saved_at ? ('آخرین ذخیره: '+esc(a.profile_saved_at)) : '';
       const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
           <b>کپچای انسانی — خودتان حل کنید</b><br>
-          پازل را داخل همین پنل، کنار دکمه حل کنید — پنجرهٔ جدا لازم نیست.<br>
+          «باز کردن دیوار» همین پروفایل لاگین‌شده را می‌آورد.<br>
           <div class="row" style="margin-top:8px">
-            <button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>
+            <button class="btn sm" type="button" onclick="openDivar('${a.name}')">باز کردن دیوار</button>
             <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
           </div>
         </div>` : '';
-      return `<div class="acc"><div class="row">
-          <span>${ic}</span><b style="font-size:15px">${esc(a.name)}</b>
-          <span class="tag ${m}">${esc(a.status)}</span>
-          ${siteTag}
-          <span class="hint">شماره‌های امروز: ${a.phones_today}</span>
-          ${a.note?`<span class="hint">${esc(a.note).slice(0,50)}</span>`:''}
+      return `<div class="acc"><div>
+          <div class="row">
+            <b style="font-size:15px">${esc(a.name)}</b>
+            <span class="tag ${m}">${esc(a.status)}</span>
+            ${siteTag}
+            ${a.profile_open?'<span class="tag ok">پنجره باز</span>':''}
+          </div>
+          <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره پروفایل')}
+            ${a.phones_today?(' · شماره‌های امروز: '+a.phones_today):''}</div>
         </div><div class="row">
-          ${a.has_token?`<button class="btn sm" type="button" onclick="collectSite('${a.name}')">🍪 جمع‌آوری سشن سایت</button>`:''}
-          ${a.site_verified?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>`:''}
-          ${a.status!=='active'?`<button class="btn sm ok" onclick="accAction('${a.name}','release')">🔄 آزادسازی</button>`:''}
+          ${ready?'':`<button class="btn sm ok" type="button" onclick="saveProfile('${a.name}')">💾 ذخیره پروفایل</button>`}
+          <button class="btn sm" type="button" onclick="openDivar('${a.name}')">🌐 باز کردن دیوار</button>
+          <button class="btn sm gray" type="button" onclick="updateProfile('${a.name}')">🔄 به‌روزرسانی Session</button>
+          ${ready?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>`:''}
+          <button class="btn sm err" type="button" onclick="deleteProfile('${a.name}')">🗑 حذف پروفایل</button>
           ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
           ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
-        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز اکانتی نیست. با کد پیامک لاگین کنید، بعد سشن سایت را از مرورگر جمع کنید.</div>';
+        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز پروفایلی نیست. نام بگذارید و «افزودن پروفایل» را بزنید.</div>';
   }catch(e){}
+}
+async function createProfile(){
+  const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
+  if(!name){ toast('نام اکانت را وارد کنید',false); return; }
+  try{
+    const r = await api('/api/accounts/profile/create',{method:'POST',body:JSON.stringify({name,phone})});
+    toast(r.message||'Chromium باز شد'); $('otp-hint').textContent='در پنجره لاگین کنید، بعد ذخیره پروفایل';
+    accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function saveProfile(name){
+  try{
+    const r = await api('/api/accounts/profile/save',{method:'POST',body:JSON.stringify({name})});
+    toast(r.message||'ذخیره شد', !!r.ok); accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function openDivar(name){
+  try{
+    const r = await api('/api/accounts/profile/open',{method:'POST',body:JSON.stringify({name})});
+    toast(r.message||'دیوار باز شد');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function updateProfile(name){
+  try{
+    const r = await api('/api/accounts/profile/update',{method:'POST',body:JSON.stringify({name})});
+    toast(r.message||'به‌روزرسانی شد', r.ok!==false); accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function deleteProfile(name){
+  if(!confirm('پروفایل «'+name+'» حذف شود؟')) return;
+  try{
+    const r = await api('/api/accounts/profile/delete',{method:'POST',body:JSON.stringify({name})});
+    toast(r.message||'حذف شد'); accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 async function collectSite(name){
   try{
@@ -1148,7 +1191,7 @@ const FA_EN = {
   "اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛":"if one account hits a captcha the rest keep working and you get notified;",
   "در تب اکانت‌ها دکمه «آزادسازی» را بزنید.":"then press Release in the Accounts tab.",
   "اکانت‌ها":"Accounts","رخدادهای زنده":"Live events",
-  "افزودن اکانت جدید (لاگین با کد پیامکی)":"Add new account (OTP login)",
+  "افزودن اکانت جدید (لاگین با کد پیامکی)":"Add new account (OTP login)","افزودن پروفایل Chromium (لاگین واقعی دیوار)":"Add Chromium profile (real Divar login)","افزودن پروفایل + باز کردن تهران":"Add profile + open Tehran","ذخیره پروفایل":"Save profile","باز کردن دیوار":"Open Divar","پروفایل ذخیره شده":"Profile saved","حذف پروفایل":"Delete profile",
   "برای هر اکانت یک":"Each account needs a","شماره موبایل واقعی":"real mobile number",
   "لازم است":" ","دیوار شماره مجازی نمی‌پذیرد)":"Divar does not accept virtual numbers).",
   "نام اکانت (انگلیسی)":"Account name (English)","شماره موبایل":"Mobile number",

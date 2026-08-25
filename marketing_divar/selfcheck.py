@@ -17,6 +17,7 @@ CHECKS = [
     ("monitor module", lambda: __import__("marketing_divar.monitor")),
     ("database module", lambda: __import__("marketing_divar.db")),
     ("web panel module", lambda: __import__("marketing_divar.web.server")),
+    ("playwright library", lambda: __import__("playwright")),
 ]
 
 
@@ -31,7 +32,8 @@ def _check_windows_installer() -> None:
         raise FileNotFoundError("installer.ps1 must be UTF-8 with BOM")
     for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
                    "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
-                   "DivarMarketing", "divar-marketing-install.log"):
+                   "DivarMarketing", "divar-marketing-install.log",
+                   "playwright install chromium"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -68,6 +70,8 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("iframe of divar.ir must not be used")
     if "openPuzzle" not in html or "/api/accounts/open-puzzle" not in html:
         raise FileNotFoundError("logged-in puzzle window missing from panel")
+    if "createProfile" not in html or "/api/accounts/profile/create" not in html:
+        raise FileNotFoundError("Chromium profile buttons missing from panel")
     logo = Path(__file__).parent / "web" / "static" / "logo.png"
     if not logo.exists() or logo.stat().st_size < 1000:
         raise FileNotFoundError("app logo missing")

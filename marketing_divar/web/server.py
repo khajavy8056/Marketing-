@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.12")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.13")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -180,6 +180,88 @@ class AccountCollect(BaseModel):
     name: str
 
 
+class ProfileReq(BaseModel):
+    name: str
+    phone: str = ""
+
+
+def _profile_name(raw: str) -> str:
+    from ..chromium_profile import safe_name
+    try:
+        return safe_name(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/accounts/profile/create")
+def accounts_profile_create(req: ProfileReq):
+    """پوشهٔ chromium جدا + باز کردن همیشه تهران."""
+    from ..chromium_profile import create_and_open
+    name = _profile_name(req.name)
+    phone = (req.phone or "").strip()
+    if phone and not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
+        raise HTTPException(400, "شماره باید ۱۱ رقم و با ۰۹ شروع شود (یا خالی بماند)")
+    try:
+        res = create_and_open(ACCOUNTS_DIR, name, phone)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    mgr().set_status(name, "active", note="پروفایل ساخته شد — لاگین دیوار در Chromium")
+    log("info", f"پروفایل Chromium «{name}» ساخته شد و تهران باز شد")
+    return res
+
+
+@app.post("/api/accounts/profile/save")
+def accounts_profile_save(req: ProfileReq):
+    from ..chromium_profile import save_profile
+    name = _profile_name(req.name)
+    try:
+        res = save_profile(ACCOUNTS_DIR, name)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    if res.get("ready"):
+        mgr().set_site_verified(name, True, note="پروفایل Chromium ذخیره شد")
+        mgr().set_status(name, "active", note="پروفایل آماده")
+        log("success", f"پروفایل «{name}» ذخیره شد")
+    else:
+        mgr().set_site_verified(name, False)
+        log("warning", f"ذخیره پروفایل «{name}»: لاگین دیده نشد")
+    return res
+
+
+@app.post("/api/accounts/profile/open")
+def accounts_profile_open(req: ProfileReq):
+    from ..chromium_profile import HOME_URL, open_profile
+    name = _profile_name(req.name)
+    try:
+        res = open_profile(ACCOUNTS_DIR, name, HOME_URL)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    log("info", f"پروفایل Chromium «{name}» روی تهران باز شد")
+    return res
+
+
+@app.post("/api/accounts/profile/update")
+def accounts_profile_update(req: ProfileReq):
+    from ..chromium_profile import update_profile
+    name = _profile_name(req.name)
+    try:
+        res = update_profile(ACCOUNTS_DIR, name)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    if res.get("ready"):
+        mgr().set_site_verified(name, True, note="پروفایل به‌روز شد")
+        log("success", f"پروفایل «{name}» به‌روز شد")
+    return res
+
+
+@app.post("/api/accounts/profile/delete")
+def accounts_profile_delete(req: ProfileReq):
+    name = _profile_name(req.name)
+    mgr().delete_account(name)
+    log("info", f"پروفایل «{name}» حذف شد")
+    return {"ok": True, "message": f"پروفایل «{name}» حذف شد"}
+
+
 @app.post("/api/accounts/collect-site")
 def accounts_collect_site(req: AccountCollect):
     """گام ۳: صفحهٔ لاگین دیوار در مرورگر — کاربر وارد می‌شود، کوکی‌ها ذخیره می‌شوند."""
@@ -252,8 +334,8 @@ def _do_unlock(name: str, reason: str = "operator") -> Dict[str, Any]:
 @app.post("/api/accounts/action")
 def accounts_action(req: AccountAction):
     m = mgr()
-    if not m.has_token(req.name):
-        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    if req.name not in m.list_accounts() and not m.has_token(req.name):
+        raise HTTPException(404, "چنین اکانتی نیست")
     if req.action == "release":
         res = _do_unlock(req.name, "آزادسازی پنل")
         return {"ok": True, **res,
@@ -296,9 +378,27 @@ def accounts_open_puzzle(req: AccountPuzzle):
     """پازل همان اکانت را داخل پاپ‌آپ پنل باز می‌کند (نه iframe، نه تب مهمان)."""
     m = mgr()
     if not m.has_full_login(req.name):
-        raise HTTPException(404, "سشن کامل این اکانت نیست — دوباره با کد پیامک لاگین کنید")
+        raise HTTPException(404, "سشن کامل این اکانت نیست — پروفایل Chromium را ذخیره کنید")
+    from ..chromium_profile import HOME_URL, open_profile, profile_ready
+    start_url = HOME_URL
+    try:
+        rec = next((a for a in m.snapshot(DB_PATH) if a.get("name") == req.name), {})
+        if rec.get("last_ad_url"):
+            start_url = rec.get("last_ad_url")
+        elif rec.get("last_ad_token"):
+            start_url = f"https://divar.ir/v/{rec['last_ad_token']}"
+    except Exception:
+        pass
+    if profile_ready(ACCOUNTS_DIR, req.name):
+        try:
+            res = open_profile(ACCOUNTS_DIR, req.name, start_url)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+        log("info", f"پازل/دیوار با پروفایل Chromium «{req.name}» باز شد")
+        return {"ok": True, "embed": False, "fallback": True, "url": start_url,
+                "message": (res.get("message") or "پنجرهٔ همین اکانت باز شد")
+                + " — همان پروفایل لاگین‌شده است."}
     from ..session_view import PuzzleLive
-    start_url = "https://divar.ir"
     try:
         rec = next((a for a in m.snapshot(DB_PATH) if a.get("name") == req.name), {})
         start_url = rec.get("last_ad_url") or start_url

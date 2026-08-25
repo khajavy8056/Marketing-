@@ -110,7 +110,16 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     }
 
+    L "Installing Chromium (playwright install chromium) ..."
+
+    & $venvPy -m playwright install chromium
+
+    if ($LASTEXITCODE -ne 0) { throw "playwright install chromium failed" }
+
+
+
     L "Health check (main.py --check) ..."
+
     & $venvPy "main.py" "--check"
     if ($LASTEXITCODE -ne 0) { throw "health check failed" }
 

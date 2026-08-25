@@ -75,6 +75,9 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="openPuzzle"', r.text)
         self.assertIn("/api/accounts/open-puzzle", r.text)
         self.assertIn("/api/accounts/collect-site", r.text)
+        self.assertIn("/api/accounts/profile/create", r.text)
+        self.assertIn("createProfile", r.text)
+        self.assertIn("divar.ir/s/tehran", r.text)
         self.assertIn("collectSite", r.text)
         self.assertIn("/api/accounts/puzzle-frame", r.text)
         self.assertIn("/api/accounts/close-puzzle", r.text)
@@ -212,6 +215,32 @@ class TestAccountFlow(unittest.TestCase):
         r = client.post("/api/accounts/close-puzzle")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json().get("ok"))
+
+    def test_05_profile_create_save_delete_mocked(self):
+        from unittest import mock
+        from marketing_divar.chromium_profile import HOME_URL
+        fake = {"ok": True, "name": "prof-one", "url": HOME_URL,
+                "message": "opened"}
+        with mock.patch("marketing_divar.chromium_profile.open_profile",
+                        return_value=fake):
+            r = client.post("/api/accounts/profile/create",
+                            json={"name": "prof one", "phone": "09120001111"})
+        self.assertEqual(r.status_code, 200, r.text)
+        names = [a["name"] for a in client.get("/api/accounts").json()["accounts"]]
+        self.assertIn("prof-one", names)
+        with mock.patch("marketing_divar.chromium_profile._cookies_from_live",
+                        return_value=[]), \
+             mock.patch("marketing_divar.chromium_profile._cookies_via_temp_launch",
+                        return_value=[]):
+            r = client.post("/api/accounts/profile/save", json={"name": "prof-one"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse(r.json().get("ready"))
+        r = client.post("/api/accounts/profile/delete", json={"name": "prof-one"})
+        self.assertEqual(r.status_code, 200, r.text)
+        names = [a["name"] for a in client.get("/api/accounts").json()["accounts"]]
+        self.assertNotIn("prof-one", names)
+        r = client.post("/api/accounts/profile/create", json={"name": "  "})
+        self.assertEqual(r.status_code, 400)
 
 
 class TestKeywords(unittest.TestCase):

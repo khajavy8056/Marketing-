@@ -320,7 +320,53 @@ $btnStart.Add_Click({
             if ($rc -ne 0) { throw "pip install failed (code $rc)" }
         }
         Log "[3] OK"
+
         $bar.Value = 75
+
+
+
+        Log "[3b] Installing Chromium (account profiles)"
+
+        Set-Step "Installing Chromium for Divar profiles" -1
+
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+
+        $pinfo.FileName = $appPy
+
+        $pinfo.Arguments = "-m playwright install chromium"
+
+        $pinfo.WorkingDirectory = $Root
+
+        $pinfo.UseShellExecute = $false
+
+        $pinfo.RedirectStandardOutput = $true
+
+        $pinfo.RedirectStandardError = $true
+
+        $pinfo.CreateNoWindow = $true
+
+        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+
+        $proc = New-Object System.Diagnostics.Process
+
+        $proc.StartInfo = $pinfo
+
+        [void]$proc.Start()
+
+        $pout = $proc.StandardOutput.ReadToEnd()
+
+        $perr = $proc.StandardError.ReadToEnd()
+
+        $proc.WaitForExit()
+
+        foreach ($line in ($pout + "`n" + $perr).Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
+
+        if ($proc.ExitCode -ne 0) { throw "playwright install chromium failed (code $($proc.ExitCode))" }
+
+        Log "[3b] Chromium OK"
+
+        $bar.Value = 82
+
 
         Log "[4] Health check"
         Set-Step "Health check" 80

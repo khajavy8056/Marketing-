@@ -30,10 +30,15 @@ class AccountManager:
 
     # ---------------------------------------------------------- حساب‌ها --
     def list_accounts(self) -> List[str]:
-        names = []
-        for p in sorted(self.dir.glob("*/session.json")):
-            names.append(p.parent.name)
-        return names
+        names = set()
+        for p in self.dir.glob("*/session.json"):
+            names.add(p.parent.name)
+        for p in self.dir.glob("*/account.json"):
+            names.add(p.parent.name)
+        for p in self.dir.glob("*/chromium"):
+            if p.is_dir():
+                names.add(p.parent.name)
+        return sorted(names)
 
     def session_path(self, name: str) -> Path:
         return self.dir / name / "session.json"
@@ -48,6 +53,9 @@ class AccountManager:
             return False
 
     def has_full_login(self, name: str) -> bool:
+        from .chromium_profile import profile_ready
+        if profile_ready(str(self.dir), name):
+            return True
         from .auth_session import session_is_complete
         return session_is_complete(str(self.session_path(name)))
 
@@ -98,6 +106,13 @@ class AccountManager:
     def release(self, name: str) -> None:
         """اپراتور کپچا را حل کرد → اکانت آزاد می‌شود (حتی از ترمینال دیگر)."""
         self.set_status(name, "active", note="released by operator")
+
+    def delete_account(self, name: str) -> None:
+        from .chromium_profile import delete_profile
+        delete_profile(str(self.dir), name)
+        st = self._load_states()
+        st.pop(name, None)
+        self._save_states(st)
 
     def record_probe(self, name: str, res: Dict[str, Any]) -> None:
         st = self._load_states()
@@ -179,11 +194,19 @@ class AccountManager:
                 status = rec.get("status", "active")
                 if status == "cooldown" and time.time() >= rec.get("cooldown_until", 0):
                     status = "active"
+                from .chromium_profile import snapshot_fields
+                prof = snapshot_fields(str(self.dir), name)
+                site_ok = bool(prof.get("profile_ready")) or (
+                    bool(rec.get("site_verified")) and full)
                 out.append({"name": name, "status": status,
                             "note": rec.get("note", ""),
                             "has_token": self.has_token(name),
-                            "login_complete": full,
-                            "site_verified": bool(rec.get("site_verified")) and full,
+                            "login_complete": full or bool(prof.get("profile_ready")),
+                            "site_verified": site_ok,
+                            "profile_ready": bool(prof.get("profile_ready")),
+                            "profile_status": prof.get("profile_status") or "",
+                            "profile_saved_at": prof.get("profile_saved_at") or "",
+                            "profile_open": bool(prof.get("profile_open")),
                             "phones_today": account_quota_today(con, name),
                             "last_probe_at": rec.get("last_probe_at") or "",
                             "last_probe_state": rec.get("last_probe_state") or "",
