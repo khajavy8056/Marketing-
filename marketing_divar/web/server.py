@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.5")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.6")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -855,27 +855,16 @@ def telegram_test():
             "preview": text, "telegram": last, "channels": ch}
 
 
-class CaptchaSolve(BaseModel):
-    name: str
-    answer: str
-
-
 @app.get("/api/captcha/pending")
 def captcha_pending():
-    """اکانت‌هایی که دیوار کپچا خواسته + سؤال ساده برای پاپ‌آپ پنل."""
-    from ..gate import new_challenge
-    gates = _state.setdefault("gates", {})
+    """اکانت‌هایی که دیوار واقعاً برایشان چالش/محدودیت ثبت کرده است."""
     pending = []
     for a in mgr().snapshot(DB_PATH):
         if a.get("status") != "captcha":
-            gates.pop(a["name"], None)
             continue
-        ch = gates.get(a["name"]) or new_challenge(a["name"])
-        gates[a["name"]] = ch
         from ..client import parse_block_body
         parsed = parse_block_body(a.get("last_block_body") or "")
-        pending.append({"name": a["name"], "question": ch["question"],
-                        "note": a.get("note") or "",
+        pending.append({"name": a["name"], "note": a.get("note") or "",
                         "last_probe_at": a.get("last_probe_at") or "",
                         "last_probe_state": a.get("last_probe_state") or "",
                         "image_url": parsed.get("image_url") or "",
@@ -883,25 +872,6 @@ def captcha_pending():
                         "last_ad_url": a.get("last_ad_url") or "",
                         "divar_url": a.get("last_ad_url") or "https://divar.ir"})
     return {"pending": pending}
-
-
-@app.post("/api/captcha/solve")
-def captcha_solve(req: CaptchaSolve):
-    """حل کپچای پنل → آزادسازی اکانت (ادامهٔ درخواست به دیوار)."""
-    from ..gate import check_answer
-    name = req.name.strip().lower().replace(" ", "-")
-    ch = (_state.get("gates") or {}).get(name)
-    if not ch:
-        raise HTTPException(400, "چالشی برای این اکانت نیست")
-    if not check_answer(ch, req.answer):
-        raise HTTPException(400, "پاسخ نادرست است")
-    m = mgr()
-    if not m.has_token(name):
-        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
-    m.release(name)
-    _state.get("gates", {}).pop(name, None)
-    log("success", f"کپچای پنل برای «{name}» حل شد — اکانت آزاد")
-    return {"ok": True, "message": "حل شد — شماره‌گیری ادامه می‌یابد"}
 
 
 @app.post("/api/diag")

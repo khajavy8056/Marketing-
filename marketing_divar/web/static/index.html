@@ -465,12 +465,10 @@
     <div id="cap-stage-msg">در حال آوردن پازل همین اکانت…</div>
   </div>
   <div class="hint">کلیک روی تصویر = کلیک روی دیوار همان اکانت. برای تایپ، روی تصویر کلیک کنید و بنویسید.</div>
-  <div class="lbl">تأیید حضور (اختیاری): <b id="cap-q" dir="ltr">—</b></div>
-  <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
+  <div class="hint">پس از تکمیل تأیید انسانی در دیوار، «بررسی واقعی دسترسی» را بزنید. برنامه فقط در صورت پاسخ موفق خود دیوار، اکانت را فعال می‌کند.</div>
   <div class="row" style="margin-top:14px">
     <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">نمایش پازل همین‌جا</button>
-    <button class="btn gray" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
-    <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
+    <button class="btn gray" type="button" onclick="capProbe()">بررسی واقعی دسترسی</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
   </div>
 </dialog>
@@ -644,15 +642,12 @@ async function openPuzzle(name){
   const dlg = $('cap-dlg');
   if (dlg && !dlg.open) dlg.showModal();
   $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + name;
-  if ($('cap-q')) $('cap-q').textContent = '—';
-  if ($('cap-answer')) $('cap-answer').value = '';
   try{
     const pend = await api('/api/captcha/pending');
     const one = (pend.pending||[]).find(p=>p.name===name);
     if (one){
       $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + one.name +
         (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
-      if ($('cap-q')) $('cap-q').textContent = one.question || '—';
       if (one.image_url && $('cap-img')){
         $('cap-img').src = one.image_url;
         $('cap-img').style.display = 'block';
@@ -692,18 +687,6 @@ async function capProbe(){
     } else {
       toast(r.message||'هنوز پازل می‌خواهد — خودکار چک می‌شود', false);
     }
-  }catch(e){ toast('❌ '+e.message, false); }
-}
-async function capSolve(){
-  const name = _capShown;
-  if (!name){ toast('اکانتی در انتظار نیست', false); return; }
-  try{
-    const r = await api('/api/captcha/solve',{
-      method:'POST', body: JSON.stringify({name, answer: ($('cap-answer')||{}).value||''})});
-    toast(r.message||'حل شد');
-    $('cap-dlg').close();
-    _capShown = '';
-    accRefresh(); refreshStatus();
   }catch(e){ toast('❌ '+e.message, false); }
 }
 async function monitorStart(){

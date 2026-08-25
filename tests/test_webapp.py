@@ -69,7 +69,8 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("/api/categories", r.text)
         self.assertIn("/api/cities", r.text)
         self.assertIn('id="cap-dlg"', r.text)
-        self.assertIn('id="cap-answer"', r.text)
+        self.assertNotIn('id="cap-answer"', r.text)
+        self.assertNotIn("/api/captcha/solve", r.text)
         self.assertIn("/api/captcha/pending", r.text)
         self.assertIn("capProbe", r.text)
         self.assertIn('id="openPuzzle"', r.text)
@@ -167,7 +168,8 @@ class TestAccountFlow(unittest.TestCase):
         r = client.post("/api/accounts/action", json={"name": "ghost", "action": "release"})
         self.assertEqual(r.status_code, 404)
 
-    def test_03_captcha_popup_solve(self):
+    def test_03_captcha_pending_never_false_releases_account(self):
+        """کپچای ساختگی پنل نباید وضعیت دیوار را به active تغییر دهد."""
         from marketing_divar.accounts import AccountManager
         from marketing_divar.config import DEFAULTS
         m = AccountManager(DEFAULTS, os.environ["DIVAR_ACCOUNTS_DIR"])
@@ -179,17 +181,15 @@ class TestAccountFlow(unittest.TestCase):
         pend = r.json()["pending"]
         self.assertTrue(any(p["name"] == "web1" for p in pend))
         one = next(p for p in pend if p["name"] == "web1")
-        self.assertTrue(one["question"])
+        self.assertNotIn("question", one)
         self.assertEqual(one.get("last_ad_url"), "https://divar.ir/v/adtok")
-        from marketing_divar.web import server as srv
-        expect = srv._state["gates"]["web1"]["expect"]
+        # دیگر endpoint «حل کپچای پنل» وجود ندارد و جواب محلی قادر به
+        # آزادسازی حساب نیست؛ تنها probe واقعی دیوار می‌تواند آن را آزاد کند.
         r = client.post("/api/captcha/solve", json={"name": "web1", "answer": "0"})
-        self.assertEqual(r.status_code, 400)
-        r = client.post("/api/captcha/solve", json={"name": "web1", "answer": str(expect)})
-        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.status_code, 404)
         st = next(a for a in client.get("/api/accounts").json()["accounts"]
                   if a["name"] == "web1")
-        self.assertEqual(st["status"], "active")
+        self.assertEqual(st["status"], "captcha")
         self.assertIn("captcha_needed", client.get("/api/status").json())
         self.assertIn("telegram", client.get("/api/status").json())
 
