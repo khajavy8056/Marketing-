@@ -189,6 +189,14 @@ def accounts_action(req: AccountAction):
     m = mgr()
     if not m.has_token(req.name):
         raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    # harvest puzzle state before release
+    live = (_state.get("puzzles") or {}).get(req.name)
+    if live:
+        try:
+            live.harvest_state()
+        except Exception:
+            pass
+    # first probe the account
     if req.action == "release":
         res = _do_unlock(req.name, "آزادسازی پنل")
         return {"ok": True, **res,
@@ -228,59 +236,77 @@ class AccountPuzzle(BaseModel):
 
 @app.post("/api/accounts/open-puzzle")
 def accounts_open_puzzle(req: AccountPuzzle):
-    """پازل همان اکانت را داخل پاپ‌آپ پنل باز می‌کند (نه iframe، نه تب مهمان)."""
+    """puzzle solve for account - opens browser with full session state (cookies + localStorage)."""
+    from ..session_view import PuzzleLive, validate_session
     m = mgr()
     if not m.has_token(req.name):
-        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
-    from ..session_view import PuzzleLive
+        raise HTTPException(404, "account not logged in")
+    sp = str(m.session_path(req.name))
+    # validate full session before opening browser
+    validation = validate_session(sp)
+    if not validation["valid"]:
+        log("error", f"[SESSION] session {req.name} invalid: {validation['detail']}")
+        raise HTTPException(400, f"session invalid: {validation['detail']}")
+    if not validation.get("has_ls"):
+        log("warning", f"[SESSION] session {req.name} has no localStorage - SPA may not detect login")
+    # recover exact product URL
     start_url = "https://divar.ir"
     try:
         rec = next((a for a in m.snapshot(DB_PATH) if a.get("name") == req.name), {})
-        start_url = rec.get("last_ad_url") or start_url
-        if not rec.get("last_ad_url") and rec.get("last_ad_token"):
+        stored_url = rec.get("last_ad_url") or ""
+        if stored_url and stored_url != "https://divar.ir" and "divar.ir/v/" in stored_url:
+            start_url = stored_url
+        elif rec.get("last_ad_token"):
+            start_url = f"https://divar.ir/v/{rec['last_ad_token']}"
+        if start_url in ("https://divar.ir", "https://www.divar.ir", "https://divar.ir/") and rec.get("last_ad_token"):
             start_url = f"https://divar.ir/v/{rec['last_ad_token']}"
     except Exception:
         pass
+    log("info", f"[CAPTCHA] opening puzzle for {req.name} at URL: {start_url}")
     with _puzzle_lock:
         _stop_all_puzzles()
         live = PuzzleLive()
         try:
-            live.start(str(m.session_path(req.name)), start_url=start_url)
+            live.start(sp, start_url=start_url)
         except Exception as e:
             try:
                 live.stop()
             except Exception:
                 pass
             from ..session_view import launch_account_browser
-            ok, win_msg = launch_account_browser(
-                str(m.session_path(req.name)), req.name)
+            ok, win_msg = launch_account_browser(sp, req.name)
             if ok:
                 log("warning",
-                    f"تصویر داخل پنل نیامد — پنجرهٔ Edge برای «{req.name}» باز شد")
+                    f"[BROWSER] image not loaded - opened separate Edge for {req.name}")
                 return {"ok": True, "embed": False, "fallback": True,
                         "url": start_url,
-                        "message": (win_msg + " پازل را در همان پنجره حل کنید، "
-                                    "بعد «الان با همین اکانت بزن» را بزنید.")}
+                        "message": (win_msg + " solve CAPTCHA in that window, "
+                                    "then press release.")}
             msg = str(e)
-            if "timed out" in msg.lower() or "CDP" in msg or "آماده نشد" in msg:
-                msg = ("مرورگر روی رایانه برای پازل آماده نشد. "
-                       "همه پنجره‌های Edge/Chrome را ببندید، پروکسی را خاموش کنید، "
-                       "بعد دوباره «نمایش پازل همین‌جا» را بزنید. " + msg)
+            if "timed out" in msg.lower() or "CDP" in msg or "not ready" in msg:
+                msg = ("browser not ready. "
+                       "close all Edge/Chrome windows, disable proxy, "
+                       "then try again. " + msg)
             raise HTTPException(400, msg)
         _state["puzzles"] = {req.name: live}
-    log("info", f"پازل دیوار فقط برای اکانت «{req.name}» داخل همین صفحه باز شد")
-    hint = "روی تصویر «نمایش شماره» را بزنید و پازل را حل کنید. لاگین پاک نمی‌شود."
+    log("info", f"[CAPTCHA] puzzle opened for account {req.name} at URL {start_url}")
+    hint = "click Show Number on the image and solve the puzzle. Login stays intact."
     if start_url and start_url != "https://divar.ir":
-        hint = "صفحهٔ همان آگهی مسدود باز است — «نمایش شماره» را بزنید و پازل را حل کنید."
+        hint = "same blocked product page is open - click Show Number and solve the puzzle."
     return {"ok": True, "embed": True, "url": start_url,
             "message": hint}
-
 
 @app.post("/api/accounts/close-puzzle")
 def accounts_close_puzzle():
     with _puzzle_lock:
+        # save state (cookies + localStorage) before closing
+        for name, live in list((_state.get("puzzles") or {}).items()):
+            try:
+                live.harvest_state()
+            except Exception:
+                pass
         _stop_all_puzzles()
-    return {"ok": True, "message": "پنجره بسته شد؛ لاگین و پروفایل همین اکانت ماند"}
+    return {"ok": True, "message": "پنجره بسته شد؛ لاگین و پروفایل و سشن همین اکانت ذخیره شد"}
 
 
 @app.get("/api/accounts/puzzle-frame")
