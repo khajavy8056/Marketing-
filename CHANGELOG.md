@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.10 — لاگین کامل برای صفحهٔ پازل (۱۴۰۵/۰۶/۰۳)
+
+- پاسخ consume اگر SuperTokens را در JSON بدهد (access/refresh/front) ذخیره می‌شود.
+- توکن API (v5) و کوکی سایت جدا می‌مانند؛ کوکی واقعی با JWT عوض نمی‌شود.
+- اگر deviceId هست فقط یک بار consume می‌شود (کد پیامک نسوزد).
+- قبل از باز شدن پازل: کوکی + localStorage (token و sFrontToken و sAccessToken).
+
 ## 2.1.9 — سشن سایت بعد از کد پیامک واقعاً گرفته می‌شود (۱۴۰۵/۰۶/۰۳)
 
 - درخواست OTP فیلدهای SuperTokens (`deviceId` / `preAuthSessionId`) را نگه می‌دارد.

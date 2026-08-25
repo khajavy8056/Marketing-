@@ -204,19 +204,67 @@ SITE_PROOF_NAMES = ("sFrontToken", "sRefreshToken", "sAntiCsrf")
 SITE_PROOF_HEADERS = ("front-token", "st-refresh-token")
 
 
+def jwt_payload(token: str) -> Dict[str, Any]:
+    import base64
+    if not token or token.count(".") < 2:
+        return {}
+    raw = token.split(".")[1]
+    pad = "=" * (-len(raw) % 4)
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(raw + pad))
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def looks_like_supertokens_jwt(token: str) -> bool:
+    p = jwt_payload(token)
+    return any(k in p for k in (
+        "sessionHandle", "parentRefreshTokenHash1", "refreshTokenHash1",
+        "antiCsrfToken"))
+
+
+def absorb_login_json(data: Any) -> Dict[str, Any]:
+    """توکن‌های SuperTokens داخل JSON پاسخ consume (حالت header/body)."""
+    cookies: List[Dict[str, Any]] = []
+    headers: Dict[str, str] = {}
+    if not isinstance(data, dict):
+        return {"cookies_full": cookies, "auth_headers": headers}
+
+    def add(name: str, value: Any, http_only: Optional[bool] = None,
+            header: str = "") -> None:
+        if not isinstance(value, str) or not value.strip():
+            return
+        cookies.append(_rec(name, value.strip(), http_only=http_only))
+        if header:
+            headers[header] = value.strip()
+
+    add("sAccessToken", data.get("sAccessToken"), header="st-access-token")
+    rt = data.get("sRefreshToken")
+    if not isinstance(rt, str):
+        rt = data.get("refreshToken") if isinstance(data.get("refreshToken"), str) else ""
+    add("sRefreshToken", rt, header="st-refresh-token")
+    add("sFrontToken", data.get("frontToken") or data.get("sFrontToken"),
+        http_only=False, header="front-token")
+    sess = data.get("session")
+    if isinstance(sess, dict):
+        at = sess.get("accessToken")
+        if isinstance(at, dict):
+            add("sAccessToken", at.get("token"), header="st-access-token")
+        else:
+            add("sAccessToken", at, header="st-access-token")
+        rtok = sess.get("refreshToken")
+        if isinstance(rtok, dict):
+            add("sRefreshToken", rtok.get("token"), header="st-refresh-token")
+        else:
+            add("sRefreshToken", rtok, header="st-refresh-token")
+    return {"cookies_full": cookies, "auth_headers": headers}
+
+
 def front_token_from_jwt(token: str) -> str:
     """sFrontToken دیوار = base64(JSON uid/ate/up) از خود JWT."""
     import base64
-    payload: Dict[str, Any] = {}
-    if token and token.count(".") >= 2:
-        raw = token.split(".")[1]
-        pad = "=" * (-len(raw) % 4)
-        try:
-            decoded = json.loads(base64.urlsafe_b64decode(raw + pad))
-            if isinstance(decoded, dict):
-                payload = decoded
-        except Exception:
-            payload = {}
+    payload = jwt_payload(token)
     uid = str(payload.get("sub") or payload.get("uid") or payload.get("userId")
               or payload.get("user_id") or "divar")
     exp = payload.get("exp")
@@ -323,22 +371,24 @@ def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:
 def localstorage_script(session_path: str) -> str:
     """قبل از بارگذاری دیوار در document اجرا می‌شود."""
     p = Path(session_path)
-    token = ""
-    front = ""
+    token = front = sat = ""
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-        token = str(data.get("token") or (data.get("cookies") or {}).get("sAccessToken") or "")
-        front = str((data.get("cookies") or {}).get("sFrontToken")
-                    or (data.get("auth_headers") or {}).get("front-token") or "")
+        ck = data.get("cookies") or {}
+        hd = data.get("auth_headers") or {}
+        token = str(data.get("token") or ck.get("sAccessToken") or "")
+        front = str(ck.get("sFrontToken") or hd.get("front-token") or "")
+        sat = str(ck.get("sAccessToken") or hd.get("st-access-token") or "")
     except Exception:
-        token = ""
-    token_js = json.dumps(token)
-    front_js = json.dumps(front)
+        token = front = sat = ""
+    token_js, front_js, sat_js = json.dumps(token), json.dumps(front), json.dumps(sat)
     return (
         "(function(){try{"
-        f"var t={token_js}, f={front_js};"
+        f"var t={token_js}, f={front_js}, a={sat_js};"
         "if(t){localStorage.setItem('token', t); sessionStorage.setItem('token', t);}"
-        "if(f){localStorage.setItem('sFrontToken', f);}"
+        "if(f){localStorage.setItem('sFrontToken', f); localStorage.setItem('front-token', f);}"
+        "if(a){localStorage.setItem('sAccessToken', a);}"
+        "localStorage.setItem('st-last-access-token-update', String(Date.now()));"
         "}catch(e){}})();"
     )
 

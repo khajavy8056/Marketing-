@@ -548,7 +548,9 @@ class DivarClient:
 
     def _st_headers(self) -> Dict[str, str]:
         return {"rid": "passwordless", "st-auth-mode": "cookie",
-                "fdi-version": "1.17", "Content-Type": "application/json"}
+                "fdi-version": "1.17", "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Origin": "https://divar.ir", "Referer": "https://divar.ir/"}
 
     def _save_otp_pending(self, phone: str, data: Any) -> Dict[str, str]:
         rec = {"phone": str(phone), "deviceId": "", "preAuthSessionId": "",
@@ -580,6 +582,52 @@ class DivarClient:
                 p.unlink()
         except OSError:
             pass
+
+    def _merge_absorbed(self, bag: Dict[str, Any]) -> None:
+        prev = getattr(self, "_last_absorbed", None) or {}
+        self._last_absorbed = {
+            "cookies_full": list(prev.get("cookies_full") or [])
+            + list(bag.get("cookies_full") or []),
+            "auth_headers": {**dict(prev.get("auth_headers") or {}),
+                             **dict(bag.get("auth_headers") or {})},
+        }
+        seen = set()
+        for c in bag.get("cookies_full") or []:
+            name = c.get("name")
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            try:
+                self.http.cookies.set(name, c.get("value") or "")
+            except Exception:
+                pass
+
+    def _apply_login_body(self, r) -> None:
+        from .auth_session import absorb_login_json
+        self._merge_absorbed(absorb_login_json(_safe_json(r)))
+
+    def _st_consume_ok(self, r) -> bool:
+        if r is None or getattr(r, "status_code", 0) not in (200, 201):
+            return False
+        data = _safe_json(r)
+        if isinstance(data, dict):
+            st = str(data.get("status") or "")
+            if st in ("INCORRECT_USER_INPUT_CODE_ERROR",
+                      "EXPIRED_USER_INPUT_CODE_ERROR",
+                      "RESTART_FLOW_ERROR", "GENERAL_ERROR"):
+                return False
+        return True
+
+    def _try_v5_confirm(self, phone: str, code: str) -> str:
+        try:
+            r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
+                            json={"phone": str(phone), "code": str(code)},
+                            timeout=25)
+        except Exception:
+            return ""
+        if r.status_code in (200, 201):
+            return _token_from_payload(_safe_json(r)) or ""
+        return ""
 
     def _finish_login(self, phone: str, token: str = "") -> str:
         if token:
@@ -644,50 +692,38 @@ class DivarClient:
         if dev and pre:
             payloads.append({"userInputCode": str(code), "deviceId": dev,
                              "preAuthSessionId": pre})
-        payloads.append({"userInputCode": str(code), "phoneNumber": str(phone)})
-        payloads.append({"code": str(code), "phoneNumber": str(phone)})
-        seen_pl = set()
-        uniq: List[Dict[str, str]] = []
-        for pl in payloads:
-            key = tuple(sorted(pl.items()))
-            if key in seen_pl:
-                continue
-            seen_pl.add(key)
-            uniq.append(pl)
-        r2 = None
+        else:
+            payloads.append({"userInputCode": str(code), "phoneNumber": str(phone)})
+            payloads.append({"code": str(code), "phoneNumber": str(phone)})
         last_consume = None
-        for pl in uniq:
+        site_ok = False
+        consume_api_tok = ""
+        for pl in payloads:
             try:
-                r2 = self._fetch(
+                last_consume = self._fetch(
                     "POST", f"{self.base}/v8/authenticate/signinup/code/consume",
                     json=pl, headers=self._st_headers(), timeout=25)
-                last_consume = r2
             except requests.exceptions.RequestException:
-                r2 = None
+                last_consume = None
                 continue
-            if r2 is None or r2.status_code not in (200, 201):
+            if not self._st_consume_ok(last_consume):
                 continue
-            tok = _token_from_payload(_safe_json(r2))
-            tok = tok or _cookie_value(self.http.cookies, "sAccessToken") or ""
-            if tok:
-                return self._finish_login(phone, tok)
-            self._save_session(phone)
-            from .auth_session import session_is_complete
-            if session_is_complete(str(self.session_path)):
-                return self._finish_login(phone, self.token or tok)
-        r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
-                           json={"phone": str(phone), "code": str(code)},
-                           timeout=25)
-        if r.status_code in (200, 201):
-            tok = _token_from_payload(_safe_json(r))
-            if tok:
-                return self._finish_login(phone, tok)
-        if self.token:
-            return self._finish_login(phone, self.token)
+            self._apply_login_body(last_consume)
+            body = _safe_json(last_consume)
+            if isinstance(body, dict) and isinstance(body.get("token"), str):
+                consume_api_tok = body.get("token") or ""
+            site_ok = True
+            break
+        api_tok = consume_api_tok
+        if not api_tok:
+            api_tok = self._try_v5_confirm(phone, code)
+        site_tok = _cookie_value(self.http.cookies, "sAccessToken") or ""
+        if api_tok or site_tok or site_ok or self.token:
+            return self._finish_login(phone, api_tok or site_tok or (self.token or ""))
         raise DivarAuthError(
             f"کد تأیید نامعتبر یا منقضی (v8→HTTP "
-            f"{getattr(last_consume or r2, 'status_code', '—')}؛ "
-            f"v5→HTTP {r.status_code})")
+            f"{getattr(last_consume, 'status_code', '—')}؛ "
+            f"v5→HTTP —)")
 
     def login_interactive(self, phone: Optional[str] = None) -> None:
         """جریان کامل لاگین: شماره → کد پیامکی → ذخیره توکن."""

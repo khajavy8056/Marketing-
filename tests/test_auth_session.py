@@ -13,7 +13,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from marketing_divar.auth_session import (  # noqa: E402
-    absorb_response, cdp_cookie_params, cookies_for_browser,
+    absorb_login_json, absorb_response, cdp_cookie_params, cookies_for_browser,
     localstorage_script, merge_into_session_file)
 from marketing_divar.client import DivarClient  # noqa: E402
 from marketing_divar.session_view import PuzzleLive  # noqa: E402
@@ -27,6 +27,18 @@ class _Hdr(dict):
 
 
 class TestAbsorb(unittest.TestCase):
+    def test_login_json_session_tokens(self):
+        bag = absorb_login_json({
+            "status": "OK",
+            "frontToken": "FT",
+            "session": {"accessToken": {"token": "AT"},
+                        "refreshToken": {"token": "RT"}},
+        })
+        names = {c["name"]: c["value"] for c in bag["cookies_full"]}
+        self.assertEqual(names["sAccessToken"], "AT")
+        self.assertEqual(names["sRefreshToken"], "RT")
+        self.assertEqual(names["sFrontToken"], "FT")
+
     def test_headers_become_site_cookies(self):
         class R:
             cookies = []
@@ -168,6 +180,71 @@ class TestPersistAndInject(unittest.TestCase):
         self.assertEqual(consume["headers"].get("rid"), "passwordless")
         data = json.loads(Path(p).read_text(encoding="utf-8"))
         self.assertTrue(data["cookies"].get("sFrontToken"))
+
+    def test_consume_json_session_becomes_site_cookies(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        c = DivarClient(session_path=p)
+
+        class Fake:
+            name = "fake"
+
+            def request(self, method, url, **kw):
+                class R:
+                    status_code = 200
+                    text = "{}"
+                    cookies = []
+                    headers = {}
+
+                    def json(self):
+                        if url.endswith("/consume"):
+                            return {"status": "OK", "session": {
+                                "accessToken": {"token": "ST-ACCESS"},
+                                "refreshToken": {"token": "ST-REFRESH"},
+                            }, "frontToken": "ST-FRONT"}
+                        return {"token": "V5-API"}
+                return R()
+
+        c._custom_transports = [Fake()]
+        tok = c.confirm_otp("09120002222", "222222")
+        self.assertEqual(tok, "V5-API")
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        self.assertEqual(data["token"], "V5-API")
+        self.assertEqual(data["cookies"].get("sAccessToken"), "ST-ACCESS")
+        self.assertEqual(data["cookies"].get("sRefreshToken"), "ST-REFRESH")
+        self.assertEqual(data["cookies"].get("sFrontToken"), "ST-FRONT")
+        script = localstorage_script(p)
+        self.assertIn("V5-API", script)
+        self.assertIn("ST-FRONT", script)
+
+    def test_consume_incorrect_status_falls_to_v5(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        c = DivarClient(session_path=p)
+
+        class Fake:
+            name = "fake"
+
+            def request(self, method, url, **kw):
+                class R:
+                    cookies = []
+                    headers = {}
+
+                    def __init__(self):
+                        self.status_code = 200
+                        if url.endswith("/consume"):
+                            self.text = '{"status":"INCORRECT_USER_INPUT_CODE_ERROR"}'
+                        else:
+                            self.text = '{"token":"V5-OK"}'
+
+                    def json(self):
+                        if url.endswith("/consume"):
+                            return {"status": "INCORRECT_USER_INPUT_CODE_ERROR"}
+                        return {"token": "V5-OK"}
+                return R()
+
+        c._custom_transports = [Fake()]
+        self.assertEqual(c.confirm_otp("09120003333", "333333"), "V5-OK")
 
     def test_v5_token_promoted_to_site_session(self):
         from marketing_divar.auth_session import session_is_complete
