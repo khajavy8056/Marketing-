@@ -215,7 +215,7 @@ def accounts_probe(req: AccountProbe):
     live = (_state.get("puzzles") or {}).get(req.name)
     if live:
         try:
-            live.harvest_cookies()
+            live.harvest_state()
         except Exception:
             pass
     res = _do_unlock(req.name, "بررسی دستی")

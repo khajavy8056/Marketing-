@@ -9,3 +9,9 @@ logs/
 .env
 config.json
 installer/install-log.txt
+# فایل‌های موقت سشن
+*.session.tmp
+# پروفایل مرورگر (حاوی کوکی/سشن)
+browser-profile/
+browser.err
+DevToolsActivePort

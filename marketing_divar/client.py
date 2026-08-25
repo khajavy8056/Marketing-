@@ -360,6 +360,7 @@ class DivarClient:
         self.http = requests.Session()
         self.http.headers.update({"User-Agent": UA, "Accept": "application/json"})
         self.token: Optional[str] = None
+        self._local_storage: Dict[str, str] = {}
         self.limiter = limiter or RateLimiter()
         self._load_session()
 
@@ -403,6 +404,14 @@ class DivarClient:
 
     # ------------------------------------------------------------- session --
     def _load_session(self) -> None:
+        """بارگذاری سشن از فایل.
+
+        این متد:
+        - توکن JWT را از فایل می‌خواند
+        - کوکی‌های ذخیره‌شده را به HTTP session اضافه می‌کند
+        - localStorage را برای مرورگر SPA ذخیره می‌کند
+        """
+        self._local_storage: Dict[str, str] = {}
         if self.session_path.exists():
             try:
                 data = json.loads(self.session_path.read_text(encoding="utf-8"))
@@ -410,20 +419,67 @@ class DivarClient:
                 # بازیابی کوکی‌های سشن (برای فلوی v8 که کوکی‌محور است)
                 for k, v in (data.get("cookies") or {}).items():
                     self.http.cookies.set(k, v)
+                # بازیابی localStorage (برای SPA)
+                ls = data.get("localStorage") or {}
+                if isinstance(ls, dict):
+                    self._local_storage = dict(ls)
             except Exception:
                 self.token = None
+                self._local_storage = {}
 
     def _save_session(self, phone: str) -> None:
+        """ذخیره اتمی سشن با الگوی .tmp -> rename.
+
+        این متد از _atomic_write استفاده می‌کند که:
+        1. ابتدا به فایل موقت .tmp می‌نویسد
+        2. JSON را اعتبارسنجی می‌کند
+        3. سپس فایل موقت را به session.json تغییر نام می‌دهد
+        
+        اگر پروسه هنگام Write Crash کند، سشن قبلی از بین نمی‌رود.
+        """
         self.session_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             cookies = {c.name: c.value for c in self.http.cookies}
         except Exception:
             cookies = {}
-        self.session_path.write_text(
-            json.dumps({"phone": phone, "token": self.token, "cookies": cookies,
-                        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
-                       ensure_ascii=False, indent=2),
-            encoding="utf-8")
+        # Load existing data to preserve localStorage if any
+        existing = {}
+        if self.session_path.exists():
+            try:
+                existing = json.loads(self.session_path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+        data = {
+            "phone": phone,
+            "token": self.token,
+            "cookies": cookies,
+            "localStorage": existing.get("localStorage", {}),
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        # Atomic write
+        tmp_path = self.session_path.with_suffix(".session.tmp")
+        try:
+            tmp_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+            # Validate JSON
+            json.loads(tmp_path.read_text(encoding="utf-8"))
+            tmp_path.rename(self.session_path)
+        except Exception:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
+            raise
+        finally:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
         try:  # فایل حاوی توکن دسترسی است
             os.chmod(self.session_path, 0o600)
         except OSError:

@@ -17,7 +17,8 @@ from marketing_divar.client import parse_block_body  # noqa: E402
 from marketing_divar.session_view import (  # noqa: E402
     PuzzleLive, _http_get_local, _wait_cdp, cookies_from_session,
     find_browser, launch_account_browser, merge_session_cookies,
-    persistent_profile_dir)
+    persistent_profile_dir, localStorage_from_session,
+    validate_session, _atomic_write, _merge_session_data)
 
 
 class TestCookiesFromSession(unittest.TestCase):
@@ -231,6 +232,83 @@ class TestFindBrowserEnv(unittest.TestCase):
                 os.environ.pop("DIVAR_BROWSER", None)
             else:
                 os.environ["DIVAR_BROWSER"] = old
+
+
+class TestLocalStorage(unittest.TestCase):
+    def test_local_storage_from_session_saved(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T1", "localStorage": {"sAccessToken": "LS_AT", "sFrontToken": "LS_FT"}}, f)
+        ls = localStorage_from_session(p)
+        self.assertEqual(ls.get("sAccessToken"), "LS_AT")
+        self.assertEqual(ls.get("sFrontToken"), "LS_FT")
+
+    def test_local_storage_reconstructed_from_cookies(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T1",
+                       "cookies": {"sAccessToken": "CK_AT", "sFrontToken": "CK_FT"}}, f)
+        ls = localStorage_from_session(p)
+        self.assertEqual(ls.get("sAccessToken"), "CK_AT")
+        self.assertEqual(ls.get("sFrontToken"), "CK_FT")
+
+    def test_validate_session_valid(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "VALID_TOKEN", "localStorage": {"sAccessToken": "AT"}}, f)
+        v = validate_session(p)
+        self.assertTrue(v["valid"])
+        self.assertTrue(v["has_token"])
+        self.assertTrue(v["has_ls"])
+
+    def test_validate_session_missing_file(self):
+        v = validate_session("/no/such/file.json")
+        self.assertFalse(v["valid"])
+        self.assertIn("وجود ندارد", v["detail"])
+
+    def test_validate_session_no_token(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"cookies": {}}, f)
+        v = validate_session(p)
+        self.assertFalse(v["valid"])
+        self.assertIn("توکن", v["detail"])
+
+    def test_validate_session_no_ls(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T1", "cookies": {"sAccessToken": "AT"}}, f)
+        v = validate_session(p)
+        self.assertTrue(v["valid"])
+        self.assertFalse(v["has_ls"])
+
+    def test_atomic_write_preserves_on_crash(self):
+        d = tempfile.mkdtemp()
+        p = Path(d) / "session.json"
+        _atomic_write(p, {"token": "ORIGINAL"})
+        self.assertEqual(json.loads(p.read_text(encoding="utf-8"))["token"], "ORIGINAL")
+        tmp = p.with_suffix(".session.tmp")
+        tmp.write_text("corrupted{json", encoding="utf-8")
+        _atomic_write(p, {"token": "NEW"})
+        self.assertEqual(json.loads(p.read_text(encoding="utf-8"))["token"], "NEW")
+        self.assertFalse(tmp.exists())
+
+    def test_merge_session_data_preserves_local_storage(self):
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "session.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"token": "T1", "localStorage": {"existing_key": "val"}}, f)
+        _merge_session_data(p, [{"name": "new_cookie", "value": "cv", "domain": ".divar.ir"}],
+                           {"new_ls_key": "new_val"})
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        self.assertEqual(data["localStorage"]["existing_key"], "val")
+        self.assertEqual(data["localStorage"]["new_ls_key"], "new_val")
+        self.assertEqual(data["cookies"]["new_cookie"], "cv")
 
 
 if __name__ == "__main__":

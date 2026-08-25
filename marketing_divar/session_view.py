@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
-"""باز کردن دیوار با سشن همان اکانت برنامه (نه تب مهمان).
+"""باز کردن دیوار با سشن همان اکانت برنامه (نه تب مهمان) — با پشتیبانی از localStorage.
 
 دیوار داخل iframe پنل باز نمی‌شود (refused to connect). تب معمولی هم
-با اکانت برنامه لاگین نیست. این ماژول Edge/Chrome را با پروفایل همان
-اکانت باز می‌کند و کوکی/توکن ذخیره‌شده را تزریق می‌کند تا پازل واقعی
-همان حساب دیده شود.
+با اکانت برنامه لاگین نیست. این ماژول:
+1. کوکی‌ها و localStorage سشن را از فایل سشن می‌خواند
+2. مرورگر را با CDP (Chrome DevTools Protocol) باز می‌کند
+3. هم کوکی‌ها و هم localStorage را تزریق می‌کند
+4. به صفحهٔ محصول (کپچا) ناویگیت می‌کند
+
+تضمین می‌شود که پس از باز شدن مرورگر:
+- همان اکانت لاگین است (نه تب مهمان)
+- همان محصول با کپچا نمایش داده می‌شود
+- اپراتور فقط کپچا را حل می‌کند، ربات خودکار کاری نمی‌کند
 """
 
 from __future__ import annotations
@@ -20,16 +27,68 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
+# ─── لاگ تگ‌های متمرکز ─────────────────────────────────────────────
+_LOG_TAG_AUTH = "[AUTH]"
+_LOG_TAG_SESSION = "[SESSION]"
+_LOG_TAG_BROWSER = "[BROWSER]"
+_LOG_TAG_CAPTCHA = "[CAPTCHA]"
+_LOG_TAG_ACCOUNT = "[ACCOUNT]"
+
+
+def _sv_log(level: str, tag: str, message: str) -> None:
+    """لاگ متمرکز برای Authentication/Session/Browser/CAPTCHA/Account."""
+    try:
+        from .logging_util import log
+        log(level, f"{tag} {message}")
+    except Exception:
+        pass
+
+
+# ═══ کلیدهای localStorage که SPA دیوار برای احراز هویت استفاده می‌کند ═══
+_DIVAR_STORAGE_KEYS = frozenset({
+    "sAccessToken",
+    "sFrontToken",
+    "token",
+    "refresh_token",
+    "user_phone",
+    "user_id",
+})
+
 
 def persistent_profile_dir(session_path: str) -> Path:
     """یک پروفایل مرورگر دائمی کنار session.json همین اکانت — پاک نمی‌شود."""
     return Path(session_path).resolve().parent / "browser-profile"
 
 
-def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> int:
-    """کوکی‌های حل‌شدهٔ دیوار را از مرورگر به session.json برمی‌گرداند.
+def _atomic_write(target_path: Path, data: Dict[str, Any]) -> None:
+    """نوشتن اتمی فایل سشن (.tmp -> validate -> rename).
 
-    پروفایل موقت بی‌فایده بود چون پاسخ پازل هرگز به کلاینت HTTP نمی‌رسید.
+    اگر پروسه هنگام Write Crash کند، سشن قبلی از بین نمی‌رود.
+    """
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = target_path.with_suffix(".session.tmp")
+    try:
+        tmp_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+        # validate JSON by re-reading
+        json.loads(tmp_path.read_text(encoding="utf-8"))
+        tmp_path.rename(target_path)
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception:
+            pass
+        raise
+
+
+def _merge_session_data(session_path: str,
+                        cookies: List[Dict[str, Any]],
+                        local_storage: Optional[Dict[str, str]] = None) -> int:
+    """کوکی‌های حل‌شده و localStorage را به session.json برمی‌گرداند.
+
+    Returns: تعداد کوکی‌های جدید اضافه‌شده
     """
     p = Path(session_path)
     data: Dict[str, Any] = {}
@@ -40,6 +99,7 @@ def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> i
             data = {}
     if not isinstance(data, dict):
         data = {}
+
     jar = data.get("cookies") or {}
     if not isinstance(jar, dict):
         jar = {}
@@ -59,10 +119,38 @@ def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> i
     data["cookies"] = jar
     if not data.get("token"):
         data["token"] = jar.get("sAccessToken") or jar.get("token") or ""
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                 encoding="utf-8")
+
+    # Merge localStorage state
+    if local_storage is not None:
+        existing_storage = data.get("localStorage", {})
+        if not isinstance(existing_storage, dict):
+            existing_storage = {}
+        for k, v in local_storage.items():
+            if v is not None:
+                existing_storage[k] = v
+        data["localStorage"] = existing_storage
+
+    # Atomic write
+    _atomic_write(p, data)
     return n
+
+
+def _get_local_storage_from_session(session_path: str) -> Dict[str, str]:
+    """دریافت localStorage ذخیره‌شده در فایل سشن."""
+    p = Path(session_path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        ls = data.get("localStorage") or {}
+        return dict(ls) if isinstance(ls, dict) else {}
+    except Exception:
+        return {}
+
+
+def merge_session_cookies(session_path: str, cookies: List[Dict[str, Any]]) -> int:
+    """Legacy backward-compatible wrapper — calls _merge_session_data with no localStorage."""
+    return _merge_session_data(session_path, cookies, None)
 
 
 def _cleanup_old_temp_profiles(session_path: str) -> None:
@@ -76,7 +164,10 @@ def _cleanup_old_temp_profiles(session_path: str) -> None:
 
 
 def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
-    """کوکی‌هایی که باید روی divar.ir ست شوند تا همان لاگین برنامه باشد."""
+    """کوکی‌هایی که باید روی divar.ir ست شوند تا همان لاگین برنامه باشد.
+
+    Returns: لیست دیکشنری‌های کوکی برای CDP Network.setCookie
+    """
     p = Path(session_path)
     if not p.exists():
         return []
@@ -104,6 +195,77 @@ def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
         add("token", token)
         add("sAccessToken", token)
     return out
+
+
+def localStorage_from_session(session_path: str) -> Dict[str, str]:
+    """localStorage‌ای که باید تزریق شود تا SPA دیوار لاگین را تشخیص دهد.
+
+    برنامه SPA دیوار (React) بعد از لود صفحه، localStorage را چک می‌کند.
+    اگر توکن‌های JWT/احراز هویت در localStorage نباشند، صفحه لاگین را نشان می‌دهد
+    حتی اگر کوکی‌ها درست باشند. این تابع localStorage را از فایل سشن می‌خواند
+    یا در صورت نبودن، از کوکی‌ها/توکن مقادیر پیش‌فرض می‌سازد.
+    """
+    p = Path(session_path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+    # First check if localStorage was saved explicitly
+    saved_ls = data.get("localStorage") or {}
+    if isinstance(saved_ls, dict) and saved_ls:
+        return dict(saved_ls)
+
+    # Otherwise reconstruct from token/cookies
+    token = str(data.get("token") or "")
+    cookies = data.get("cookies") or {}
+    if not isinstance(cookies, dict):
+        cookies = {}
+
+    ls: Dict[str, str] = {}
+    sAccess = cookies.get("sAccessToken") or token or ""
+    sFront = cookies.get("sFrontToken") or ""
+
+    if sAccess:
+        ls["sAccessToken"] = sAccess
+    if sFront:
+        ls["sFrontToken"] = sFront
+    if token and "sAccessToken" not in ls:
+        ls["sAccessToken"] = token
+    if token:
+        ls["token"] = token
+
+    return ls
+
+
+def _inject_local_storage(cdp_client: "CdpClient", ls_items: Dict[str, str]) -> int:
+    """تزریق localStorage به مرورگر از طریق CDP.
+
+    SPAهای مدرن (مانند دیوار) بعد از بارگذاری صفحه، localStorage را برای
+    تشخیص لاگین چک می‌کنند. این تابع قبل از ناویگیت به صفحه، آیتم‌های
+    localStorage را ست می‌کند تا SPA کاربر را لاگین‌شده تشخیص دهد.
+
+    Returns: تعداد آیتم‌های تزریق‌شده
+    """
+    n = 0
+    for key, value in ls_items.items():
+        if not key or value is None:
+            continue
+        # Sanitize: escape quotes for JS
+        safe_key = key.replace("\\", "\\\\").replace("'", "\\'")
+        safe_val = str(value).replace("\\", "\\\\").replace("'", "\\'")
+        expr = f"localStorage.setItem('{safe_key}', '{safe_val}')"
+        try:
+            cdp_client.call("Runtime.evaluate", {
+                "expression": expr,
+                "returnByValue": True,
+            }, timeout=2)
+            n += 1
+        except Exception:
+            pass
+    return n
 
 
 def find_browsers() -> List[str]:
@@ -196,38 +358,8 @@ def _ws_send(sock: socket.socket, text: str) -> None:
     sock.sendall(header + masked)
 
 
-def _cdp_set_cookies(ws_url: str, cookies: List[Dict[str, Any]],
-                     start_url: str) -> None:
-    sock = _ws_connect(ws_url)
-    try:
-        i = 1
-        _ws_send(sock, json.dumps({"id": i, "method": "Network.enable"}))
-        for ck in cookies:
-            i += 1
-            params = {"name": ck["name"], "value": ck["value"],
-                      "domain": ck.get("domain") or ".divar.ir",
-                      "path": ck.get("path") or "/",
-                      "secure": True, "httpOnly": ck["name"] != "sFrontToken"}
-            _ws_send(sock, json.dumps({"id": i, "method": "Network.setCookie",
-                                       "params": params}))
-        i += 1
-        _ws_send(sock, json.dumps({
-            "id": i, "method": "Page.navigate",
-            "params": {"url": start_url}}))
-        time.sleep(0.4)
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
-
-
 def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
-    """GET روی 127.0.0.1 — هرگز از پروکسی سیستم استفاده نمی‌کند.
-
-    urlopen در ویندوز اگر HTTP_PROXY ست باشد به 127.0.0.1 هم از پروکسی
-    می‌رود و با «timed out» می‌میرد (خطای زندهٔ پازل).
-    """
+    """GET روی 127.0.0.1 — هرگز از پروکسی سیستم استفاده نمی‌کند."""
     if int(port) <= 0:
         raise RuntimeError("پورت دیباگ هنوز صفر است")
     last = "پاسخ خالی از CDP"
@@ -242,10 +374,6 @@ def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
             sock.sendall(req.encode("ascii"))
             sock.settimeout(timeout)
             buf = b""
-            # پاسخ DevTools مانند /json/list بدنهٔ JSON دارد. قبلاً به‌محض
-            # رسیدنِ header از حلقه خارج می‌شدیم؛ در اتصال‌های معمول TCP، header
-            # و body جدا می‌رسند و نتیجهٔ آن JSON خالی و شکست تصادفی بازشدن
-            # مرورگر بود. بعد از header تا Content-Length کامل بخوان.
             expected = None
             while True:
                 try:
@@ -271,8 +399,6 @@ def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
                             break
                 if expected and len(body) >= expected:
                     break
-                # DevTools پاسخ‌های chunked هم ممکن است بدهد. در آن حالت تا
-                # بسته‌شدن اتصال می‌خوانیم، نه این‌که تنها header را برگردانیم.
         except OSError as e:
             last = str(e)
             time.sleep(0.15)
@@ -438,13 +564,22 @@ def _browser_cmd(browser: str, profile: Path, port: int) -> List[str]:
 
 
 def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir") -> str:
-    """Edge/Chrome را با کوکی همان اکانت باز می‌کند. فرآیند همین‌جا می‌ماند تا مرورگر بالا بیاید."""
+    """Edge/Chrome را با کوکی + localStorage همان اکانت باز می‌کند.
+
+    این تابع هم کوکی‌ها و هم localStorage را تزریق می‌کند تا SPA دیوار
+    کاربر را لاگین‌شده تشخیص دهد.
+    """
+    _sv_log("info", _LOG_TAG_SESSION, f"باز کردن مرورگر با سشن {session_path}")
     browser = find_browser()
     if not browser:
         raise RuntimeError("Edge/Chrome پیدا نشد — برای پازل همان اکانت لازم است")
     cookies = cookies_from_session(session_path)
     if not cookies:
         raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
+    ls_items = localStorage_from_session(session_path)
+    if not ls_items:
+        _sv_log("warning", _LOG_TAG_AUTH,
+                "localStorage در سشن خالی است — لاگین ممکن است کار نکند")
     profile = persistent_profile_dir(session_path)
     profile.mkdir(parents=True, exist_ok=True)
     _clear_stale_locks(profile)
@@ -459,9 +594,39 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
         "--new-window",
         f"--app={start_url}",
     ]
+    _sv_log("info", _LOG_TAG_BROWSER, f"لانچ مرورگر برای {Path(session_path).parent.name}")
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ws = _wait_cdp(port, tries=100, profile=profile, proc=proc)
-    _cdp_set_cookies(ws, cookies, start_url)
+    cdp = CdpClient(ws)
+    try:
+        cdp.call("Network.enable")
+        cdp.call("Page.enable")
+        try:
+            cdp.call("Runtime.enable")
+        except Exception:
+            pass
+        for ck in cookies:
+            try:
+                cdp.call("Network.setCookie", {
+                    "name": ck["name"], "value": ck["value"],
+                    "domain": ck.get("domain") or ".divar.ir",
+                    "path": ck.get("path") or "/",
+                    "secure": True,
+                    "httpOnly": ck["name"] != "sFrontToken",
+                })
+            except Exception:
+                pass
+        # تزریق localStorage قبل از ناویگیت — حیاتی برای SPA
+        n_ls = _inject_local_storage(cdp, ls_items)
+        _sv_log("info", _LOG_TAG_AUTH, f"{n_ls} آیتم localStorage تزریق شد")
+        cdp.call("Page.navigate", {"url": start_url}, timeout=20)
+        time.sleep(0.8)
+    finally:
+        try:
+            cdp.close()
+        except Exception:
+            pass
+    _sv_log("success", _LOG_TAG_SESSION, f"مرورگر با سشن {Path(session_path).parent.name} باز شد")
     return f"opened {browser} as session {Path(session_path).parent.name}"
 
 
@@ -490,7 +655,7 @@ def _ws_recv(sock: socket.socket, timeout: float = 8.0) -> Optional[str]:
     if mask:
         data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
     if opcode == 0x9:
-        _ws_send(sock, "")  # ignore empty; ping handled loosely
+        _ws_send(sock, "")
         return None
     if opcode in (0x8, 0xA):
         return None
@@ -500,6 +665,8 @@ def _ws_recv(sock: socket.socket, timeout: float = 8.0) -> Optional[str]:
 
 
 class CdpClient:
+    """کلاینت CDP (Chrome DevTools Protocol) از طریق WebSocket."""
+
     def __init__(self, ws_url: str):
         self.sock = _ws_connect(ws_url)
         self._n = 0
@@ -537,8 +704,54 @@ class CdpClient:
             pass
 
 
+# ─── Session validation helpers ───────────────────────────────────
+
+def validate_session(session_path: str) -> Dict[str, Any]:
+    """اعتبارسنجی کامل سشن.
+
+    بررسی می‌کند:
+    - فایل وجود دارد
+    - JSON معتبر است
+    - توکن وجود دارد
+    - localStorage (در صورت نیاز) وجود دارد
+
+    Returns: {"valid": bool, "has_token": bool, "has_ls": bool, "detail": str}
+    """
+    p = Path(session_path)
+    if not p.exists():
+        return {"valid": False, "detail": "فایل سشن وجود ندارد"}
+
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        return {"valid": False, "detail": f"JSON نامعتبر: {e}"}
+
+    token = data.get("token") or data.get("cookies", {}).get("sAccessToken") or ""
+    if not token:
+        return {"valid": False, "detail": "توکن لاگین وجود ندارد"}
+
+    has_ls = bool(data.get("localStorage"))
+    return {
+        "valid": True,
+        "has_token": bool(token),
+        "has_ls": has_ls,
+        "detail": f"توکن موجود ({len(token)} کاراکتر)" +
+                  (", localStorage موجود" if has_ls else ", localStorage موجود نیست — ممکن است SPA لاگین را تشخیص ندهد"),
+    }
+
+
+# ─── PuzzleLive with localStorage support ───────────────────────
+
 class PuzzleLive:
-    """سشن دیوار همین اکانت — تصویر داخل پاپ‌آپ پنل، بدون iframe."""
+    """سشن دیوار همین اکانت — تصویر داخل پاپ‌آپ پنل، بدون iframe.
+
+    این کلاس:
+    1. مرورگر را با پروفایل دائمی اکانت باز می‌کند
+    2. کوکی‌ها و localStorage را تزریق می‌کند
+    3. به URL موردنظر ناویگیت می‌کند
+    4. منتظر می‌ماند تا اپراتور کپچا را حل کند
+    5. سپس کوکی‌ها و localStorage به‌روزشده را برمی‌گرداند
+    """
 
     def __init__(self) -> None:
         self.proc: Optional[subprocess.Popen] = None
@@ -550,24 +763,48 @@ class PuzzleLive:
         self.lock = __import__("threading").Lock()
 
     def start(self, session_path: str, start_url: str = "https://divar.ir") -> None:
+        """مرورگر را باز می‌کند و کوکی+localStorage را تزری می‌کند.
+
+        Args:
+            session_path: مسیر فایل session.json اکانت
+            start_ur: URL مقصد (محصول با کپچا)
+        """
+        _sv_log("info", _LOG_TAG_SESSION, f"PuzzleLive.start({session_path}, {start_url})")
         browsers = find_browsers()
         if not browsers:
             raise RuntimeError("Edge یا Chrome روی این رایانه پیدا نشد")
+
         cookies = cookies_from_session(session_path)
         if not cookies:
             raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
+
+        ls_items = localStorage_from_session(session_path)
+        if not ls_items:
+            _sv_log("warning", _LOG_TAG_AUTH, "localStorage خالی است")
+        else:
+            _sv_log("info", _LOG_TAG_AUTH, f"{len(ls_items)} آیتم localStorage از فایل سشن خوانده شد")
+
+        # Validate the start_url — never use root URL for product pages
+        if not start_url or start_url == "about:blank":
+            _sv_log("error", _LOG_TAG_CAPTCHA, "start_url نامعتبر است")
+            raise RuntimeError("URL مقصد نامعتبر است")
+        if start_url in ("https://divar.ir", "https://www.divar.ir", "https://divar.ir/"):
+            _sv_log("warning", _LOG_TAG_CAPTCHA,
+                    "start_url به ریشه دیوار اشاره دارد — ممکن است محصول مشخص نباشد")
+
+        _sv_log("info", _LOG_TAG_CAPTCHA, f"باز شدن مرورگر برای URL: {start_url}")
+
         self.session_path = session_path
         _cleanup_old_temp_profiles(session_path)
-        # همان پروفایل دائمی اکانت — نه پوشهٔ موقت puzzle-live.
-        # کوکی حل‌شده اینجا می‌ماند و بعد به session.json برمی‌گردد.
+
+        # همان پروفایل دائمی اکانت
         profile = persistent_profile_dir(session_path)
         profile.mkdir(parents=True, exist_ok=True)
         self.profile = profile
         _clear_stale_locks(profile)
+
         last = ""
         for browser in browsers:
-            # پورت ۰: خود Edge/Chrome پورت واقعی را در DevToolsActivePort می‌نویسد.
-            # پورت ازپیش‌گرفته‌شده در ویندوز اغلب نادیده گرفته می‌شد → پاسخ خالی CDP.
             port = 0
             cmd = _browser_cmd(browser, profile, port)
             err_log = profile / "browser.err"
@@ -596,6 +833,7 @@ class PuzzleLive:
                 _kill_proc(self.proc)
                 self.proc = None
                 continue
+
             self.cdp = CdpClient(ws)
             try:
                 self.cdp.call("Network.enable")
@@ -604,6 +842,8 @@ class PuzzleLive:
                     self.cdp.call("Runtime.enable")
                 except Exception:
                     pass
+
+                # 1) کوکی‌ها را تزریق کن
                 for ck in cookies:
                     try:
                         self.cdp.call("Network.setCookie", {
@@ -615,9 +855,20 @@ class PuzzleLive:
                         })
                     except Exception:
                         pass
+
+                # 2) localStorage را تزریق کن (بعد از کوکی‌ها، قبل از ناویگیت)
+                n_ls = _inject_local_storage(self.cdp, ls_items)
+                _sv_log("info", _LOG_TAG_AUTH, f"{n_ls} آیتم localStorage تزریق شد")
+                if n_ls == 0 and ls_items:
+                    _sv_log("warning", _LOG_TAG_AUTH,
+                            "localStorage تزریق نشد — ممکن است SPA لاگین را تشخیص ندهد")
+
+                # 3) به URL مقصد ناویگیت کن
                 self.cdp.call("Page.navigate", {"url": start_url}, timeout=20)
                 self._wait_ready()
                 self._nudge_window()
+
+                _sv_log("success", _LOG_TAG_CAPTCHA, f"مرورگر برای {start_url} باز شد")
             except Exception as e:
                 last = str(e)
                 try:
@@ -629,6 +880,7 @@ class PuzzleLive:
                 self.proc = None
                 continue
             return
+
         raise RuntimeError(
             "پازل روی رایانه باز نشد. پروکسی/وی‌پی‌ان سیستم را برای این برنامه "
             "خاموش کنید، Edge/Chrome را ببندید و دوباره «نمایش پازل» را بزنید"
@@ -667,10 +919,15 @@ class PuzzleLive:
         except Exception:
             pass
 
-    def harvest_cookies(self) -> int:
-        """کوکی دیوار همین پروفایل را به session.json برمی‌گرداند."""
+    def harvest_state(self) -> int:
+        """کوکی‌ها و localStorage را از مرورگر جمع‌آوری کرده و در فایل سشن ذخیره می‌کند.
+
+        Returns: تعداد آیتم‌های ذخیره‌شده
+        """
         if not self.cdp or not self.session_path:
             return 0
+
+        # 1) Get cookies
         cookies: List[Dict[str, Any]] = []
         try:
             r = self.cdp.call("Network.getCookies", {
@@ -686,7 +943,28 @@ class PuzzleLive:
                 cookies = list(r.get("cookies") or [])
             except Exception:
                 return 0
-        return merge_session_cookies(self.session_path, cookies)
+
+        # 2) Get localStorage
+        ls = {}
+        try:
+            r = self.cdp.call("Runtime.evaluate", {
+                "expression": "JSON.stringify(window.localStorage)",
+                "returnByValue": True,
+            }, timeout=5)
+            val = r.get("result", {}).get("value")
+            if val and isinstance(val, str):
+                parsed = json.loads(val)
+                if isinstance(parsed, dict):
+                    ls = parsed
+        except Exception:
+            pass
+
+        # 3) Save to session file atomically
+        return _merge_session_data(self.session_path, cookies, ls)
+
+    def harvest_cookies(self) -> int:
+        """Legacy: only cookies. Use harvest_state() instead."""
+        return self.harvest_state()
 
     def screenshot(self) -> bytes:
         if not self.cdp:
@@ -735,10 +1013,14 @@ class PuzzleLive:
                               {"type": "keyUp", "text": ch})
 
     def stop(self) -> None:
+        _sv_log("info", _LOG_TAG_SESSION, "PuzzleLive.stop() — ذخیره و بستن")
+        # اول state را ذخیره کن، بعد ببند
         try:
-            self.harvest_cookies()
-        except Exception:
-            pass
+            n = self.harvest_state()
+            if n:
+                _sv_log("info", _LOG_TAG_SESSION, f"{n} آیتم state ذخیره شد")
+        except Exception as e:
+            _sv_log("warning", _LOG_TAG_SESSION, f"خطا در ذخیره state: {e}")
         try:
             if self.cdp:
                 self.cdp.close()
@@ -771,7 +1053,12 @@ class PuzzleLive:
 
 
 def launch_account_browser(session_path: str, name: str = "") -> Tuple[bool, str]:
-    """از پنل صدا زده می‌شود — فرآیند جدا تا GUI گیر نکند."""
+    """از پنل صدا زده می‌شود — فرآیند جدا تا GUI گیر نکند.
+
+    این تابع یک فرآیند جداگانه راه می‌اندازد که مرورگر را با سشن همان
+    اکانت باز می‌کند. برای نمایش پازل/کپچا به اپراتور استفاده می‌شود.
+    """
+    _sv_log("info", _LOG_TAG_CAPTCHA, f"launch_account_browser({session_path}, {name})")
     session_path = str(session_path)
     if not Path(session_path).exists():
         return False, "سشن این اکانت پیدا نشد"
