@@ -200,15 +200,50 @@ def merge_into_session_file(session_path: str, phone: str, token: str,
         pass
 
 
-def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:
-    """لیست کوکی برای CDP — روی divar.ir و api.divar.ir، قبل از Navigate."""
+SITE_PROOF_NAMES = ("sFrontToken", "sRefreshToken", "sAntiCsrf")
+SITE_PROOF_HEADERS = ("front-token", "st-refresh-token")
+
+
+def _cookie_names(data: Dict[str, Any]) -> set:
+    names = set()
+    for k in (data.get("cookies") or {}):
+        names.add(str(k))
+    for c in data.get("cookies_full") or []:
+        if isinstance(c, dict) and c.get("name"):
+            names.add(str(c["name"]))
+    return names
+
+
+def session_data(session_path: str) -> Dict[str, Any]:
     p = Path(session_path)
     if not p.exists():
-        return []
+        return {}
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
+        return {}
+
+
+def session_is_complete(session_path: str) -> bool:
+    """سشن سایت کامل است؟ فقط JWT برای صفحهٔ لاگین‌شده کافی نیست."""
+    data = session_data(session_path)
+    if not data.get("token"):
+        return False
+    names = _cookie_names(data)
+    if any(n in names for n in SITE_PROOF_NAMES):
+        return True
+    headers = data.get("auth_headers") or {}
+    if any(headers.get(h) for h in SITE_PROOF_HEADERS):
+        return True
+    return False
+
+
+def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:
+    """لیست کوکی برای CDP — فقط اگر سشن سایت کامل باشد."""
+    if not session_is_complete(session_path):
         return []
+    data = session_data(session_path)
     token = str(data.get("token") or "")
     by_name: Dict[str, str] = {}
     for c in data.get("cookies_full") or []:

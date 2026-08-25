@@ -39,14 +39,12 @@ class TestCookiesFromSession(unittest.TestCase):
                             or "api.divar.ir" in " ".join(c.get("urls") or [])
                             for c in cks))
 
-    def test_token_only_sets_access_cookie(self):
+    def test_token_only_is_not_a_logged_in_site_session(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
             json.dump({"token": "ONLY"}, f)
-        by = {c["name"]: c["value"] for c in cookies_from_session(p)}
-        self.assertEqual(by["token"], "ONLY")
-        self.assertEqual(by["sAccessToken"], "ONLY")
+        self.assertEqual(cookies_from_session(p), [])
 
     def test_missing_file(self):
         self.assertEqual(cookies_from_session("/no/such/session.json"), [])
@@ -74,7 +72,7 @@ class TestLaunchGuard(unittest.TestCase):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
-            json.dump({"token": "T"}, f)
+            json.dump({"token": "T", "cookies": {"sFrontToken": "F"}}, f)
         with mock.patch("marketing_divar.session_view.find_browser",
                         return_value="/usr/bin/chromium"), \
              mock.patch("marketing_divar.session_view.subprocess.Popen") as pop:
@@ -144,7 +142,7 @@ class TestCdpLocalHttp(unittest.TestCase):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
         with open(p, "w", encoding="utf-8") as f:
-            json.dump({"token": "T"}, f)
+            json.dump({"token": "T", "cookies": {"sFrontToken": "F"}}, f)
         live = PuzzleLive()
         with mock.patch("marketing_divar.session_view.find_browsers",
                         return_value=["/usr/bin/no-such-browser"]), \

@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.7")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.8")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -128,7 +128,7 @@ class LeadStatusUpdate(BaseModel):
 # ------------------------------------------------------------ API اکانت‌ها --
 @app.get("/api/accounts")
 def accounts_list():
-    return {"accounts": mgr().snapshot(DB_PATH)}
+    return {"accounts": mgr().snapshot(DB_PATH, complete_only=True)}
 
 
 @app.post("/api/accounts/otp")
@@ -166,9 +166,13 @@ def accounts_confirm(req: OtpConfirm):
     except DivarAuthError as e:
         _state["pending_logins"][name] = phone  # فرصت دوباره برای کد
         raise HTTPException(400, f"کد نامعتبر: {e}")
+    if not mgr().has_full_login(name):
+        log("warning", f"اکانت «{name}» توکن گرفت ولی سشن سایت کامل نشد — در پنل نشان داده نمی‌شود")
+        return {"ok": False, "incomplete": True,
+                "message": "لاگین ناقص بود (سشن سایت نیامد). این اکانت نشان داده نمی‌شود — دوباره کد بگیرید"}
     mgr().set_status(name, "active", note="")
-    log("success", f"اکانت «{name}» با موفقیت لاگین شد ({phone})")
-    return {"ok": True, "message": "لاگین موفق"}
+    log("success", f"اکانت «{name}» با سشن کامل لاگین شد ({phone})")
+    return {"ok": True, "message": "لاگین موفق — سشن سایت همین اکانت ذخیره شد"}
 
 
 def _do_unlock(name: str, reason: str = "operator") -> Dict[str, Any]:
@@ -210,8 +214,8 @@ class AccountProbe(BaseModel):
 def accounts_probe(req: AccountProbe):
     """با همان اکانت مسدود به دیوار بزن — اگر پازل رفته بود خودکار آزاد شود."""
     m = mgr()
-    if not m.has_token(req.name):
-        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    if not m.has_full_login(req.name):
+        raise HTTPException(404, "سشن کامل این اکانت نیست — دوباره لاگین کنید")
     live = (_state.get("puzzles") or {}).get(req.name)
     if live:
         try:
@@ -230,8 +234,8 @@ class AccountPuzzle(BaseModel):
 def accounts_open_puzzle(req: AccountPuzzle):
     """پازل همان اکانت را داخل پاپ‌آپ پنل باز می‌کند (نه iframe، نه تب مهمان)."""
     m = mgr()
-    if not m.has_token(req.name):
-        raise HTTPException(404, "چنین اکانتی لاگین نشده است")
+    if not m.has_full_login(req.name):
+        raise HTTPException(404, "سشن کامل این اکانت نیست — دوباره با کد پیامک لاگین کنید")
     from ..session_view import PuzzleLive
     start_url = "https://divar.ir"
     try:
@@ -542,7 +546,7 @@ def status():
             "no_contact": _cnt("phone_status='hidden'"),
             "failed": _cnt("phone_status='error'"),
         }
-        acc_snap = mgr().snapshot(DB_PATH)
+        acc_snap = mgr().snapshot(DB_PATH, complete_only=True)
         acc_break = {"active": 0, "busy": 0, "rate_limited": 0,
                      "captcha": 0, "error": 0, "disabled": 0}
         for a in acc_snap:
@@ -866,7 +870,7 @@ def captcha_pending():
     from ..gate import new_challenge
     gates = _state.setdefault("gates", {})
     pending = []
-    for a in mgr().snapshot(DB_PATH):
+    for a in mgr().snapshot(DB_PATH, complete_only=True):
         if a.get("status") != "captcha":
             gates.pop(a["name"], None)
             continue

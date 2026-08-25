@@ -737,7 +737,7 @@ async function accRefresh(){
           ${a.status!=='active'?`<button class="btn sm ok" onclick="accAction('${a.name}','release')">🔄 آزادسازی</button>`:''}
           ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
           ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
-        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز اکانتی لاگین نشده</div>';
+        </div>${cap}</div>`;}).join('') : '<div class="empty">اکانت لاگین‌شدهٔ کامل نیست. حساب‌های قدیمی فقط-توکن نشان داده نمی‌شوند — دوباره با کد پیامک لاگین کنید.</div>';
   }catch(e){}
 }
 async function accAction(name, action){

@@ -47,6 +47,10 @@ class AccountManager:
         except Exception:
             return False
 
+    def has_full_login(self, name: str) -> bool:
+        from .auth_session import session_is_complete
+        return session_is_complete(str(self.session_path(name)))
+
     def login_account(self, name: str) -> None:
         """لاگین تعاملی یک اکانت مشخص (شماره + کد پیامکی)."""
         from .client import DivarClient  # import داخلی برای جلوگیری از حلقه
@@ -150,13 +154,16 @@ class AccountManager:
         finally:
             con.close()
 
-    def snapshot(self, db_path: str) -> List[Dict[str, Any]]:
-        """گزارش کامل برای فرمان status داخل مانیتور."""
+    def snapshot(self, db_path: str, complete_only: bool = False) -> List[Dict[str, Any]]:
+        """گزارش اکانت‌ها. complete_only=True یعنی سشن ناقص (فقط JWT) دیده نشود."""
         con = connect(db_path)
         try:
             out = []
             states = self._load_states()
             for name in self.list_accounts():
+                full = self.has_full_login(name)
+                if complete_only and not full:
+                    continue
                 rec = states.get(name) or {}
                 status = rec.get("status", "active")
                 if status == "cooldown" and time.time() >= rec.get("cooldown_until", 0):
@@ -164,6 +171,7 @@ class AccountManager:
                 out.append({"name": name, "status": status,
                             "note": rec.get("note", ""),
                             "has_token": self.has_token(name),
+                            "login_complete": full,
                             "phones_today": account_quota_today(con, name),
                             "last_probe_at": rec.get("last_probe_at") or "",
                             "last_probe_state": rec.get("last_probe_state") or "",

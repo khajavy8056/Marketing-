@@ -178,6 +178,22 @@ def city_slug(cities: Optional[List[Any]]) -> str:
     return _slug_of(cities[0])
 
 
+def _cookie_value(jar, name: str) -> str:
+    """RequestsCookieJar با چند دامنه برای یک نام، .get را می‌ترکاند."""
+    try:
+        v = jar.get(name)
+        return str(v) if v else ""
+    except Exception:
+        pass
+    try:
+        for c in jar:
+            if getattr(c, "name", None) == name:
+                return str(getattr(c, "value", "") or "")
+    except Exception:
+        pass
+    return ""
+
+
 HIDDEN_MARKER = "شماره مخفی شده است"
 MOBILE_MARKER = "موبایل"          # عنوان ویجت شماره در پاسخ v2
 HIDDEN_MARKER_V2 = "مخفی"         # عنوان ویجت شماره مخفی در v2
@@ -421,9 +437,14 @@ class DivarClient:
         merged_hdr = dict(prev.get("auth_headers") or {})
         merged_hdr.update(bag.get("auth_headers") or {})
         self._last_absorbed = {"cookies_full": merged_full, "auth_headers": merged_hdr}
+        seen_names = set()
         for c in bag.get("cookies_full") or []:
+            name = c.get("name")
+            if not name or name in seen_names:
+                continue
+            seen_names.add(name)
             try:
-                self.http.cookies.set(c["name"], c["value"])
+                self.http.cookies.set(name, c.get("value") or "")
             except Exception:
                 pass
 
@@ -464,7 +485,22 @@ class DivarClient:
 
     # --------------------------------------------------------------- login --
     def request_otp(self, phone: str) -> bool:
-        """گام ۱: درخواست کد تایید پیامکی — v5 اصلی، v8 پشتیبان."""
+        """گام ۱: اول مسیر سایت (v8/SuperTokens)، بعد v5."""
+        r2 = None
+        try:
+            r2 = self._fetch(
+                "POST", f"{self.base}/v8/authenticate/signinup/code",
+                json={"phoneNumber": str(phone)},
+                headers={"st-auth-mode": "cookie"}, timeout=25)
+            if r2.status_code in (200, 201):
+                return True
+            if r2.status_code in (403, 429) or looks_like_captcha(r2.text):
+                raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
+                                        r2.status_code, r2.text)
+        except DivarBlockedError:
+            raise
+        except Exception:
+            pass
         r = self._fetch("POST", f"{self.base}/v5/auth/authenticate",
                            json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
@@ -472,35 +508,17 @@ class DivarClient:
         if r.status_code in (403, 429) or looks_like_captcha(r.text):
             raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
                                     r.status_code, r.text)
-        # مسیر جدید v8 (کوکی‌محور) — اگر v5 غیرفعال شده باشد
-        try:
-            r2 = self._fetch("POST", 
-                f"{self.base}/v8/authenticate/signinup/code",
-                json={"phoneNumber": str(phone)},
-                headers={"st-auth-mode": "cookie"}, timeout=25)
-            if r2.status_code in (200, 201):
-                return True
-        except requests.exceptions.RequestException:
-            pass
         raise RuntimeError(
-            f"ارسال کد ناموفق: v5→HTTP {r.status_code}؛ "
-            f"v8→HTTP {getattr(r2, 'status_code', '—')} — {r.text[:150]}")
+            f"ارسال کد ناموفق: v8→HTTP {getattr(r2, 'status_code', '—')}؛ "
+            f"v5→HTTP {r.status_code} — {r.text[:150]}")
 
     def confirm_otp(self, phone: str, code: str) -> str:
-        """گام ۲: تأیید کد و دریافت توکن — v5 اصلی، v8 پشتیبان."""
-        r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
-                           json={"phone": str(phone), "code": str(code)},
-                           timeout=25)
-        if r.status_code in (200, 201):
-            tok = (r.json() or {}).get("token")
-            if tok:
-                self.token = tok
-                self._save_session(phone)
-                return tok
-        # مسیر جدید v8 — سشن کوکی‌محور (sAccessToken/sFrontToken)
+        """گام ۲: اول consume سایت (کوکی SuperTokens)، بعد توکن API."""
+        from .auth_session import session_is_complete
+        r2 = None
         try:
-            r2 = self._fetch("POST", 
-                f"{self.base}/v8/authenticate/signinup/code/consume",
+            r2 = self._fetch(
+                "POST", f"{self.base}/v8/authenticate/signinup/code/consume",
                 json={"code": str(code), "phoneNumber": str(phone)},
                 headers={"st-auth-mode": "cookie"}, timeout=25)
             if r2.status_code in (200, 201):
@@ -509,17 +527,33 @@ class DivarClient:
                     tok = (r2.json() or {}).get("token") or ""
                 except ValueError:
                     pass
-                # در فلوی v8 اعتبارسنجی با کوکی‌های ست‌شده توسط سرور انجام می‌شود
-                if tok or self.http.cookies.get("sAccessToken"):
-                    self.token = tok or self.http.cookies.get("sAccessToken")
-                    self._save_session(phone)
+                tok = tok or _cookie_value(self.http.cookies, "sAccessToken") or ""
+                if tok:
+                    self.token = tok
+                self._save_session(phone)
+                if self.token and session_is_complete(str(self.session_path)):
                     return self.token
-                raise DivarAuthError("پاسخ v8 نه توکن داشت نه کوکی سشن")
-        except requests.exceptions.RequestException as e:
-            raise DivarAuthError(f"خطای شبکه در تأیید v8: {e}")
+        except requests.exceptions.RequestException:
+            r2 = None
+        r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
+                           json={"phone": str(phone), "code": str(code)},
+                           timeout=25)
+        if r.status_code in (200, 201):
+            tok = ""
+            try:
+                tok = (r.json() or {}).get("token") or ""
+            except ValueError:
+                pass
+            if tok:
+                self.token = tok
+                self._save_session(phone)
+                return tok
+        if self.token:
+            self._save_session(phone)
+            return self.token
         raise DivarAuthError(
-            f"کد تأیید نامعتبر یا منقضی (v5→HTTP {r.status_code}؛ "
-            f"v8→HTTP {getattr(r2, 'status_code', '—')})")
+            f"کد تأیید نامعتبر یا منقضی (v8→HTTP {getattr(r2, 'status_code', '—')}؛ "
+            f"v5→HTTP {r.status_code})")
 
     def login_interactive(self, phone: Optional[str] = None) -> None:
         """جریان کامل لاگین: شماره → کد پیامکی → ذخیره توکن."""

@@ -129,6 +129,28 @@ class TestPersistAndInject(unittest.TestCase):
         self.assertEqual(data["cookies"].get("sFrontToken"), "FRONT1")
         self.assertTrue(any(x.get("name") == "sRefreshToken" for x in data["cookies_full"]))
 
+    def test_incomplete_token_only_hidden(self):
+        from marketing_divar.accounts import AccountManager
+        from marketing_divar.auth_session import session_is_complete
+        from marketing_divar.config import DEFAULTS
+        d = tempfile.mkdtemp()
+        old = Path(d) / "old" / "session.json"
+        old.parent.mkdir(parents=True)
+        old.write_text(json.dumps({"token": "JWT-ONLY"}), encoding="utf-8")
+        good = Path(d) / "good" / "session.json"
+        good.parent.mkdir(parents=True)
+        good.write_text(json.dumps({
+            "token": "JWT2", "cookies": {"sFrontToken": "FRONT"}}), encoding="utf-8")
+        self.assertFalse(session_is_complete(str(old)))
+        self.assertTrue(session_is_complete(str(good)))
+        m = AccountManager(DEFAULTS, d)
+        db = os.path.join(d, "x.db")
+        from marketing_divar.db import connect
+        connect(db).close()
+        names = [a["name"] for a in m.snapshot(db, complete_only=True)]
+        self.assertEqual(names, ["good"])
+        self.assertNotIn("old", names)
+
     def test_inject_cookies_and_script_before_navigate(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "session.json")
