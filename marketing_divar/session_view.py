@@ -232,7 +232,7 @@ def _http_get_local(port: int, path: str, timeout: float = 1.8) -> str:
                 if not chunk:
                     break
                 buf += chunk
-                if b"\r\n\r\n" in buf or len(buf) > 2_000_000:
+                if len(buf) > 2_000_000:
                     break
         except OSError as e:
             last = str(e)

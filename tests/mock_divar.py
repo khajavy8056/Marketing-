@@ -88,7 +88,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(200, {"token": "tok-ok"})
         elif u.path == "/v8/authenticate/signinup/code":
-            self._json(200, {})
+            self._json(200, {"status": "OK", "deviceId": "dev-mock",
+                             "preAuthSessionId": "pre-mock",
+                             "flowType": "USER_INPUT_CODE"})
         elif u.path.startswith("/v8/postcontact/web/contact_info_v2/"):
             # فلوی جدید دو مرحله‌ای — باید Bearer/کوکی + contact_uuid درست باشد
             token = u.path.rsplit("/", 1)[-1]
@@ -123,8 +125,13 @@ class Handler(BaseHTTPRequestHandler):
                                    "has_chat": p["has_chat"]}} for p in items]
             self._json(200, {"web_widgets": {"post_list": post_list}})
         elif u.path == "/v8/authenticate/signinup/code/consume":
-            if body.get("code") == "000000":
+            code = str(body.get("userInputCode") or body.get("code") or "")
+            if code.strip() == "000000":
                 self._json(401, {"error": "invalid code"})
+            elif body.get("deviceId") and body.get("deviceId") != "dev-mock":
+                self._json(401, {"error": "bad device"})
+            elif body.get("preAuthSessionId") and body.get("preAuthSessionId") != "pre-mock":
+                self._json(401, {"error": "bad preAuth"})
             else:
                 # فلوی v8: کوکی‌های سشن ست می‌شوند (شبیه دیوار واقعی)
                 self.send_response(200)

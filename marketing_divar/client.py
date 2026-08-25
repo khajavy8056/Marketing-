@@ -271,6 +271,65 @@ CAPTCHA_MARKERS = ("captcha_required", "captcha-required", "arkose",
                    "hcaptcha", "recaptcha", "کپچا")
 
 
+def _safe_json(r: Any) -> Any:
+    try:
+        return r.json()
+    except Exception:
+        return None
+
+
+def _extract_otp_device(obj: Any, depth: int = 0) -> Dict[str, str]:
+    """deviceId / preAuthSessionId را از هر شکل پاسخ SuperTokens برمی‌دارد."""
+    out = {"deviceId": "", "preAuthSessionId": "", "flowType": ""}
+    if depth > 6 or obj is None:
+        return out
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            lk = str(k).lower().replace("_", "")
+            if isinstance(v, str) and v.strip():
+                if lk == "deviceid" and not out["deviceId"]:
+                    out["deviceId"] = v.strip()
+                elif lk == "preauthsessionid" and not out["preAuthSessionId"]:
+                    out["preAuthSessionId"] = v.strip()
+                elif lk == "flowtype" and not out["flowType"]:
+                    out["flowType"] = v.strip()
+            elif isinstance(v, dict):
+                nested = _extract_otp_device(v, depth + 1)
+                out["deviceId"] = out["deviceId"] or nested["deviceId"]
+                out["preAuthSessionId"] = out["preAuthSessionId"] or nested["preAuthSessionId"]
+                out["flowType"] = out["flowType"] or nested["flowType"]
+            elif isinstance(v, list):
+                for item in v[:8]:
+                    nested = _extract_otp_device(item, depth + 1)
+                    out["deviceId"] = out["deviceId"] or nested["deviceId"]
+                    out["preAuthSessionId"] = out["preAuthSessionId"] or nested["preAuthSessionId"]
+                    out["flowType"] = out["flowType"] or nested["flowType"]
+    return out
+
+
+def _token_from_payload(data: Any) -> str:
+    if not isinstance(data, dict):
+        return ""
+    for k in ("token", "accessToken", "access_token", "sAccessToken"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    sess = data.get("session")
+    if isinstance(sess, dict):
+        at = sess.get("accessToken") or sess.get("token")
+        if isinstance(at, dict) and isinstance(at.get("token"), str) and at["token"].strip():
+            return at["token"].strip()
+        if isinstance(at, str) and at.strip():
+            return at.strip()
+    user = data.get("user")
+    if isinstance(user, dict):
+        for k in ("token", "accessToken"):
+            v = user.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return ""
+
+
 class DivarAuthError(Exception):
     """توکن وجود ندارد، منقضی شده یا رد شده است."""
 
@@ -484,6 +543,61 @@ class DivarClient:
         self._load_session()
 
     # --------------------------------------------------------------- login --
+    def _otp_pending_path(self) -> Path:
+        return self.session_path.parent / "otp_pending.json"
+
+    def _st_headers(self) -> Dict[str, str]:
+        return {"rid": "passwordless", "st-auth-mode": "cookie",
+                "fdi-version": "1.17", "Content-Type": "application/json"}
+
+    def _save_otp_pending(self, phone: str, data: Any) -> Dict[str, str]:
+        rec = {"phone": str(phone), "deviceId": "", "preAuthSessionId": "",
+               "flowType": "", "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        rec.update(_extract_otp_device(data))
+        p = self._otp_pending_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        return rec
+
+    def _load_otp_pending(self, phone: str) -> Dict[str, str]:
+        p = self._otp_pending_path()
+        if not p.exists():
+            return {}
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        if not isinstance(rec, dict):
+            return {}
+        if rec.get("phone") and str(rec.get("phone")) != str(phone):
+            return rec
+        return rec
+
+    def _clear_otp_pending(self) -> None:
+        try:
+            p = self._otp_pending_path()
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
+
+    def _finish_login(self, phone: str, token: str = "") -> str:
+        if token:
+            self.token = token
+        if not self.token:
+            self.token = (_cookie_value(self.http.cookies, "sAccessToken")
+                          or _cookie_value(self.http.cookies, "token") or "")
+        self._save_session(phone)
+        if self.token:
+            try:
+                from .auth_session import ensure_site_cookies_from_token
+                ensure_site_cookies_from_token(
+                    str(self.session_path), self.token, phone)
+            except Exception:
+                pass
+        self._clear_otp_pending()
+        return self.token or ""
+
     def request_otp(self, phone: str) -> bool:
         """گام ۱: اول مسیر سایت (v8/SuperTokens)، بعد v5."""
         r2 = None
@@ -491,8 +605,16 @@ class DivarClient:
             r2 = self._fetch(
                 "POST", f"{self.base}/v8/authenticate/signinup/code",
                 json={"phoneNumber": str(phone)},
-                headers={"st-auth-mode": "cookie"}, timeout=25)
+                headers=self._st_headers(), timeout=25)
             if r2.status_code in (200, 201):
+                body = None
+                try:
+                    body = r2.json()
+                except ValueError:
+                    body = {}
+                rec = self._save_otp_pending(phone, body)
+                _log("info", "OTP v8 ثبت شد"
+                     + (f" (deviceId={'هست' if rec.get('deviceId') else 'نیست'})"))
                 return True
             if r2.status_code in (403, 429) or looks_like_captcha(r2.text):
                 raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
@@ -504,6 +626,7 @@ class DivarClient:
         r = self._fetch("POST", f"{self.base}/v5/auth/authenticate",
                            json={"phone": str(phone)}, timeout=25)
         if r.status_code in (200, 201):
+            self._save_otp_pending(phone, {})
             return True
         if r.status_code in (403, 429) or looks_like_captcha(r.text):
             raise DivarBlockedError("درخواست کد محدود شد (شاید تلاش‌های زیاد OTP)",
@@ -513,46 +636,57 @@ class DivarClient:
             f"v5→HTTP {r.status_code} — {r.text[:150]}")
 
     def confirm_otp(self, phone: str, code: str) -> str:
-        """گام ۲: اول consume سایت (کوکی SuperTokens)، بعد توکن API."""
-        from .auth_session import session_is_complete
+        """گام ۲: consume سایت با deviceId/preAuthSessionId، بعد توکن API."""
+        pending = self._load_otp_pending(phone)
+        payloads: List[Dict[str, str]] = []
+        dev = str(pending.get("deviceId") or "")
+        pre = str(pending.get("preAuthSessionId") or "")
+        if dev and pre:
+            payloads.append({"userInputCode": str(code), "deviceId": dev,
+                             "preAuthSessionId": pre})
+        payloads.append({"userInputCode": str(code), "phoneNumber": str(phone)})
+        payloads.append({"code": str(code), "phoneNumber": str(phone)})
+        seen_pl = set()
+        uniq: List[Dict[str, str]] = []
+        for pl in payloads:
+            key = tuple(sorted(pl.items()))
+            if key in seen_pl:
+                continue
+            seen_pl.add(key)
+            uniq.append(pl)
         r2 = None
-        try:
-            r2 = self._fetch(
-                "POST", f"{self.base}/v8/authenticate/signinup/code/consume",
-                json={"code": str(code), "phoneNumber": str(phone)},
-                headers={"st-auth-mode": "cookie"}, timeout=25)
-            if r2.status_code in (200, 201):
-                tok = ""
-                try:
-                    tok = (r2.json() or {}).get("token") or ""
-                except ValueError:
-                    pass
-                tok = tok or _cookie_value(self.http.cookies, "sAccessToken") or ""
-                if tok:
-                    self.token = tok
-                self._save_session(phone)
-                if self.token and session_is_complete(str(self.session_path)):
-                    return self.token
-        except requests.exceptions.RequestException:
-            r2 = None
+        last_consume = None
+        for pl in uniq:
+            try:
+                r2 = self._fetch(
+                    "POST", f"{self.base}/v8/authenticate/signinup/code/consume",
+                    json=pl, headers=self._st_headers(), timeout=25)
+                last_consume = r2
+            except requests.exceptions.RequestException:
+                r2 = None
+                continue
+            if r2 is None or r2.status_code not in (200, 201):
+                continue
+            tok = _token_from_payload(_safe_json(r2))
+            tok = tok or _cookie_value(self.http.cookies, "sAccessToken") or ""
+            if tok:
+                return self._finish_login(phone, tok)
+            self._save_session(phone)
+            from .auth_session import session_is_complete
+            if session_is_complete(str(self.session_path)):
+                return self._finish_login(phone, self.token or tok)
         r = self._fetch("POST", f"{self.base}/v5/auth/confirm",
                            json={"phone": str(phone), "code": str(code)},
                            timeout=25)
         if r.status_code in (200, 201):
-            tok = ""
-            try:
-                tok = (r.json() or {}).get("token") or ""
-            except ValueError:
-                pass
+            tok = _token_from_payload(_safe_json(r))
             if tok:
-                self.token = tok
-                self._save_session(phone)
-                return tok
+                return self._finish_login(phone, tok)
         if self.token:
-            self._save_session(phone)
-            return self.token
+            return self._finish_login(phone, self.token)
         raise DivarAuthError(
-            f"کد تأیید نامعتبر یا منقضی (v8→HTTP {getattr(r2, 'status_code', '—')}؛ "
+            f"کد تأیید نامعتبر یا منقضی (v8→HTTP "
+            f"{getattr(last_consume or r2, 'status_code', '—')}؛ "
             f"v5→HTTP {r.status_code})")
 
     def login_interactive(self, phone: Optional[str] = None) -> None:

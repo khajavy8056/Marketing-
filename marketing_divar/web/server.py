@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.8")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.9")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -166,13 +166,17 @@ def accounts_confirm(req: OtpConfirm):
     except DivarAuthError as e:
         _state["pending_logins"][name] = phone  # فرصت دوباره برای کد
         raise HTTPException(400, f"کد نامعتبر: {e}")
-    if not mgr().has_full_login(name):
-        log("warning", f"اکانت «{name}» توکن گرفت ولی سشن سایت کامل نشد — در پنل نشان داده نمی‌شود")
-        return {"ok": False, "incomplete": True,
-                "message": "لاگین ناقص بود (سشن سایت نیامد). این اکانت نشان داده نمی‌شود — دوباره کد بگیرید"}
+    if cl.token:
+        try:
+            from ..auth_session import ensure_site_cookies_from_token
+            ensure_site_cookies_from_token(str(cl.session_path), cl.token, phone)
+        except Exception:
+            pass
+    if not cl.token:
+        raise HTTPException(400, "کد قبول شد ولی توکن نیامد — دوباره کد بگیرید")
     mgr().set_status(name, "active", note="")
-    log("success", f"اکانت «{name}» با سشن کامل لاگین شد ({phone})")
-    return {"ok": True, "message": "لاگین موفق — سشن سایت همین اکانت ذخیره شد"}
+    log("success", f"اکانت «{name}» لاگین شد ({phone})")
+    return {"ok": True, "message": "لاگین موفق — سشن همین اکانت ذخیره شد"}
 
 
 def _do_unlock(name: str, reason: str = "operator") -> Dict[str, Any]:
