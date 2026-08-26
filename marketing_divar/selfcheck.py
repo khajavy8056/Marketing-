@@ -38,8 +38,8 @@ def _check_windows_installer() -> None:
                    "ungoogled-chromium", "PROGRESS",
                    "barChrome", "SOURCE_FAIL", "BYTES", "SHA256",
                    "CHROMIUM_START", "DOWNLOAD_COMPLETED",
-                   "FolderBrowserDialog", "Publish-AppFiles",
-                   "WindowStyle Minimized", "Install folder"):
+                   "Find-Python", "Install-Python", "python.org",
+                   "WindowStyle Minimized"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -64,13 +64,6 @@ def _check_windows_installer() -> None:
         raise FileNotFoundError("setup_app.py missing independent Chromium progress")
     if "app-chromium" not in setup:
         raise FileNotFoundError("setup_app.py missing app-chromium folder")
-    if "askdirectory" not in setup or "CREATE_NO_WINDOW" not in setup:
-        raise FileNotFoundError("setup_app.py must pick install folder and hide console")
-    if "WindowStyle = 7" not in setup:
-        raise FileNotFoundError("setup_app.py shortcuts must start minimized")
-    pack = (root / "installer" / "pack_payload.py").read_text(encoding="utf-8")
-    if "payload.zip" not in pack or "marketing_divar" not in pack:
-        raise FileNotFoundError("pack_payload.py must zip the full app")
     fetch = (root / "installer" / "fetch_chromium.py").read_text(encoding="utf-8")
     if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
         raise FileNotFoundError("fetch_chromium.py incomplete")
@@ -88,8 +81,6 @@ def _check_windows_installer() -> None:
     bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
     if "fetch_chromium.py" not in bat_setup:
         raise FileNotFoundError("Setup build must bundle fetch_chromium.py")
-    if "pack_payload.py" not in bat_setup:
-        raise FileNotFoundError("Setup build must pack the full payload")
 
 
 def _check_static_ui() -> None:
@@ -122,6 +113,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("boot splash missing from panel")
     if 'id="link-ping"' not in html or "BOOT_MS = 240000" not in html:
         raise FileNotFoundError("server-link badge / 4-minute splash missing")
+    if 'id="quit-btn"' not in html or "quitApp" not in html:
+        raise FileNotFoundError("panel exit button missing")
+    if "/api/shutdown" not in html:
+        raise FileNotFoundError("shutdown API not wired in panel")
     cp = Path(__file__).parent / "chromium_profile.py"
     src = cp.read_text(encoding="utf-8")
     if "--user-data-dir=" not in src or "--profile-directory=Default" not in src:

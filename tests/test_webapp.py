@@ -32,6 +32,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from mock_divar import MockDivar, start_mock  # noqa: E402
 
 TMP = tempfile.mkdtemp()
+os.environ["DIVAR_NO_EXIT"] = "1"
 os.environ["DIVAR_DB_PATH"] = os.path.join(TMP, "web.db")
 os.environ["DIVAR_ACCOUNTS_DIR"] = os.path.join(TMP, "accounts")
 
@@ -105,6 +106,9 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("در حال اتصال به سرورها", r.text)
         self.assertIn("BOOT_MS = 240000", r.text)
         self.assertIn('id="link-ping"', r.text)
+        self.assertIn('id="quit-btn"', r.text)
+        self.assertIn("quitApp", r.text)
+        self.assertIn("/api/shutdown", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
@@ -133,6 +137,12 @@ class TestUIBasics(unittest.TestCase):
         self.assertEqual(cr.status_code, 200)
         self.assertIn("installed", cr.json())
         self.assertIn("percent", cr.json())
+
+    def test_shutdown_does_not_kill_tests(self):
+        r = client.post("/api/shutdown")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json().get("ok"))
+        self.assertFalse(r.json().get("scheduled"))
 
 
 class TestAccountFlow(unittest.TestCase):

@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.23")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.24")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -1156,6 +1156,31 @@ def diag_run():
     log("success" if good >= 4 else "error",
         f"بررسی اتصال تمام شد: {good}/{len(result['steps'])} قدم سالم")
     return result
+
+
+@app.post("/api/shutdown")
+def shutdown():
+    """Stop monitor and exit the Python process (panel Close button)."""
+    mon = _state.get("monitor")
+    if mon:
+        try:
+            mon.stop()
+        except Exception:
+            pass
+    try:
+        _stop_all_puzzles()
+    except Exception:
+        pass
+    log("info", "خروج کامل از برنامه")
+    if os.environ.get("DIVAR_NO_EXIT") == "1" or "unittest" in sys.modules:
+        return {"ok": True, "scheduled": False, "message": "برنامه بسته می‌شود"}
+
+    def _die() -> None:
+        time.sleep(0.4)
+        os._exit(0)
+
+    threading.Thread(target=_die, daemon=True).start()
+    return {"ok": True, "scheduled": True, "message": "برنامه بسته می‌شود"}
 
 
 @app.get("/", response_class=HTMLResponse)

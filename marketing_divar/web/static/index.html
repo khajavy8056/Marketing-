@@ -22,8 +22,9 @@
   header .sub{opacity:.85; font-size:13px}
   header .spacer{flex:1}
   #run-badge{background:rgba(255,255,255,.15); padding:6px 14px; border-radius:99px; font-size:13px}
-  #lang-btn{background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
+  #lang-btn,#quit-btn{background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35);
             padding:6px 14px; border-radius:99px; font-size:13px; cursor:pointer; font-family:inherit}
+  #quit-btn{background:#b42318; border-color:rgba(255,255,255,.25)}
   #run-badge.on{background:#2e9e5b}
   nav{display:flex; gap:6px; background:var(--card); border-bottom:1px solid var(--line);
       padding:0 18px; overflow-x:auto; position:sticky; top:0; z-index:10}
@@ -171,6 +172,7 @@
   <div class="spacer"></div>
   <button id="theme-btn" onclick="cycleTheme()" title="تم روشن / تیره / خودکار">◐</button>
   <button id="lang-btn" onclick="toggleLang()" title="فارسی / English">🌐 English</button>
+  <button id="quit-btn" type="button" onclick="quitApp()" title="بستن کامل برنامه">خروج</button>
   <div id="run-badge">⏸ متوقف</div>
 </header>
 
@@ -1376,6 +1378,13 @@ function cycleTheme(){
   applyTheme();
 }
 applyTheme();
+async function quitApp(){
+  if (!confirm(tt('برنامه کامل بسته شود؟','Close the whole app?'))) return;
+  try { await api('/api/shutdown',{method:'POST', body:'{}'}); }
+  catch(e){}
+  toast(tt('در حال بستن برنامه…','Closing…'));
+  setTimeout(()=>{ try{ window.close(); }catch(e){} }, 500);
+}
 
 /* ───────────────────────── حلقه تازه‌سازی ───────────────────────── */
 (function(){
