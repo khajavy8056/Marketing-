@@ -107,6 +107,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("channel enable/test buttons missing from panel")
     if "divar.ir/user" not in html:
         raise FileNotFoundError("login URL divar.ir/user missing from panel")
+    if 'id="boot-splash"' not in html or "در حال اتصال به سرورها" not in html:
+        raise FileNotFoundError("boot splash missing from panel")
+    if 'id="link-ping"' not in html or "BOOT_MS = 120000" not in html:
+        raise FileNotFoundError("server-link badge / 2-minute splash missing")
     cp = Path(__file__).parent / "chromium_profile.py"
     src = cp.read_text(encoding="utf-8")
     if "--user-data-dir=" not in src or "--profile-directory=Default" not in src:

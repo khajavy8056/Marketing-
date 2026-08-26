@@ -118,10 +118,45 @@
   html[data-theme="dark"] .btn.gray{background:#243040; color:var(--txt)}
   html[data-theme="dark"] .btn.gray:hover{background:#2e3c4e}
   html[data-theme="dark"] dialog{background:var(--card); color:var(--txt)}
+
+  body.booting{overflow:hidden}
+  #boot-splash{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 700px at 70% -10%,#1b4f8a 0%,#0b1a30 48%,#071018 100%);
+    color:#e8eef5;flex-direction:column;padding:28px;text-align:center}
+  #boot-splash.gone{opacity:0;pointer-events:none;transition:opacity .7s ease}
+  #boot-splash .boot-logo{width:72px;height:72px;border-radius:18px;background:#fff;object-fit:cover;
+    box-shadow:0 10px 40px rgba(0,0,0,.35);margin-bottom:18px}
+  #boot-splash h1{font-size:26px;font-weight:800;letter-spacing:.2px}
+  #boot-splash .boot-title{margin-top:8px;font-size:16px;color:#9ec4f0;font-weight:700}
+  #boot-splash .boot-sub{margin-top:6px;font-size:13px;color:#9aa8bb;min-height:1.6em}
+  #boot-bar-wrap{width:min(420px,88vw);height:10px;background:rgba(255,255,255,.12);border-radius:99px;
+    margin:22px auto 10px;overflow:hidden;border:1px solid rgba(255,255,255,.12)}
+  #boot-bar{height:100%;width:0;background:linear-gradient(90deg,#4ea3f0,#7ad0ff);border-radius:99px;
+    transition:width .35s ease}
+  #boot-pct{font-size:12px;color:#bcd3ea;direction:ltr}
+  #boot-log{width:min(420px,88vw);margin-top:16px;text-align:right;font-size:11.5px;color:#8fa3b8;
+    line-height:1.85;max-height:7.4em;overflow:hidden;font-family:ui-monospace,Consolas,monospace}
+  #boot-log div{opacity:.55} #boot-log div:last-child{opacity:1;color:#cfe6ff}
+  #link-badge{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:6px 12px;
+    border-radius:99px;background:#e8f6ee;color:#1a7a3c;font-size:12.5px;font-weight:700}
+  #link-badge .dot{width:8px;height:8px;border-radius:50%;background:#2e9e5b;
+    box-shadow:0 0 0 0 rgba(46,158,91,.7);animation:pingpulse 1.8s infinite}
+  @keyframes pingpulse{0%{box-shadow:0 0 0 0 rgba(46,158,91,.55)}70%{box-shadow:0 0 0 8px rgba(46,158,91,0)}100%{box-shadow:0 0 0 0 rgba(46,158,91,0)}}
+  html[data-theme="dark"] #link-badge{background:#16351f;color:#6fd99a}
   @media(max-width:640px){ header{padding:14px} main{margin:12px auto} }
 </style>
 </head>
-<body>
+<body class="booting">
+
+<div id="boot-splash" aria-live="polite">
+  <img class="boot-logo" src="/logo.png" alt="">
+  <h1>مارکتینگ دیوار</h1>
+  <div class="boot-title" id="boot-title">در حال اتصال به سرورها</div>
+  <div class="boot-sub" id="boot-sub">برقراری کانال امن با هستهٔ برنامه…</div>
+  <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
+  <div id="boot-pct" dir="ltr">0%</div>
+  <div id="boot-log"></div>
+</div>
 
 <header>
   <div>
@@ -483,6 +518,10 @@
 </main>
 
 <footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار<br>
+  <div id="link-badge"><span class="dot"></span>
+    <span>متصل به سرور</span>
+    <span dir="ltr">· پینگ <span id="link-ping">—</span> ms</span>
+  </div>
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
 
@@ -527,6 +566,77 @@
 <div class="toast" id="toast"></div>
 
 <script>
+
+/* ─── صفحه لودینگ نمایشی — روی عملکرد اسکن/API اثر ندارد ─── */
+const BOOT_MS = 120000;
+(function bootSplash(){
+  const el = document.getElementById('boot-splash');
+  if (!el) return;
+  const stages = [
+    {at:0, p:3, t:'در حال اتصال به سرورها', s:'باز کردن نشست امن…', l:'handshake → core-gw-01.local'},
+    {at:8, p:11, t:'در حال اتصال به سرورها', s:'حل نام میزبان و مسیر ایران…', l:'dns lookup node-ir-1'},
+    {at:18, p:19, t:'برقراری کانال رمزنگاری', s:'تبادل کلید TLS…', l:'tls 1.3 · cipher negotiated'},
+    {at:32, p:31, t:'بررسی مسیر سرور', s:'پینگ دروازهٔ داخلی…', l:'rtt probe gw-02  … ok'},
+    {at:48, p:46, t:'احراز نشست برنامه', s:'تأیید توکن پنل روی هسته…', l:'session ticket accepted'},
+    {at:68, p:62, t:'همگام‌سازی سرویس‌ها', s:'اتصال صف و وضعیت اکانت‌ها…', l:'sync accounts / queue'},
+    {at:88, p:78, t:'آماده‌سازی پنل', s:'بارگذاری ماژول داشبورد…', l:'ui modules 7/7'},
+    {at:105, p:91, t:'اتصال پایدار شد', s:'آخرین بررسی سلامت لینک…', l:'link quality: stable'},
+    {at:118, p:100, t:'متصل به سرور', s:'ورود به برنامه…', l:'ready'},
+  ];
+  const log = document.getElementById('boot-log');
+  const bar = document.getElementById('boot-bar');
+  const pct = document.getElementById('boot-pct');
+  const title = document.getElementById('boot-title');
+  const sub = document.getElementById('boot-sub');
+  const t0 = Date.now();
+  let lastL = '';
+  function ease(u){
+    /* غیرخطی تا حس واقعی بدهد */
+    return u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2;
+  }
+  function tick(){
+    const elapsed = Date.now() - t0;
+    const u = Math.min(1, elapsed / BOOT_MS);
+    let st = stages[0];
+    for (const s of stages){ if (elapsed/1000 >= s.at) st = s; }
+    const next = stages[stages.indexOf(st)+1];
+    let p = st.p;
+    if (next){
+      const a = st.at*1000, b = next.at*1000;
+      const f = (elapsed-a)/Math.max(1,b-a);
+      p = st.p + (next.p-st.p)*ease(Math.max(0,Math.min(1,f)));
+    }
+    if (bar) bar.style.width = p.toFixed(1)+'%';
+    if (pct) pct.textContent = Math.round(p)+'%';
+    if (title) title.textContent = st.t;
+    if (sub) sub.textContent = st.s;
+    if (log && st.l !== lastL){
+      lastL = st.l;
+      const row = document.createElement('div');
+      row.textContent = '› '+st.l;
+      log.appendChild(row);
+      while (log.children.length > 5) log.removeChild(log.firstChild);
+    }
+    if (u < 1){ requestAnimationFrame(tick); return; }
+    document.body.classList.remove('booting');
+    el.classList.add('gone');
+    setTimeout(()=>{ try{ el.remove(); }catch(e){} }, 800);
+    startLinkPulse();
+  }
+  requestAnimationFrame(tick);
+})();
+function startLinkPulse(){
+  const n = document.getElementById('link-ping');
+  if (!n) return;
+  const pulse = ()=>{
+    const ms = 14 + Math.floor(Math.random()*17);
+    n.textContent = String(ms);
+  };
+  pulse();
+  setInterval(pulse, 2600);
+}
+
+
 /* ───────────────────────── ابزارهای عمومی ───────────────────────── */
 const $ = id => document.getElementById(id);
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

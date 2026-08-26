@@ -101,6 +101,10 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("requeueHidden", r.text)
         self.assertIn("/api/leads/requeue-hidden", r.text)
         self.assertIn("نمایش شماره", r.text)
+        self.assertIn('id="boot-splash"', r.text)
+        self.assertIn("در حال اتصال به سرورها", r.text)
+        self.assertIn("BOOT_MS = 120000", r.text)
+        self.assertIn('id="link-ping"', r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""
