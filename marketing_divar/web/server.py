@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.24")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.25")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -1060,6 +1060,9 @@ def channel_test(req: ChannelTest):
     store.settings_set(DB_PATH, en_k, True if req.enabled is None else bool(req.enabled))
     cfg = store.effective_config(DB_PATH, load_config())
     res = test_channel(cfg, ch)
+    if res.get("ok") and res.get("suggested_chat_id"):
+        store.settings_set(DB_PATH, chat_k, str(res["suggested_chat_id"]))
+        cfg = store.effective_config(DB_PATH, load_config())
     res["channels"] = channels_status(cfg)
     log("success" if res.get("ok") else "warning",
         f"تست {ch}: {res.get('message')}")

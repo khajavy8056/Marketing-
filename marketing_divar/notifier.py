@@ -164,6 +164,110 @@ def _set_chan(store: Dict[str, Any], **kw: Any) -> None:
     store["at"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _ascii_digits(s: str) -> str:
+    return (s or "").translate(str.maketrans(
+        "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+
+
+def _norm_chat_id(raw: Any, *, numeric: bool) -> Any:
+    s = _ascii_digits(str(raw or "")).strip()
+    if numeric and s.lstrip("-").isdigit():
+        try:
+            return int(s)
+        except ValueError:
+            return s
+    return s
+
+
+def _json_body(r: Any) -> Any:
+    try:
+        return r.json()
+    except Exception:
+        return None
+
+
+def _bale_ok(body: Any) -> bool:
+    """مستندات بله: هر پاسخ JSON فیلد بولی ok دارد؛ موفقیت فقط ok===true."""
+    return isinstance(body, dict) and body.get("ok") is True
+
+
+def _rubika_ok(body: Any) -> bool:
+    """مستندات روبیکا: موفقیت با status=OK (یا data.message_id / data.bot)."""
+    if not isinstance(body, dict):
+        return False
+    st = str(body.get("status") or "").strip().upper()
+    if st in ("ERROR", "FAIL", "FALSE"):
+        return False
+    if st == "OK":
+        return True
+    data = body.get("data")
+    if isinstance(data, dict) and (
+            data.get("message_id") or data.get("bot")
+            or data.get("bot_id") or data.get("updates") is not None):
+        return True
+    return bool(body.get("message_id") or body.get("bot"))
+
+
+def _bale_err(body: Any, status_code: int) -> str:
+    if isinstance(body, dict):
+        desc = body.get("description")
+        code = body.get("error_code")
+        if desc:
+            extra = f" ({code})" if code not in (None, "") else ""
+            return f"بله: {desc}{extra}"
+        return f"بله: پاسخ بدون ok=true (HTTP {status_code})"
+    if body is None:
+        return f"بله HTTP {status_code}: پاسخ JSON معتبر نبود"
+    return f"بله HTTP {status_code}"
+
+
+def _rubika_err(body: Any, status_code: int) -> str:
+    if isinstance(body, dict):
+        st = body.get("status")
+        det = body.get("status_det") or body.get("description")
+        data = body.get("data")
+        if st or det:
+            return ("روبیکا: " + str(st or "ناموفق")
+                    + (f" — {det}" if det else ""))[:200]
+        if isinstance(data, dict) and (data.get("error") or data.get("message")):
+            return f"روبیکا: {data.get('error') or data.get('message')}"
+        return f"روبیکا: پاسخ بدون status=OK (HTTP {status_code})"
+    if body is None:
+        return f"روبیکا HTTP {status_code}: پاسخ JSON معتبر نبود"
+    return f"روبیکا HTTP {status_code}"
+
+
+def _chats_from_bale_updates(body: Any) -> List[Any]:
+    ids: List[Any] = []
+    if not isinstance(body, dict):
+        return ids
+    for upd in body.get("result") or []:
+        if not isinstance(upd, dict):
+            continue
+        msg = upd.get("message") or upd.get("edited_message") or {}
+        if not isinstance(msg, dict):
+            continue
+        chat = (msg.get("chat") or {}).get("id")
+        if chat is not None and chat not in ids:
+            ids.append(chat)
+    return ids
+
+
+def _chats_from_rubika_updates(body: Any) -> List[Any]:
+    ids: List[Any] = []
+    if not isinstance(body, dict):
+        return ids
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    for upd in (data.get("updates") or body.get("updates") or []):
+        if not isinstance(upd, dict):
+            continue
+        inner = upd.get("update") if isinstance(upd.get("update"), dict) else upd
+        chat = inner.get("chat_id")
+        if chat and chat not in ids:
+            ids.append(chat)
+    return ids
+
+
 def bale_configured(cfg: Optional[Dict[str, Any]]) -> bool:
     n = telegram_notify_cfg(cfg)
     if not _flag_on(n, "bale_enabled"):
@@ -196,20 +300,13 @@ def bale_request(cfg: Optional[Dict[str, Any]], method: str, *,
     try:
         r = requests.post(url, json=json, data=data, files=files,
                           params=params, timeout=timeout)
-        body: Any = {}
-        try:
-            body = r.json() or {}
-        except Exception:
-            body = {}
-        if r.status_code == 200 and (not isinstance(body, dict) or body.get("ok") is not False):
+        body = _json_body(r)
+        if r.status_code == 200 and _bale_ok(body):
             _set_chan(_LAST_BALE, ok=True, configured=True, path=BALE_API,
                       message="بله وصل شد")
             return r
-        desc = ""
-        if isinstance(body, dict):
-            desc = str(body.get("description") or body)[:160]
         _set_chan(_LAST_BALE, ok=False, configured=True, path=BALE_API,
-                  message=f"بله HTTP {r.status_code}: {desc}")
+                  message=_bale_err(body, r.status_code))
     except Exception as e:
         _set_chan(_LAST_BALE, ok=False, configured=True,
                   message=f"{type(e).__name__}: {str(e)[:160]}")
@@ -232,20 +329,13 @@ def rubika_request(cfg: Optional[Dict[str, Any]], method: str, *,
         r = requests.post(url, json=json if json is not None else {},
                           headers={"Content-Type": "application/json"},
                           timeout=timeout)
-        body: Any = {}
-        try:
-            body = r.json() or {}
-        except Exception:
-            body = {}
-        status = ""
-        if isinstance(body, dict):
-            status = str(body.get("status") or "")
-        if r.status_code == 200 and str(status).upper() not in ("ERROR", "FAIL", "FALSE"):
+        body = _json_body(r)
+        if r.status_code == 200 and _rubika_ok(body):
             _set_chan(_LAST_RUBIKA, ok=True, configured=True, path=RUBIKA_API,
                       message="روبیکا وصل شد")
             return r
         _set_chan(_LAST_RUBIKA, ok=False, configured=True, path=RUBIKA_API,
-                  message=f"روبیکا HTTP {r.status_code}: {str(body)[:160]}")
+                  message=_rubika_err(body, r.status_code))
     except Exception as e:
         _set_chan(_LAST_RUBIKA, ok=False, configured=True,
                   message=f"{type(e).__name__}: {str(e)[:160]}")
@@ -256,7 +346,7 @@ def send_bale(cfg: Optional[Dict[str, Any]], text: str,
               extra: Optional[Dict[str, Any]] = None) -> bool:
     """API رسمی بله: https://tapi.bale.ai/bot<token>/sendMessage"""
     n = telegram_notify_cfg(cfg)
-    chat = (n.get("bale_chat_id") or "").strip()
+    chat = _norm_chat_id(n.get("bale_chat_id"), numeric=True)
     if not bale_configured(cfg):
         _set_chan(_LAST_BALE, ok=False, configured=False,
                   message="توکن یا Chat ID بله نیست یا تیک استفاده خاموش است")
@@ -264,7 +354,15 @@ def send_bale(cfg: Optional[Dict[str, Any]], text: str,
     payload: Dict[str, Any] = {"chat_id": chat, "text": text}
     if extra:
         payload.update(extra)
-    return bale_request(cfg, "sendMessage", json=payload, timeout=12) is not None
+        payload["chat_id"] = chat
+        payload["text"] = text
+    if bale_request(cfg, "sendMessage", json=payload, timeout=12) is not None:
+        return True
+    if extra:
+        return bale_request(
+            cfg, "sendMessage",
+            json={"chat_id": chat, "text": text}, timeout=12) is not None
+    return False
 
 
 def send_rubika(cfg: Optional[Dict[str, Any]], text: str,
@@ -310,31 +408,89 @@ def test_channel(cfg: Optional[Dict[str, Any]], channel: str) -> Dict[str, Any]:
             return {"ok": False, "channel": ch, "message": "توکن بله را بگذارید"}
         r = bale_request(cfg, "getMe", timeout=12)
         if r is None:
-            return {"ok": False, "channel": ch, **bale_last(),
-                    "message": bale_last().get("message") or "بله پاسخ نداد"}
+            last = bale_last()
+            return {"channel": ch, **last, "ok": False,
+                    "message": last.get("message") or "بله پاسخ نداد"}
         if not (n.get("bale_chat_id") or "").strip():
             return {"ok": False, "channel": ch,
                     "message": "توکن معتبر است — شناسه گفتگو بله را بگذارید"}
-        ok = send_bale(cfg, hello, extra={"reply_markup": REPLY_KEYBOARD})
-        return {"ok": ok, "channel": ch, **bale_last(),
-                "message": "ارتباط با بله برقرار شد — پیام آزمایشی فرستاده شد"
-                if ok else (bale_last().get("message") or "ارسال نشد")}
+        bot_id = None
+        try:
+            bot_id = ((_json_body(r) or {}).get("result") or {}).get("id")
+        except Exception:
+            bot_id = None
+        chat = _norm_chat_id(n.get("bale_chat_id"), numeric=True)
+        if bot_id is not None and str(chat) == str(bot_id):
+            _set_chan(_LAST_BALE, ok=False, configured=True,
+                      message="شناسه گفتگو نباید شناسهٔ خود بازو باشد")
+            ok = False
+        else:
+            ok = send_bale(cfg, hello, extra={"reply_markup": REPLY_KEYBOARD})
+        suggested = None
+        if not ok:
+            ur = bale_request(cfg, "getUpdates",
+                              json={"timeout": 0, "limit": 20}, timeout=12)
+            found = _chats_from_bale_updates(_json_body(ur) if ur else None)
+            found = [c for c in found if bot_id is None or str(c) != str(bot_id)]
+            if found:
+                suggested = found[-1]
+                cfg2 = dict(cfg or {})
+                n2 = dict(telegram_notify_cfg(cfg))
+                n2["bale_chat_id"] = str(suggested)
+                cfg2["notify"] = n2
+                ok = send_bale(cfg2, hello)
+        last = bale_last()
+        if ok and suggested is not None:
+            msg = (f"پیام فرستاده شد. شناسه گفتگوی درست: {suggested} "
+                   "— همین را ذخیره کنید (نه شناسهٔ بازو).")
+        elif ok:
+            msg = "ارتباط با بله برقرار شد — پیام آزمایشی فرستاده شد"
+        else:
+            msg = (last.get("message") or "ارسال نشد") + (
+                " — بازو را استارت کنید و شناسهٔ خودتان را بگذارید"
+                if "ok=true" in str(last.get("message") or "")
+                else "")
+        out = {"channel": ch, **last, "ok": ok, "message": msg}
+        if suggested is not None:
+            out["suggested_chat_id"] = str(suggested)
+        return out
     if ch == "rubika":
         n = telegram_notify_cfg(cfg)
         if not (n.get("rubika_bot_token") or "").strip():
             return {"ok": False, "channel": ch, "message": "توکن روبیکا را بگذارید"}
         r = rubika_request(cfg, "getMe", json={}, timeout=12)
         if r is None:
-            return {"ok": False, "channel": ch, **rubika_last(),
-                    "message": rubika_last().get("message") or "روبیکا پاسخ نداد"}
+            last = rubika_last()
+            return {"channel": ch, **last, "ok": False,
+                    "message": last.get("message") or "روبیکا پاسخ نداد"}
         if not (n.get("rubika_chat_id") or "").strip():
             return {"ok": False, "channel": ch,
                     "message": "توکن معتبر است — شناسه گفتگو روبیکا را بگذارید"}
         ok = send_rubika(cfg, hello, extra={
             "chat_keypad_type": "New", "chat_keypad": RUBIKA_CHAT_KEYPAD})
-        return {"ok": ok, "channel": ch, **rubika_last(),
-                "message": "ارتباط با روبیکا برقرار شد — پیام آزمایشی فرستاده شد"
-                if ok else (rubika_last().get("message") or "ارسال نشد")}
+        suggested = None
+        if not ok:
+            ur = rubika_request(cfg, "getUpdates", json={"limit": 20}, timeout=12)
+            found = _chats_from_rubika_updates(_json_body(ur) if ur else None)
+            if found:
+                suggested = found[-1]
+                cfg2 = dict(cfg or {})
+                n2 = dict(telegram_notify_cfg(cfg))
+                n2["rubika_chat_id"] = str(suggested)
+                cfg2["notify"] = n2
+                ok = send_rubika(cfg2, hello)
+        last = rubika_last()
+        if ok and suggested is not None:
+            msg = (f"پیام فرستاده شد. شناسه گفتگوی درست: {suggested} "
+                   "— همین را در پنل ذخیره کنید.")
+        elif ok:
+            msg = "ارتباط با روبیکا برقرار شد — پیام آزمایشی فرستاده شد"
+        else:
+            msg = last.get("message") or "ارسال نشد"
+        out = {"channel": ch, **last, "ok": ok, "message": msg}
+        if suggested is not None:
+            out["suggested_chat_id"] = str(suggested)
+        return out
     return {"ok": False, "channel": ch, "message": "پلتفرم ناشناخته"}
 
 

@@ -44,8 +44,6 @@ RUBIKA_CHAT_KEYPAD = {
             {"id": "help", "type": "Simple", "button_text": "ℹ️ راهنما"},
         ]},
     ],
-    "resize_keyboard": True,
-    "one_time_keyboard": False,
 }
 
 _ALIASES = {

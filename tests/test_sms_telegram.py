@@ -16,7 +16,8 @@ from marketing_divar.sms import (  # noqa: E402
 from marketing_divar.telegram_bot import (  # noqa: E402
     found_alert_text, handle_command, handle_update)
 from marketing_divar.notifier import (  # noqa: E402
-    bale_configured, notify, rubika_configured, send_bale, send_rubika)
+    _bale_ok, _norm_chat_id, _rubika_ok, bale_configured, notify,
+    rubika_configured, send_bale, send_rubika)
 from marketing_divar.db import connect, upsert_lead  # noqa: E402
 
 
@@ -208,6 +209,47 @@ class TestBaleRubika(unittest.TestCase):
             self.assertTrue(r["ok"], r)
             self.assertTrue(any("tapi.bale.ai/botBT/getMe" in u for u in seen))
             self.assertTrue(any("sendMessage" in u for u in seen))
+        finally:
+            n.requests = old
+
+    def test_http_200_without_official_ok_is_failure(self):
+        self.assertFalse(_bale_ok({}))
+        self.assertFalse(_bale_ok({"ok": False, "description": "chat not found"}))
+        self.assertFalse(_bale_ok(None))
+        self.assertTrue(_bale_ok({"ok": True, "result": {"message_id": 1}}))
+        self.assertFalse(_rubika_ok({}))
+        self.assertFalse(_rubika_ok({"status": "ERROR"}))
+        self.assertFalse(_rubika_ok(None))
+        self.assertTrue(_rubika_ok({"status": "OK", "data": {"message_id": "1"}}))
+
+    def test_bale_chat_id_numeric(self):
+        self.assertEqual(_norm_chat_id("123456789", numeric=True), 123456789)
+        self.assertEqual(_norm_chat_id("۱۲۳", numeric=True), 123)
+        self.assertEqual(_norm_chat_id("b123", numeric=False), "b123")
+
+    def test_empty_200_not_sent(self):
+        seen = []
+
+        class R:
+            status_code = 200
+            def json(self):
+                return {}
+
+        def poster(url, json=None, data=None, files=None, params=None,
+                   timeout=12, headers=None, proxies=None, **kw):
+            seen.append(url)
+            return R()
+
+        import marketing_divar.notifier as n
+        old = n.requests
+        class Fake:
+            post = staticmethod(poster)
+        n.requests = Fake
+        try:
+            cfg = {"notify": {"bale_bot_token": "BT", "bale_chat_id": "9",
+                              "rubika_bot_token": "RT", "rubika_chat_id": "8"}}
+            self.assertFalse(send_bale(cfg, "سلام"))
+            self.assertFalse(send_rubika(cfg, "سلام"))
         finally:
             n.requests = old
 
