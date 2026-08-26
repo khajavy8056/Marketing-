@@ -109,4 +109,10 @@ def apply_runtime_paths() -> Path:
     os.environ.setdefault("DIVAR_ACCOUNTS_DIR", str(dest / "accounts"))
     os.environ.setdefault("DIVAR_LOG_DIR", str(dest / "logs"))
     os.environ.setdefault("DIVAR_CONFIG_PATH", str(dest / "config.json"))
+    try:
+        from .app_chromium import apply_browser_env
+        apply_browser_env()
+    except Exception:
+        os.environ.setdefault(
+            "PLAYWRIGHT_BROWSERS_PATH", str(dest / "app-chromium"))
     return dest

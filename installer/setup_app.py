@@ -126,6 +126,39 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
             log("Shortcut skipped: " + str(e))
 
 
+def install_app_chromium(target: Path, workdir: Path, log) -> None:
+    """Download Chromium into %LOCALAPPDATA%\\DivarMarketing\\app-chromium.
+
+    Never uses the user's Chrome/Edge. The frozen exe looks in _MEI unless
+    PLAYWRIGHT_BROWSERS_PATH is this folder.
+    """
+    dest = install_dir() / "app-chromium"
+    dest.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
+    env["DIVAR_CHROMIUM_DIR"] = str(dest)
+    log("Installing app-only Chromium (not your system browser) ...")
+    try:
+        if target.suffix.lower() == ".exe":
+            cmd = [str(target), "--install-chromium"]
+        else:
+            cmd = [sys.executable, str(target), "--install-chromium"]
+        r = subprocess.run(
+            cmd, cwd=str(workdir), env=env, capture_output=True,
+            text=True, timeout=900)
+        out = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()
+        for line in out.splitlines()[-12:]:
+            if line.strip():
+                log("  " + line.strip())
+        if r.returncode != 0:
+            raise RuntimeError("chromium install exit " + str(r.returncode))
+        log("App Chromium OK -> " + str(dest))
+    except Exception as e:
+        log("ERROR installing Chromium: " + str(e))
+        raise
+
+
 def open_firewall(log) -> None:
     cmd = [
         "netsh", "advfirewall", "firewall", "add", "rule",
@@ -146,6 +179,9 @@ def launch(target: Path, workdir: Path, log) -> None:
     log("Starting " + APP_NAME + "...")
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
+    chrome = str(install_dir() / "app-chromium")
+    env["PLAYWRIGHT_BROWSERS_PATH"] = chrome
+    env["DIVAR_CHROMIUM_DIR"] = chrome
     if target.suffix.lower() == ".exe":
         subprocess.Popen([str(target)], cwd=str(workdir), env=env)
     else:
@@ -166,8 +202,10 @@ def run_install(progress, log) -> None:
     ico_dst = dest / "app.ico"
     if ico_src.exists():
         shutil.copy2(ico_src, ico_dst)
-    progress(65, "Shortcuts")
+    progress(55, "App Chromium")
     workdir = dest if target.suffix.lower() == ".exe" else dest
+    install_app_chromium(target, workdir, log)
+    progress(72, "Shortcuts")
     make_shortcut(target, workdir, ico_dst if ico_dst.exists() else ico_src, log)
     progress(80, "Network")
     open_firewall(log)

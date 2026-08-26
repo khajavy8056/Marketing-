@@ -325,47 +325,43 @@ $btnStart.Add_Click({
 
 
 
-        Log "[3b] Installing Chromium (account profiles)"
-
-        Set-Step "Installing Chromium for Divar profiles" -1
-
+                Log "[3b] Installing app-only Chromium (not system Chrome/Edge)"
+        Set-Step "Installing app Chromium (DivarMarketing\\app-chromium)" -1
+        $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
+        New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-
         $pinfo.FileName = $appPy
-
-        $pinfo.Arguments = "-m playwright install chromium"
-
+        $pinfo.Arguments = "main.py --install-chromium"
         $pinfo.WorkingDirectory = $Root
-
         $pinfo.UseShellExecute = $false
-
         $pinfo.RedirectStandardOutput = $true
-
         $pinfo.RedirectStandardError = $true
-
         $pinfo.CreateNoWindow = $true
-
         $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
-
+        $pinfo.EnvironmentVariables["PLAYWRIGHT_BROWSERS_PATH"] = $chromeDir
+        $pinfo.EnvironmentVariables["DIVAR_CHROMIUM_DIR"] = $chromeDir
         $proc = New-Object System.Diagnostics.Process
-
         $proc.StartInfo = $pinfo
-
         [void]$proc.Start()
-
         $pout = $proc.StandardOutput.ReadToEnd()
-
         $perr = $proc.StandardError.ReadToEnd()
-
         $proc.WaitForExit()
-
         foreach ($line in ($pout + "`n" + $perr).Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
-
-        if ($proc.ExitCode -ne 0) { throw "playwright install chromium failed (code $($proc.ExitCode))" }
-
-        Log "[3b] Chromium OK"
-
+        if ($proc.ExitCode -ne 0) {
+            Log "[3b] main.py --install-chromium failed -> playwright install chromium"
+            $pinfo.Arguments = "-m playwright install chromium"
+            $proc = New-Object System.Diagnostics.Process
+            $proc.StartInfo = $pinfo
+            [void]$proc.Start()
+            $pout = $proc.StandardOutput.ReadToEnd()
+            $perr = $proc.StandardError.ReadToEnd()
+            $proc.WaitForExit()
+            foreach ($line in ($pout + "`n" + $perr).Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
+            if ($proc.ExitCode -ne 0) { throw "playwright install chromium failed (code $($proc.ExitCode))" }
+        }
+        Log "[3b] Chromium OK -> $chromeDir"
         $bar.Value = 82
+
 
 
         Log "[4] Health check"

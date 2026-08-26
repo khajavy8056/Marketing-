@@ -23,6 +23,16 @@ except Exception as e:
     _pause_on_crash(f"Startup failed: {e}")
     raise
 
+if len(sys.argv) > 1 and sys.argv[1] == "--install-chromium":
+    from marketing_divar.app_chromium import ensure_installed
+    try:
+        path = ensure_installed()
+        print("App Chromium:", path)
+        sys.exit(0)
+    except Exception as e:
+        _pause_on_crash(f"Chromium install failed: {e}")
+        raise
+
 if len(sys.argv) > 1 and sys.argv[1] == "--check":
     from marketing_divar.selfcheck import run
     sys.exit(run())

@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal EnableExtensions
 title Divar Marketing - Build Setup EXE
 cd /d "%~dp0"
@@ -54,8 +54,11 @@ if exist "dist\DivarMarketing.exe" del /q "dist\DivarMarketing.exe"
 "%PY%" -m PyInstaller --noconfirm --clean --onefile --name DivarMarketing ^
   --icon "installer\app.ico" ^
   --collect-all uvicorn --collect-submodules uvicorn ^
+  --collect-all playwright --collect-submodules playwright ^
   --hidden-import marketing_divar.web.server ^
   --hidden-import marketing_divar.web ^
+  --hidden-import marketing_divar.app_chromium ^
+  --hidden-import marketing_divar.chromium_profile ^
   --add-data "marketing_divar\web\static;marketing_divar\web\static" ^
   main.py
 if errorlevel 1 goto FAIL

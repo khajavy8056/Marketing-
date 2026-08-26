@@ -43,7 +43,8 @@ class TestWindowsInstaller(unittest.TestCase):
         self.assertTrue(all(ord(c) < 128 for c in body), "console installer must be ASCII")
         for needle in ("Find-Python", "venv", "requirements.txt", "main.py --check",
                        "DivarMarketing", "localhost:8642", "mirror-pypi",
-                       "playwright install chromium"):
+                       "playwright install chromium",
+                       "--install-chromium", "app-chromium"):
             self.assertIn(needle, body)
 
     def test_entry_bats_are_windows_safe(self):

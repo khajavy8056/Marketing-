@@ -110,11 +110,19 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     }
 
-    L "Installing Chromium (playwright install chromium) ..."
+        L "Installing app-only Chromium into app-chromium ..."
+    $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
+    New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
+    $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
+    $env:DIVAR_CHROMIUM_DIR = $chromeDir
+    & $venvPy "main.py" "--install-chromium"
+    if ($LASTEXITCODE -ne 0) {
+        L "main.py --install-chromium failed -> playwright install chromium"
+        & $venvPy -m playwright install chromium
+        if ($LASTEXITCODE -ne 0) { throw "playwright install chromium failed" }
+    }
+    L "App Chromium OK -> $chromeDir"
 
-    & $venvPy -m playwright install chromium
-
-    if ($LASTEXITCODE -ne 0) { throw "playwright install chromium failed" }
 
 
 

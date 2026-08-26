@@ -96,20 +96,28 @@ def cookies_look_logged_in(cookies: List[Dict[str, Any]]) -> bool:
 
 
 def _ensure_playwright():
+    from .app_chromium import apply_browser_env, ensure_installed
+    apply_browser_env()
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as e:
         raise RuntimeError(
-            "Playwright نصب نیست. نصب‌کننده باید «playwright install chromium» را اجرا کند"
+            "Playwright نصب نیست. نصب‌کننده باید Chromium اختصاصی برنامه را نصب کند"
         ) from e
+    ensure_installed()
     return sync_playwright
 
 
-def launch_kwargs(user_data: Path) -> Dict[str, Any]:
+def launch_kwargs(user_data: Path, headless: bool = False) -> Dict[str, Any]:
+    """همیشه Chromium اختصاصی برنامه — نه Chrome/Edge کاربر."""
+    from .app_chromium import apply_browser_env, executable_path
+    apply_browser_env()
     user_data.mkdir(parents=True, exist_ok=True)
+    exe = executable_path()
     return {
         "user_data_dir": str(user_data),
-        "headless": False,
+        "executable_path": exe,
+        "headless": bool(headless),
         "viewport": {"width": 1100, "height": 800},
         "locale": "fa-IR",
         "timezone_id": "Asia/Tehran",
@@ -118,6 +126,8 @@ def launch_kwargs(user_data: Path) -> Dict[str, Any]:
             "--disable-blink-features=AutomationControlled",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-sync",
+            "--noerrdialogs",
         ],
         "ignore_default_args": ["--enable-automation"],
     }
@@ -129,6 +139,12 @@ def close_live(name: str) -> None:
         live = _LIVE.pop(name, None)
     if not live:
         return
+    stop = live.get("stop")
+    try:
+        if stop is not None:
+            stop.set()
+    except Exception:
+        pass
     for key in ("context", "pw"):
         obj = live.get(key)
         try:
@@ -198,7 +214,9 @@ def _run_browser(accounts_dir: str, name: str, url: str, ready: threading.Event,
 
 def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str, Any]:
     """Chromium همان اکانت را باز می‌کند — صفحهٔ تهران."""
+    from .app_chromium import ensure_installed
     name = safe_name(name)
+    ensure_installed()
     close_live(name)
     chromium_dir(accounts_dir, name).mkdir(parents=True, exist_ok=True)
     save_meta(accounts_dir, name, {"status": "open", "last_url": url or HOME_URL})
@@ -210,8 +228,8 @@ def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str,
         daemon=True,
     )
     t.start()
-    if not ready.wait(45):
-        raise RuntimeError("Chromium در ۴۵ ثانیه باز نشد — نصب Chromium را از نصب‌کننده چک کنید")
+    if not ready.wait(90):
+        raise RuntimeError("Chromium در ۹۰ ثانیه باز نشد — نصب Chromium اختصاصی را از نصب‌کننده چک کنید")
     if errbox:
         raise RuntimeError(errbox[0])
     return {"ok": True, "name": name, "url": url or HOME_URL,
@@ -236,7 +254,7 @@ def _cookies_via_temp_launch(accounts_dir: str, name: str) -> List[Dict[str, Any
     pw = sync_playwright().start()
     try:
         ctx = pw.chromium.launch_persistent_context(
-            **launch_kwargs(chromium_dir(accounts_dir, name)))
+            **launch_kwargs(chromium_dir(accounts_dir, name), headless=True))
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             try:
@@ -292,11 +310,11 @@ def harvest_to_session(accounts_dir: str, name: str,
 
 
 def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
-    """بعد از لاگین کاربر: کوکی پروفایل را می‌خواند و READY می‌کند."""
+    """بعد از لاگین کاربر: کوکی پروفایل را می‌خواند، READY می‌کند، پنجره را می‌بندد."""
     name = safe_name(name)
-    cookies = _cookies_from_live(name)
-    used_live = bool(cookies)
-    if not cookies:
+    used_live = is_open(name)
+    cookies = _cookies_from_live(name) if used_live else []
+    if not cookies and not used_live:
         cookies = _cookies_via_temp_launch(accounts_dir, name)
     ok = cookies_look_logged_in(cookies)
     harvest_to_session(accounts_dir, name, cookies)
@@ -310,8 +328,10 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
     if not ok:
         return {"ok": False, "ready": False, **rec,
                 "message": "لاگین دیوار در این پروفایل دیده نشد. در پنجره Chromium وارد شوید، بعد ذخیره را بزنید."}
+    close_live(name)
+    rec = save_meta(accounts_dir, name, {"status": "ready", "closed_after_save": True})
     return {"ok": True, "ready": True, **rec,
-            "message": "پروفایل ذخیره شد. دفعهٔ بعد «باز کردن دیوار» همین حساب لاگین‌شده را می‌آورد."}
+            "message": "پروفایل کامل ذخیره شد و پنجره بسته شد. دفعهٔ بعد «باز کردن دیوار» همین حساب لاگین‌شده را می‌آورد."}
 
 
 def create_and_open(accounts_dir: str, name: str, phone: str = "") -> Dict[str, Any]:

@@ -84,9 +84,21 @@ def cookies_from_session(session_path: str) -> List[Dict[str, Any]]:
 
 
 def find_browsers() -> List[str]:
+    """Chromium اختصاصی برنامه — مرورگر کاربر قاطی نمی‌شود."""
     env = os.environ.get("DIVAR_BROWSER") or ""
-    cands = [env] if env else []
-    if sys.platform == "win32":
+    cands: List[str] = []
+    if env:
+        cands.append(env)
+    try:
+        from .app_chromium import apply_browser_env, find_chrome
+        apply_browser_env()
+        exe = find_chrome()
+        if exe:
+            cands.append(str(exe))
+    except Exception:
+        pass
+    # سیستم فقط اگر صریحاً اجازه داده شود — پیش‌فرض ایزوله است
+    if os.environ.get("DIVAR_ALLOW_SYSTEM_BROWSER") == "1" and sys.platform == "win32":
         pf = os.environ.get("PROGRAMFILES", r"C:\Program Files")
         pfx = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
         local = os.environ.get("LOCALAPPDATA", "")
@@ -98,7 +110,7 @@ def find_browsers() -> List[str]:
             os.path.join(pfx, r"Google\Chrome\Application\chrome.exe"),
             os.path.join(local, r"Google\Chrome\Application\chrome.exe"),
         ]
-    else:
+    elif os.environ.get("DIVAR_ALLOW_SYSTEM_BROWSER") == "1":
         cands += ["microsoft-edge", "msedge", "google-chrome", "chromium",
                   "chromium-browser", "google-chrome-stable"]
     out: List[str] = []
@@ -402,7 +414,7 @@ def run_logged_in_browser(session_path: str, start_url: str = "https://divar.ir"
     """Edge/Chrome را با کوکی همان اکانت باز می‌کند. فرآیند همین‌جا می‌ماند تا مرورگر بالا بیاید."""
     browser = find_browser()
     if not browser:
-        raise RuntimeError("Edge/Chrome پیدا نشد — برای پازل همان اکانت لازم است")
+        raise RuntimeError("Chromium اختصاصی برنامه پیدا نشد — نصب‌کننده را دوباره اجرا کنید")
     cookies = cookies_from_session(session_path)
     if not cookies:
         raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
@@ -819,7 +831,7 @@ def launch_account_browser(session_path: str, name: str = "") -> Tuple[bool, str
     if not cookies_from_session(session_path):
         return False, "سشن این اکانت خالی است — دوباره لاگین کنید"
     if not find_browser():
-        return False, "Edge یا Chrome روی این رایانه پیدا نشد — پازل همین اکانت به آن نیاز دارد"
+        return False, "Chromium اختصاصی برنامه پیدا نشد — نصب‌کننده را دوباره اجرا کنید"
     if getattr(sys, "frozen", False):
         cmd = [sys.executable, "--session-view", session_path]
     else:

@@ -18,6 +18,7 @@ CHECKS = [
     ("database module", lambda: __import__("marketing_divar.db")),
     ("web panel module", lambda: __import__("marketing_divar.web.server")),
     ("playwright library", lambda: __import__("playwright")),
+    ("app Chromium helper", lambda: __import__("marketing_divar.app_chromium")),
 ]
 
 
@@ -33,7 +34,8 @@ def _check_windows_installer() -> None:
     for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
                    "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
                    "DivarMarketing", "divar-marketing-install.log",
-                   "playwright install chromium"):
+                   "playwright install chromium",
+                   "--install-chromium", "app-chromium"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -41,7 +43,8 @@ def _check_windows_installer() -> None:
     if "Extract All" not in bat and "Extract the ZIP" not in bat:
         raise FileNotFoundError("Extract warning missing from bat")
     for needle in ("Find-Python", ".venv", "requirements.txt", "main.py --check",
-                   "DivarMarketing", "localhost:8642"):
+                   "DivarMarketing", "localhost:8642",
+                   "--install-chromium", "app-chromium"):
         if needle not in console:
             raise FileNotFoundError(f"console installer incomplete — missing {needle}")
     setup = (root / "installer" / "setup_app.py").read_text(encoding="utf-8")
@@ -50,6 +53,11 @@ def _check_windows_installer() -> None:
             raise FileNotFoundError("setup_app.py has no progress bar")
     if "DivarMarketing" not in setup:
         raise FileNotFoundError("setup_app.py missing product id")
+    if "--install-chromium" not in setup or "app-chromium" not in setup:
+        raise FileNotFoundError("setup_app.py must install app-only Chromium")
+    bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
+    if "--collect-all playwright" not in bat_setup:
+        raise FileNotFoundError("Setup build must collect playwright driver")
 
 
 def _check_static_ui() -> None:
