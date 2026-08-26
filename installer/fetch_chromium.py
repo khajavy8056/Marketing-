@@ -19,6 +19,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 APP_ID = "DivarMarketing"
@@ -61,11 +62,13 @@ SNAP_LIN = (
 )
 
 PROBE_SEC = 6.0
-CONNECT_SEC = 8.0
-STALL_SEC = 12.0
-SOURCE_MAX_SEC = 180.0
+CONNECT_SEC = 20.0
+STALL_SEC = 30.0
+RESUME_TRIES = 12
+RECONNECT_WAIT = 2.0
 MIN_ZIP_BYTES = 8_000_000
 CHROMIUM_PRODUCTS = frozenset({"chromium", "ungoogled-chromium"})
+ZIP_NAME = "chromium-download.zip"
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int], None]
@@ -253,7 +256,7 @@ def _ssl_ctx():
 
 def _get(url: str, timeout: float = CONNECT_SEC, headers: Optional[Dict] = None):
     hdrs = {
-        "User-Agent": "DivarMarketing/2.1.17",
+        "User-Agent": "DivarMarketing/2.1.18",
         "Accept": "*/*",
     }
     if headers:
@@ -373,7 +376,8 @@ def verify_zip(path: Path, expected_sha256: Optional[str] = None,
 
 
 def _cleanup(path: Path) -> None:
-    for p in (path, path.with_suffix(path.suffix + ".part")):
+    for p in (path, path.with_suffix(path.suffix + ".part"),
+              path.with_suffix(path.suffix + ".part.url")):
         try:
             if p.exists():
                 p.unlink()
@@ -381,65 +385,223 @@ def _cleanup(path: Path) -> None:
             pass
 
 
+def _part_paths(dest: Path) -> tuple:
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    meta = dest.with_suffix(dest.suffix + ".part.url")
+    return tmp, meta
+
+
+def find_cached_zip(root: Path) -> Optional[Path]:
+    """Reuse a Chromium zip already sitting in the dedicated install folder."""
+    cands = [root / ZIP_NAME]
+    try:
+        cands.extend(sorted(root.glob("*.zip")))
+    except Exception:
+        pass
+    seen = set()
+    for p in cands:
+        key = str(p.resolve()) if p.exists() else str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not p.is_file():
+            continue
+        try:
+            verify_zip(p)
+            assert_chromium_zip(p)
+            return p
+        except Exception:
+            continue
+    return None
+
+
+def _usable_existing(dest: Path, expected_sha256: Optional[str],
+                     min_bytes: int) -> bool:
+    if not dest.is_file() or dest.stat().st_size < min_bytes:
+        return False
+    try:
+        if expected_sha256:
+            if sha256_file(dest).lower() != expected_sha256.lower():
+                return False
+        verify_zip(dest, expected_sha256=expected_sha256, min_bytes=min_bytes)
+        return True
+    except Exception:
+        return False
+
+
+class DownloadManager:
+    """Resume-capable downloader (HTTP Range + retry).
+
+    Brief zero-speed or a short disconnect reconnects the SAME url and
+    appends to the .part file in the install folder. It does not start
+    over and does not jump to another source.
+    """
+
+    def __init__(self, log: LogFn, progress: Optional[ProgressFn] = None):
+        self.log = log
+        self.progress = progress
+
+    def fetch(self, url: str, dest: Path,
+              expected_sha256: Optional[str] = None,
+              min_bytes: int = MIN_ZIP_BYTES) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if _usable_existing(dest, expected_sha256, min_bytes):
+            self.log("REUSING existing zip " + str(dest))
+            self.log("PROGRESS 100")
+            self.log("DOWNLOAD_COMPLETED")
+            if self.progress:
+                self.progress(100)
+            return
+        tmp, meta = _part_paths(dest)
+        n = 0
+        if tmp.exists():
+            saved = ""
+            if meta.exists():
+                try:
+                    saved = meta.read_text(encoding="utf-8").strip()
+                except Exception:
+                    saved = ""
+            if saved and saved != url:
+                self.log("PARTIAL is from another source - starting a new file")
+                _cleanup(dest)
+                n = 0
+            else:
+                n = tmp.stat().st_size
+                if n:
+                    self.log("RESUME %d bytes from %s" % (n, tmp.name))
+        try:
+            meta.write_text(url, encoding="utf-8")
+        except Exception:
+            pass
+        self.log("Downloading " + url)
+        total = 0
+        last_pct = -1
+        last_report = 0.0
+        t0 = time.time()
+        got_any = False
+        for attempt in range(1, RESUME_TRIES + 1):
+            headers = {}
+            if n > 0:
+                headers["Range"] = "bytes=%d-" % n
+                self.log("RESUME attempt %d at byte %d" % (attempt, n))
+            try:
+                r = _get(url, timeout=CONNECT_SEC, headers=headers or None)
+            except HTTPError as e:
+                if e.code == 416 and n >= min_bytes:
+                    self.log("HTTP 416 - treating %d bytes as complete" % n)
+                    break
+                if e.code in (401, 403, 404, 410, 451):
+                    raise RuntimeError("HTTP %s from %s" % (e.code, url)) from e
+                self.log("RECONNECT %d/%d after HTTP %s" % (
+                    attempt, RESUME_TRIES, e.code))
+                if attempt >= RESUME_TRIES:
+                    raise TimeoutError("reconnect failed: HTTP %s" % e.code) from e
+                time.sleep(RECONNECT_WAIT * min(attempt, 5))
+                continue
+            except (URLError, TimeoutError, OSError) as e:
+                self.log("RECONNECT %d/%d after connect error: %s" % (
+                    attempt, RESUME_TRIES, e))
+                if attempt >= RESUME_TRIES:
+                    raise TimeoutError("reconnect failed: %s" % e) from e
+                time.sleep(RECONNECT_WAIT * min(attempt, 5))
+                continue
+            status = int(getattr(r, "status", 200) or 200)
+            cl = int(r.headers.get("Content-Length") or 0)
+            crange = str(r.headers.get("Content-Range") or "")
+            if status == 206 and "/" in crange:
+                try:
+                    total = int(crange.rsplit("/", 1)[-1])
+                except ValueError:
+                    total = total or (n + cl)
+                mode = "ab"
+            elif status == 200 and n > 0:
+                self.log("server ignored Range — restarting this source from 0")
+                n = 0
+                mode = "wb"
+                total = cl
+            else:
+                mode = "ab" if n else "wb"
+                total = cl
+            last_byte = time.time()
+            stalled = False
+            read_error = False
+            try:
+                with r, open(tmp, mode) as f:
+                    if total:
+                        self.log("BYTES %d/%d" % (n, total))
+                    while True:
+                        if time.time() - last_byte > STALL_SEC:
+                            self.log("STALL kept %d bytes - reconnect same source" % n)
+                            stalled = True
+                            break
+                        try:
+                            chunk = r.read(256 * 1024)
+                        except Exception as e:
+                            self.log("READ fail, resume same source: %s" % e)
+                            read_error = True
+                            break
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        n += len(chunk)
+                        got_any = True
+                        last_byte = time.time()
+                        elapsed = max(0.001, last_byte - t0)
+                        speed = n / elapsed
+                        pct = int(n * 100 / total) if total else min(
+                            99, n // (2 * 1024 * 1024))
+                        if pct >= last_pct + 1 or (last_byte - last_report) >= 1.0:
+                            last_pct = pct
+                            last_report = last_byte
+                            self.log("PROGRESS %d" % pct)
+                            self.log("BYTES %d/%d" % (n, total))
+                            self.log("SPEED %.2f MB/s" % (speed / (1024 * 1024)))
+                            self.log("  Chromium %d%% (%d MB)" % (
+                                pct, n // (1024 * 1024)))
+                            if self.progress:
+                                self.progress(min(100, pct))
+            except Exception as e:
+                self.log("STREAM fail, resume same source: %s" % e)
+                read_error = True
+            size = tmp.stat().st_size if tmp.exists() else 0
+            n = size
+            done = size >= min_bytes and (not total or size >= total)
+            if done:
+                break
+            if size == 0 and not got_any and not stalled and not read_error:
+                _cleanup(dest)
+                raise RuntimeError("download too small (0 bytes): %s" % url)
+            if attempt >= RESUME_TRIES:
+                raise TimeoutError(
+                    "could not finish after %d reconnects (%d bytes kept)" % (
+                        RESUME_TRIES, size))
+            time.sleep(RECONNECT_WAIT)
+        size = tmp.stat().st_size if tmp.exists() else 0
+        if size < min_bytes:
+            raise RuntimeError("download too small (%d bytes): %s" % (size, url))
+        if expected_sha256:
+            got = sha256_file(tmp)
+            if got.lower() != expected_sha256.lower():
+                _cleanup(dest)
+                raise RuntimeError("SHA256 mismatch")
+        tmp.replace(dest)
+        try:
+            meta.unlink()
+        except Exception:
+            pass
+        self.log("PROGRESS 100")
+        self.log("BYTES %d/%d" % (size, size if not total else total))
+        self.log("DOWNLOAD_COMPLETED")
+        if self.progress:
+            self.progress(100)
+
+
 def _download(url: str, dest: Path, log: LogFn,
               progress: Optional[ProgressFn],
               expected_sha256: Optional[str] = None,
               min_bytes: int = MIN_ZIP_BYTES) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    _cleanup(tmp)
-    log("Downloading " + url)
-    t0 = time.time()
-    last_byte = time.time()
-    n = 0
-    last_pct = -1
-    last_report = 0.0
-    with _get(url, timeout=CONNECT_SEC) as r, open(tmp, "wb") as f:
-        total = int(r.headers.get("Content-Length") or 0)
-        if total:
-            log("BYTES 0/%d" % total)
-        while True:
-            now = time.time()
-            if now - last_byte > STALL_SEC:
-                raise TimeoutError("download stalled (no data for %.0fs)" % STALL_SEC)
-            if now - t0 > SOURCE_MAX_SEC:
-                raise TimeoutError("source exceeded %.0fs" % SOURCE_MAX_SEC)
-            try:
-                chunk = r.read(256 * 1024)
-            except Exception as e:
-                raise TimeoutError(str(e)) from e
-            if not chunk:
-                break
-            f.write(chunk)
-            n += len(chunk)
-            last_byte = time.time()
-            elapsed = max(0.001, last_byte - t0)
-            speed = n / elapsed
-            pct = int(n * 100 / total) if total else min(99, n // (2 * 1024 * 1024))
-            if pct >= last_pct + 1 or (last_byte - last_report) >= 1.0:
-                last_pct = pct
-                last_report = last_byte
-                log("PROGRESS %d" % pct)
-                log("BYTES %d/%d" % (n, total))
-                log("SPEED %.2f MB/s" % (speed / (1024 * 1024)))
-                log("  Chromium %d%% (%d MB)" % (pct, n // (1024 * 1024)))
-                if progress:
-                    progress(min(100, pct))
-    size = tmp.stat().st_size if tmp.exists() else 0
-    if size < min_bytes:
-        _cleanup(tmp)
-        raise RuntimeError("download too small (%d bytes): %s" % (size, url))
-    if expected_sha256:
-        got = sha256_file(tmp)
-        if got.lower() != expected_sha256.lower():
-            _cleanup(tmp)
-            raise RuntimeError("SHA256 mismatch")
-    tmp.replace(dest)
-    log("PROGRESS 100")
-    log("BYTES %d/%d" % (size, size if not total else total))
-    log("DOWNLOAD_COMPLETED")
-    if progress:
-        progress(100)
+    DownloadManager(log, progress).fetch(
+        url, dest, expected_sha256=expected_sha256, min_bytes=min_bytes)
 
 
 def _extract_zip(zpath: Path, dest_folder: Path, log: LogFn) -> Path:
@@ -483,7 +645,27 @@ def ensure_installed(log: Optional[LogFn] = None,
     if find_chrome(dest) and not is_ready(dest):
         log("Leftover Chrome/CFT (or unmarked) install ignored — fetching Chromium")
     log("CHROMIUM_START")
-    log("Installing app-only Chromium (not Chrome, not Edge) into " + str(dest))
+    log("Installing app-only Chromium into dedicated folder " + str(dest))
+    zpath = dest / ZIP_NAME
+    cached = find_cached_zip(dest)
+    if cached:
+        try:
+            log("REUSING zip already in install folder: " + str(cached))
+            verify_zip(cached)
+            prod = assert_chromium_zip(cached)
+            log("VALIDATED product=" + prod)
+            found = _extract_zip(cached, dest / "current", log)
+            write_marker(dest, {"product": prod, "path": str(found),
+                                "source": "cached-zip"})
+            if not is_ready(dest):
+                raise RuntimeError("extract finished but Chromium did not register")
+            log("CHROMIUM_OK " + str(found))
+            log("App Chromium ready: " + str(found))
+            if progress:
+                progress(100)
+            return found
+        except Exception as e:
+            log("cached zip not usable: %s" % e)
     srcs = sources()
     extra = []
     try:
@@ -495,7 +677,6 @@ def ensure_installed(log: Optional[LogFn] = None,
         if u not in seen:
             srcs.append({"name": "extra", "url": u, "kind": "chromium"})
             seen.add(u)
-    zpath = dest / "chromium-download.zip"
     last_err = "no url"
     for src in srcs:
         name, url = src["name"], src["url"]
@@ -517,10 +698,6 @@ def ensure_installed(log: Optional[LogFn] = None,
             log("VALIDATED product=" + prod)
             found = _extract_zip(zpath, dest / "current", log)
             write_marker(dest, {"product": prod, "path": str(found), "source": name})
-            try:
-                zpath.unlink()
-            except Exception:
-                pass
             if not is_ready(dest):
                 raise RuntimeError("extract finished but Chromium did not register")
             log("CHROMIUM_OK " + str(found))
@@ -529,7 +706,6 @@ def ensure_installed(log: Optional[LogFn] = None,
         except Exception as e:
             last_err = "%s: %s" % (url, e)
             log("SOURCE_FAIL %s %s" % (name, e))
-            _cleanup(zpath)
     raise RuntimeError(
         "Could not download Chromium (Chrome/CFT rejected; all Chromium sources failed). "
         + last_err

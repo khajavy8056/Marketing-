@@ -178,6 +178,92 @@ class TestBrowsersPath(unittest.TestCase):
         self.assertTrue(dest.exists())
         self.assertGreater(dest.stat().st_size, 8_000_000)
 
+    def test_resume_same_url_after_brief_disconnect(self):
+        body = b"Z" * 50_000
+        state = {"n": 0}
+
+        def fake_get(url, timeout=20, headers=None):
+            headers = headers or {}
+            rng = str(headers.get("Range") or "")
+            start = 0
+            if rng.startswith("bytes="):
+                start = int(rng.split("=", 1)[1].split("-")[0])
+            state["n"] += 1
+            call = state["n"]
+
+            class R:
+                status = 206 if start else 200
+                headers = {
+                    "Content-Length": str(len(body) - start),
+                    "Content-Range": "bytes %d-%d/%d" % (
+                        start, len(body) - 1, len(body)),
+                }
+
+                def __init__(self):
+                    self.pos = 0
+                    self.data = body[start:]
+
+                def read(self, n):
+                    if self.pos >= len(self.data):
+                        return b""
+                    take = min(n, len(self.data) - self.pos)
+                    if call == 1:
+                        take = min(take, max(0, 20_000 - self.pos))
+                        if take <= 0:
+                            raise ConnectionResetError("blip")
+                    chunk = self.data[self.pos:self.pos + take]
+                    self.pos += take
+                    return chunk
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    return False
+
+            return R()
+
+        dest = Path(self.tmp) / "app-chromium" / "chromium-download.zip"
+        notes = []
+        with mock.patch.object(ac._fc, "_get", side_effect=fake_get), \
+             mock.patch.object(ac._fc.time, "sleep"):
+            ac._fc._download("https://example.test/c.zip", dest,
+                             notes.append, None, min_bytes=40_000)
+        self.assertGreaterEqual(state["n"], 2)
+        self.assertTrue(any("RESUME" in x for x in notes))
+        self.assertFalse(any("SOURCE_FAIL" in x for x in notes))
+        self.assertTrue(dest.exists())
+        self.assertEqual(dest.read_bytes(), body)
+        self.assertIn("app-chromium", str(dest))
+        self.assertNotIn("Downloads", str(dest))
+
+    def test_reuse_cached_zip_skips_download(self):
+        dest = Path(self.tmp) / "app-chromium"
+        dest.mkdir()
+        os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
+        zpath = dest / ac._fc.ZIP_NAME
+        with zipfile.ZipFile(zpath, "w") as zf:
+            zf.writestr("chrome-win/chrome.exe", b"B" * 60_000)
+            zf.writestr("pad.bin", b"P" * 8_000_000)
+        notes = []
+        with mock.patch.object(ac._fc, "_download",
+                               side_effect=AssertionError("must not re-download")):
+            found = ac._fc.ensure_installed(log=notes.append)
+        self.assertTrue(found.is_file())
+        self.assertTrue(zpath.exists(), "zip must stay in the install folder")
+        self.assertTrue(any("REUSING" in n for n in notes))
+        self.assertTrue(ac._fc.is_ready(dest))
+
+    def test_install_dir_is_app_chromium_not_downloads(self):
+        d = ac.browsers_dir()
+        self.assertTrue(str(d).endswith("app-chromium") or d.name == "app-chromium")
+        self.assertNotIn("/Downloads/", str(d).replace("\\", "/"))
+        self.assertNotIn("/Temp/", str(d).replace("\\", "/"))
+        self.assertEqual(ac._fc.ZIP_NAME, "chromium-download.zip")
+        self.assertGreaterEqual(ac._fc.STALL_SEC, 20)
+        self.assertGreaterEqual(ac._fc.RESUME_TRIES, 8)
+        self.assertFalse(hasattr(ac._fc, "SOURCE_MAX_SEC"))
+
     def test_incomplete_download_deleted(self):
         class Tiny:
             headers = {"Content-Length": "100"}
@@ -303,10 +389,12 @@ class TestBrowsersPath(unittest.TestCase):
         ac._parse_log("PROGRESS 42")
         ac._parse_log("BYTES 1000/2000")
         ac._parse_log("SPEED 1.20 MB/s")
+        ac._parse_log("RESUME 8000000 bytes from chromium-download.zip.part")
         st = ac.status()
         self.assertEqual(st["percent"], 42)
         self.assertEqual(st["bytes"], 1000)
         self.assertEqual(st["source"], "ghproxy")
+        self.assertIn("RESUME", str(st.get("note") or ""))
 
 
 if __name__ == "__main__":

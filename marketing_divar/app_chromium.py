@@ -128,6 +128,13 @@ def _parse_log(msg: str) -> None:
             _STATUS["note"] = "source " + str(_STATUS["source"])
         elif line.startswith("SOURCE_FAIL "):
             _STATUS["note"] = line
+        elif line.startswith("RESUME "):
+            _STATUS["note"] = line
+        elif line.startswith("STALL ") or line.startswith("RECONNECT "):
+            _STATUS["note"] = line
+        elif line.startswith("REUSING "):
+            _STATUS["note"] = line
+            _STATUS["percent"] = 100
         elif line.startswith("VALIDATED "):
             _STATUS["note"] = line
         elif line.startswith("REGISTERED "):
