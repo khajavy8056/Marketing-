@@ -4,6 +4,7 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -55,6 +56,15 @@ class TestBrowsersPath(unittest.TestCase):
         mei.mkdir(parents=True)
         (mei / "chrome.exe").write_bytes(b"x")
         self.assertIsNone(ac.find_chrome(Path(self.tmp) / "_MEI123"))
+
+    def test_ignores_system_chrome_outside_app_dir(self):
+        system = Path(self.tmp) / "Program Files" / "Google" / "Chrome" / "Application"
+        system.mkdir(parents=True)
+        (system / "chrome.exe").write_bytes(b"system")
+        app = Path(self.tmp) / "app-chromium"
+        app.mkdir()
+        self.assertIsNone(ac.find_chrome(app))
+        self.assertNotEqual(ac.find_chrome(app), system / "chrome.exe")
 
     def test_extract_zip_layout(self):
         dest = Path(self.tmp) / "app-chromium"
@@ -132,8 +142,105 @@ class TestBrowsersPath(unittest.TestCase):
             ac._fc._download("https://example.test/c.zip", dest,
                              lambda m: seen.append(m), lambda p: None)
         self.assertTrue(any(x.startswith("PROGRESS ") for x in seen))
+        self.assertTrue(any(x.startswith("BYTES ") for x in seen))
+        self.assertTrue(any(x.startswith("SPEED ") for x in seen))
+        self.assertTrue(any(x == "DOWNLOAD_COMPLETED" for x in seen))
         self.assertTrue(dest.exists())
         self.assertGreater(dest.stat().st_size, 8_000_000)
+
+    def test_incomplete_download_deleted(self):
+        class Tiny:
+            headers = {"Content-Length": "100"}
+            def read(self, n):
+                return b""
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        dest = Path(self.tmp) / "small.zip"
+        with mock.patch.object(ac._fc, "_get", return_value=Tiny()):
+            with self.assertRaises(RuntimeError):
+                ac._fc._download("https://example.test/bad.zip", dest,
+                                 lambda m: None, None)
+        self.assertFalse(dest.exists())
+        self.assertFalse((dest.with_suffix(".zip.part")).exists())
+
+    def test_sha256_mismatch_deletes(self):
+        class Fake:
+            headers = {"Content-Length": str(9 * 1024 * 1024)}
+            def __init__(self):
+                self.left = 9 * 1024 * 1024
+            def read(self, n):
+                if self.left <= 0:
+                    return b""
+                take = min(n, self.left)
+                self.left -= take
+                return b"y" * take
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        dest = Path(self.tmp) / "hash.zip"
+        with mock.patch.object(ac._fc, "_get", return_value=Fake()):
+            with self.assertRaises(RuntimeError) as ctx:
+                ac._fc._download("https://example.test/h.zip", dest,
+                                 lambda m: None, None,
+                                 expected_sha256="0" * 64)
+        self.assertIn("SHA256", str(ctx.exception))
+        self.assertFalse(dest.exists())
+
+    def test_verify_zip_crc(self):
+        zpath = Path(self.tmp) / "ok.zip"
+        with zipfile.ZipFile(zpath, "w") as zf:
+            zf.writestr("chrome-win/chrome.exe", b"bin" * 100)
+        # below min size
+        with self.assertRaises(RuntimeError):
+            ac._fc.verify_zip(zpath, min_bytes=8_000_000)
+        ac._fc.verify_zip(zpath, min_bytes=10)
+        junk = Path(self.tmp) / "trunc.zip"
+        junk.write_bytes(b"PK\x03\x04not-a-real-zip")
+        with self.assertRaises(RuntimeError):
+            ac._fc.verify_zip(junk, min_bytes=4)
+
+    def test_dead_source_skipped_quickly(self):
+        t0 = time.time()
+        ok = ac._fc.probe_url("http://127.0.0.1:1/nope.zip", timeout=1.5)
+        dt = time.time() - t0
+        self.assertFalse(ok)
+        self.assertLess(dt, 5.0)
+
+    def test_ensure_falls_through_dead_then_ok(self):
+        dest = Path(self.tmp) / "app-chromium"
+        dest.mkdir()
+        os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
+        zpath = Path(self.tmp) / "good.zip"
+        with zipfile.ZipFile(zpath, "w") as zf:
+            zf.writestr("chrome-win/chrome.exe", b"bin")
+        # pad to min size after extract path: _download min 8MB so we mock
+        # ensure_installed at source loop
+        srcs = [
+            {"name": "dead", "url": "http://127.0.0.1:1/a.zip", "kind": "x"},
+            {"name": "ok", "url": "https://example.test/ok.zip", "kind": "x"},
+        ]
+        notes = []
+
+        def fake_download(url, dest_zip, log, progress, expected_sha256=None,
+                          min_bytes=8_000_000):
+            dest_zip.write_bytes(zpath.read_bytes())
+            log("PROGRESS 100")
+            log("DOWNLOAD_COMPLETED")
+
+        with mock.patch.object(ac._fc, "sources", return_value=srcs), \
+             mock.patch.object(ac._fc, "github_zip_urls", return_value=[]), \
+             mock.patch.object(ac._fc, "probe_url",
+                               side_effect=lambda u, timeout=6: "ok.zip" in u), \
+             mock.patch.object(ac._fc, "_download", side_effect=fake_download), \
+             mock.patch.object(ac._fc, "verify_zip", return_value=None):
+            found = ac._fc.ensure_installed(log=notes.append)
+        self.assertTrue(found.is_file())
+        self.assertTrue(any("SOURCE_FAIL dead" in n for n in notes))
+        self.assertTrue(any(n.startswith("CHROMIUM_OK") or "ready" in n.lower()
+                            for n in notes))
 
     def test_save_without_login_keeps_window(self):
         acc = Path(self.tmp) / "accounts"
@@ -146,6 +253,17 @@ class TestBrowsersPath(unittest.TestCase):
             res = save_profile(str(acc), "acc1")
         self.assertFalse(res["ok"])
         cl.assert_not_called()
+
+    def test_status_and_parse(self):
+        ac._parse_log("CHROMIUM_START")
+        ac._parse_log("SOURCE ghproxy")
+        ac._parse_log("PROGRESS 42")
+        ac._parse_log("BYTES 1000/2000")
+        ac._parse_log("SPEED 1.20 MB/s")
+        st = ac.status()
+        self.assertEqual(st["percent"], 42)
+        self.assertEqual(st["bytes"], 1000)
+        self.assertEqual(st["source"], "ghproxy")
 
 
 if __name__ == "__main__":

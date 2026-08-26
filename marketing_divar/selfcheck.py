@@ -35,7 +35,9 @@ def _check_windows_installer() -> None:
                    "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
                    "DivarMarketing", "divar-marketing-install.log",
                    "--install-chromium", "app-chromium",
-                   "ungoogled-chromium", "PROGRESS"):
+                   "ungoogled-chromium", "PROGRESS",
+                   "barChrome", "SOURCE_FAIL", "BYTES", "SHA256",
+                   "CHROMIUM_START", "DOWNLOAD_COMPLETED"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -56,11 +58,17 @@ def _check_windows_installer() -> None:
         raise FileNotFoundError("setup_app.py missing product id")
     if "fetch_chromium" not in setup or "ungoogled-chromium" not in setup:
         raise FileNotFoundError("setup_app.py must download ungoogled-chromium")
+    if "chrome_bar" not in setup or "CHROMIUM_START" not in setup:
+        raise FileNotFoundError("setup_app.py missing independent Chromium progress")
     if "app-chromium" not in setup:
         raise FileNotFoundError("setup_app.py missing app-chromium folder")
     fetch = (root / "installer" / "fetch_chromium.py").read_text(encoding="utf-8")
     if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
         raise FileNotFoundError("fetch_chromium.py incomplete")
+    for needle in ("SHA256", "SOURCE_FAIL", "BYTES", "SPEED",
+                   "probe_url", "verify_zip", "CHROMIUM_START"):
+        if needle not in fetch:
+            raise FileNotFoundError(f"fetch_chromium.py missing {needle}")
     bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
     if "fetch_chromium.py" not in bat_setup:
         raise FileNotFoundError("Setup build must bundle fetch_chromium.py")

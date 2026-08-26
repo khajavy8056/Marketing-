@@ -1,22 +1,39 @@
 # -*- coding: utf-8 -*-
 """Chromium اختصاصی برنامه — جدا از مرورگر و پروفایل کاربر.
 
-دانلود از GitHub (ungoogled-chromium)، نه CDN فیلترشدهٔ Playwright.
-پوشه: %LOCALAPPDATA%\\DivarMarketing\\app-chromium
+دانلود از چند منبع (ungoogled-chromium / Chrome for Testing). فورک سورس
+Chromium لازم نیست: Playwright + user-data-dir جدا برای هر اکانت کافی است.
+پوشه: %LOCALAPPDATA%\\\\DivarMarketing\\\\app-chromium
 پروفایل لاگین هر اکانت جداست: accounts/<name>/chromium/
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
+import threading
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 from .paths import user_data_dir
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int], None]
+
+_STATUS: Dict[str, object] = {
+    "installed": False,
+    "path": "",
+    "running": False,
+    "percent": 0,
+    "bytes": 0,
+    "total": 0,
+    "speed": "",
+    "source": "",
+    "error": "",
+    "note": "",
+}
+_LOCK = threading.Lock()
 
 
 def _load_fetch():
@@ -44,7 +61,7 @@ _fc = _load_fetch()
 
 
 def browsers_dir() -> Path:
-    override = __import__("os").environ.get("DIVAR_CHROMIUM_DIR")
+    override = os.environ.get("DIVAR_CHROMIUM_DIR")
     if override:
         return Path(override)
     return user_data_dir() / "app-chromium"
@@ -53,7 +70,6 @@ def browsers_dir() -> Path:
 def apply_browser_env() -> Path:
     dest = browsers_dir()
     dest.mkdir(parents=True, exist_ok=True)
-    import os
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
     os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
     os.environ.pop("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", None)
@@ -70,7 +86,7 @@ def executable_path() -> str:
     if not found:
         raise RuntimeError(
             "Chromium اختصاصی برنامه نصب نیست. نصب‌کننده باید ungoogled-chromium "
-            "را در پوشهٔ DivarMarketing\\app-chromium بگذارد."
+            "را در پوشهٔ DivarMarketing\\\\app-chromium بگذارد."
         )
     return str(found)
 
@@ -83,8 +99,108 @@ def github_zip_urls():
     return _fc.github_zip_urls()
 
 
+def _parse_log(msg: str) -> None:
+    line = str(msg or "").strip()
+    with _LOCK:
+        if line.startswith("PROGRESS "):
+            try:
+                _STATUS["percent"] = max(0, min(100, int(line.split()[1])))
+            except Exception:
+                pass
+        elif line.startswith("BYTES "):
+            try:
+                part = line.split()[1]
+                a, b = part.split("/", 1)
+                _STATUS["bytes"] = int(a)
+                _STATUS["total"] = int(b)
+            except Exception:
+                pass
+        elif line.startswith("SPEED "):
+            _STATUS["speed"] = line[6:].strip()
+        elif line.startswith("SOURCE ") and not line.startswith("SOURCE_"):
+            _STATUS["source"] = line[7:].strip()
+            _STATUS["note"] = "source " + str(_STATUS["source"])
+        elif line.startswith("SOURCE_FAIL "):
+            _STATUS["note"] = line
+        elif line.startswith("DOWNLOAD_COMPLETED"):
+            _STATUS["percent"] = 100
+            _STATUS["note"] = "Completed"
+        elif line.startswith("CHROMIUM_OK "):
+            _STATUS["path"] = line[12:].strip()
+            _STATUS["installed"] = True
+            _STATUS["percent"] = 100
+            _STATUS["note"] = "Completed"
+            _STATUS["error"] = ""
+
+
+def status() -> Dict[str, object]:
+    apply_browser_env()
+    found = find_chrome()
+    with _LOCK:
+        out = dict(_STATUS)
+    out["installed"] = bool(found)
+    if found:
+        out["path"] = str(found)
+        if not out.get("percent"):
+            out["percent"] = 100
+            out["note"] = out.get("note") or "Completed"
+    return out
+
+
 def ensure_installed(log: Optional[LogFn] = None,
                      progress: Optional[ProgressFn] = None,
                      force: bool = False) -> Path:
     apply_browser_env()
-    return _fc.ensure_installed(log=log, progress=progress, force=force)
+
+    def wrapped(msg: str) -> None:
+        _parse_log(msg)
+        if log:
+            log(msg)
+        else:
+            print(msg, flush=True)
+
+    def on_pct(p: int) -> None:
+        with _LOCK:
+            _STATUS["percent"] = int(p)
+        if progress:
+            progress(p)
+
+    with _LOCK:
+        _STATUS["running"] = True
+        _STATUS["error"] = ""
+        _STATUS["note"] = "started"
+    try:
+        found = _fc.ensure_installed(log=wrapped, progress=on_pct, force=force)
+        with _LOCK:
+            _STATUS["installed"] = True
+            _STATUS["path"] = str(found)
+            _STATUS["percent"] = 100
+            _STATUS["note"] = "Completed"
+        return found
+    except Exception as e:
+        with _LOCK:
+            _STATUS["error"] = str(e)
+            _STATUS["note"] = "failed"
+        raise
+    finally:
+        with _LOCK:
+            _STATUS["running"] = False
+
+
+def start_install_async() -> Dict[str, object]:
+    with _LOCK:
+        if _STATUS.get("running"):
+            return status()
+        _STATUS["running"] = True
+        _STATUS["error"] = ""
+        _STATUS["note"] = "started"
+        _STATUS["percent"] = 0
+
+    def work() -> None:
+        try:
+            ensure_installed()
+        except Exception:
+            pass
+
+    threading.Thread(target=work, daemon=True).start()
+    return status()

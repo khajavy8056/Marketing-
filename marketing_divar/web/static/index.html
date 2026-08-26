@@ -204,6 +204,16 @@
       <b dir="ltr">divar.ir/s/tehran</b>. شما همان‌جا لاگین می‌کنید، بعد
       <b>ذخیره پروفایل</b> را می‌زنید — پنجره بسته می‌شود و لاگین می‌ماند.
       کوکی تزریق نمی‌شود.</div>
+    <div id="chromium-box" class="warn-box" style="display:none">
+      <b>دانلود Chromium اختصاصی</b>
+      <div id="chromium-label">0%</div>
+      <div style="background:#e3e8f0;border-radius:8px;height:10px;margin-top:6px">
+        <div id="chromium-bar" style="height:10px;width:0;background:#1976d2;border-radius:8px"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sm" type="button" onclick="installChromium()">شروع دانلود Chromium</button>
+      </div>
+    </div>
     <div class="grid g2">
       <div>
         <div class="lbl">نام اکانت</div>
@@ -758,10 +768,44 @@ async function accRefresh(){
         </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز پروفایلی نیست. نام بگذارید و «افزودن پروفایل» را بزنید.</div>';
   }catch(e){}
 }
+async function refreshChromium(){
+  try{
+    const s = await api('/api/chromium/status');
+    const box = $('chromium-box');
+    if(!box) return s;
+    if(s.installed && !s.running){ box.style.display='none'; return s; }
+    box.style.display='block';
+    const pct = s.percent||0;
+    if($('chromium-bar')) $('chromium-bar').style.width = pct+'%';
+    const bits = [];
+    if(s.note) bits.push(s.note);
+    bits.push(pct+'%');
+    if(s.bytes && s.total) bits.push(Math.round(s.bytes/1048576)+' / '+Math.round(s.total/1048576)+' MB');
+    if(s.speed) bits.push(s.speed);
+    if(s.source) bits.push(s.source);
+    if(s.error) bits.push(s.error);
+    if($('chromium-label')) $('chromium-label').textContent = bits.join(' · ');
+    return s;
+  }catch(e){ return null; }
+}
+async function installChromium(){
+  try{
+    const r = await api('/api/chromium/install',{method:'POST',body:'{}'});
+    toast(r.message||'دانلود Chromium شروع شد');
+    refreshChromium();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 async function createProfile(){
   const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
   if(!name){ toast('نام اکانت را وارد کنید',false); return; }
   try{
+    const st = await api('/api/chromium/status');
+    if(!st.installed){
+      await api('/api/chromium/install',{method:'POST',body:'{}'});
+      refreshChromium();
+      toast('اول Chromium اختصاصی دانلود شود — نوار پیشرفت را ببینید', false);
+      return;
+    }
     const r = await api('/api/accounts/profile/create',{method:'POST',body:JSON.stringify({name,phone})});
     toast(r.message||'Chromium باز شد'); $('otp-hint').textContent='در پنجره لاگین کنید، بعد ذخیره پروفایل';
     accRefresh();

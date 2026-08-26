@@ -66,7 +66,7 @@ Get-ChildItem -LiteralPath $Root -Recurse -Include *.ps1,*.bat -ErrorAction Sile
 try {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Divar Marketing Setup"
-$form.Size = New-Object System.Drawing.Size(640, 520)
+$form.Size = New-Object System.Drawing.Size(640, 600)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -88,35 +88,46 @@ $lblStatus.Text = "Ready. Click Start Install."
 
 $bar = New-Object System.Windows.Forms.ProgressBar
 $bar.Location = New-Object System.Drawing.Point(20, 88)
-$bar.Size = New-Object System.Drawing.Size(586, 24)
+$bar.Size = New-Object System.Drawing.Size(586, 22)
 $bar.Minimum = 0; $bar.Maximum = 100; $bar.Value = 0
 
 $lblStep = New-Object System.Windows.Forms.Label
-$lblStep.Location = New-Object System.Drawing.Point(20, 118)
-$lblStep.Size = New-Object System.Drawing.Size(586, 22)
+$lblStep.Location = New-Object System.Drawing.Point(20, 112)
+$lblStep.Size = New-Object System.Drawing.Size(586, 20)
 $lblStep.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $lblStep.Text = ""
 
+$lblChrome = New-Object System.Windows.Forms.Label
+$lblChrome.Location = New-Object System.Drawing.Point(20, 134)
+$lblChrome.Size = New-Object System.Drawing.Size(586, 20)
+$lblChrome.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblChrome.Text = "Chromium: waiting"
+
+$barChrome = New-Object System.Windows.Forms.ProgressBar
+$barChrome.Location = New-Object System.Drawing.Point(20, 156)
+$barChrome.Size = New-Object System.Drawing.Size(586, 22)
+$barChrome.Minimum = 0; $barChrome.Maximum = 100; $barChrome.Value = 0
+
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Object System.Drawing.Point(20, 146)
-$logBox.Size = New-Object System.Drawing.Size(586, 280)
+$logBox.Location = New-Object System.Drawing.Point(20, 184)
+$logBox.Size = New-Object System.Drawing.Size(586, 260)
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = "Vertical"
 $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
 
 $btnStart = New-Object System.Windows.Forms.Button
-$btnStart.Location = New-Object System.Drawing.Point(20, 438)
+$btnStart.Location = New-Object System.Drawing.Point(20, 516)
 $btnStart.Size = New-Object System.Drawing.Size(180, 36)
 $btnStart.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $btnStart.Text = "Start Install"
 
 $btnClose = New-Object System.Windows.Forms.Button
-$btnClose.Location = New-Object System.Drawing.Point(426, 438)
+$btnClose.Location = New-Object System.Drawing.Point(426, 516)
 $btnClose.Size = New-Object System.Drawing.Size(180, 36)
 $btnClose.Text = "Close"
 
-$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $logBox, $btnStart, $btnClose))
+$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $logBox, $btnStart, $btnClose))
 } catch {
     Write-InstallLog "GUI build failed: $_"
     try { Write-Host "GUI build failed: $_" } catch {}
@@ -325,8 +336,11 @@ $btnStart.Add_Click({
 
 
 
-                        Log "[3b] Installing app Chromium (ungoogled-chromium from GitHub)"
-        Set-Step "Downloading Chromium 0%" 55
+                        Log "[3b] Installing app Chromium (ungoogled-chromium, multi-source)"
+        Set-Step "Application ready" 75
+        $lblChrome.Text = "Chromium: started"
+        $barChrome.Style = "Blocks"
+        $barChrome.Value = 0
         $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
         New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
         $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
@@ -353,13 +367,33 @@ $btnStart.Add_Click({
             [System.Windows.Forms.Application]::DoEvents()
             $logged = Stream-File $outFile $logged
             try {
-                $tail = Get-Content -LiteralPath $outFile -Tail 8 -ErrorAction SilentlyContinue
+                $tail = Get-Content -LiteralPath $outFile -Tail 12 -ErrorAction SilentlyContinue
                 foreach ($ln in $tail) {
                     if ($ln -match "PROGRESS\s+(\d+)") {
                         $p = [int]$Matches[1]
-                        $bar.Style = "Blocks"
-                        $bar.Value = [Math]::Min(82, 55 + [int]($p * 0.27))
-                        $lblStep.Text = "Downloading Chromium $p%"
+                        $barChrome.Style = "Blocks"
+                        $barChrome.Value = [Math]::Min(100, $p)
+                    }
+                    if ($ln -match "BYTES\s+(\d+)/(\d+)") {
+                        $doneMb = [int]([int]$Matches[1] / 1MB)
+                        $totMb = [int]([int]$Matches[2] / 1MB)
+                        $lblChrome.Text = "Chromium $($barChrome.Value)%  $doneMb / $totMb MB"
+                    }
+                    if ($ln -match "SPEED\s+(.+)$") {
+                        $lblChrome.Text = $lblChrome.Text + "  " + $Matches[1]
+                    }
+                    if ($ln -match "SOURCE_FAIL\s+(\S+)") {
+                        Log ("    source-fail " + $Matches[1])
+                    }
+                    if ($ln -match "DOWNLOAD_COMPLETED") {
+                        $barChrome.Value = 100
+                        $lblChrome.Text = "Chromium Completed"
+                    }
+                    if ($ln -match "CHROMIUM_START") {
+                        $lblChrome.Text = "Chromium: started"
+                    }
+                    if ($ln -match "SHA256") {
+                        Log "    SHA256 check"
                     }
                 }
             } catch {}
@@ -367,14 +401,18 @@ $btnStart.Add_Click({
         $proc.WaitForExit()
         $logged = Stream-File $outFile $logged
         Remove-Item $outFile -ErrorAction SilentlyContinue
-        if ($proc.ExitCode -ne 0) { throw "Chromium download failed (code $($proc.ExitCode)) — see log. Need GitHub access." }
-        Log "[3b] Chromium OK -> $chromeDir"
+        if ($proc.ExitCode -ne 0) {
+            Log "[3b] Chromium download failed (code $($proc.ExitCode)) - app will retry from the panel. Need GitHub or a Chrome-for-Testing mirror."
+            $lblChrome.Text = "Chromium failed - retry in panel"
+        } else {
+            Log "[3b] Chromium OK -> $chromeDir"
+            $barChrome.Value = 100
+            $lblChrome.Text = "Chromium Completed"
+        }
         $bar.Value = 82
 
 
-
-
-        Log "[4] Health check"
+Log "[4] Health check"
         Set-Step "Health check" 80
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"

@@ -110,15 +110,18 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
     }
 
-            L "Installing app Chromium (ungoogled-chromium from GitHub) ..."
+    L "Installing app Chromium (ungoogled-chromium, multi-source) ..."
     $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
     New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
     $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
     $env:DIVAR_CHROMIUM_DIR = $chromeDir
     $env:PYTHONUNBUFFERED = "1"
     & $venvPy "main.py" "--install-chromium"
-    if ($LASTEXITCODE -ne 0) { throw "Chromium download failed - GitHub must be reachable" }
-    L "App Chromium OK -> $chromeDir"
+    if ($LASTEXITCODE -ne 0) {
+        L "Chromium download failed - app will retry from the panel"
+    } else {
+        L "App Chromium OK -> $chromeDir"
+    }
 
 
 

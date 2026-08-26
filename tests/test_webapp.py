@@ -77,6 +77,9 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("/api/accounts/collect-site", r.text)
         self.assertIn("/api/accounts/profile/create", r.text)
         self.assertIn("createProfile", r.text)
+        self.assertIn("/api/chromium/status", r.text)
+        self.assertIn("chromium-box", r.text)
+        self.assertIn("installChromium", r.text)
         self.assertIn("divar.ir/s/tehran", r.text)
         self.assertIn("collectSite", r.text)
         self.assertIn("/api/accounts/puzzle-frame", r.text)
@@ -117,6 +120,10 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("contact_found", r.json()["breakdown"])
         self.assertEqual(r.json()["listen"]["port"], 8642)
         self.assertEqual(r.json()["listen"]["bind"], "0.0.0.0")
+        cr = client.get("/api/chromium/status")
+        self.assertEqual(cr.status_code, 200)
+        self.assertIn("installed", cr.json())
+        self.assertIn("percent", cr.json())
 
 
 class TestAccountFlow(unittest.TestCase):

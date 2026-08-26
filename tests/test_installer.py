@@ -33,6 +33,12 @@ class TestWindowsInstaller(unittest.TestCase):
             "ungoogled-chromium",
             "PROGRESS",
             "app-chromium",
+            "barChrome",
+            "SOURCE_FAIL",
+            "BYTES",
+            "SHA256",
+            "CHROMIUM_START",
+            "DOWNLOAD_COMPLETED",
         ):
             self.assertIn(needle, ps1, f"installer missing: {needle}")
         self.assertFalse(any("\u0600" <= ch <= "\u06FF" for ch in ps1),

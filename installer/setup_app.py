@@ -54,13 +54,15 @@ def extract_payload(dest: Path, log) -> Path:
         # Dev / source fallback: copy the repo next to this script
         root = Path(__file__).resolve().parent.parent
         log("No packed payload — copying source from " + str(root))
-        for name in ("main.py", "requirements.txt", "marketing_divar"):
+        for name in ("main.py", "requirements.txt", "marketing_divar",
+                     "installer"):
             src = root / name
             dst = dest / name
             if src.is_dir():
                 if dst.exists():
                     shutil.rmtree(dst, ignore_errors=True)
-                shutil.copytree(src, dst)
+                shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
+                    "__pycache__", "*.pyc", "install-log.txt"))
             elif src.exists():
                 shutil.copy2(src, dst)
     exe = dest / f"{APP_ID}.exe"
@@ -143,30 +145,39 @@ def _load_fetch_chromium():
     raise FileNotFoundError("fetch_chromium.py missing from installer")
 
 
-def install_app_chromium(target: Path, workdir: Path, log, progress=None) -> None:
-    """Download ungoogled-chromium into %LOCALAPPDATA%\\DivarMarketing\\app-chromium.
+def install_app_chromium(target: Path, workdir: Path, log, chrome_progress=None) -> bool:
+    """Download ungoogled-chromium into the app folder.
 
-    Live percent on the Setup bar. Does not spawn Playwright (that hangs).
+    Independent Chromium bar (started / percent / bytes / speed / Completed).
+    Dead hosts are skipped quickly. Does not spawn Playwright (that hangs).
+    Returns True if chrome.exe is ready.
     """
     dest = install_dir() / "app-chromium"
     dest.mkdir(parents=True, exist_ok=True)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
     os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
-    log("Installing app-only Chromium from GitHub (ungoogled-chromium) ...")
+    log("CHROMIUM_START")
+    log("Installing app-only Chromium (ungoogled-chromium / Chrome for Testing) ...")
     fc = _load_fetch_chromium()
 
     def on_pct(pct: int) -> None:
-        if progress:
-            # map 0-100 download onto overall 55-82
-            progress(55 + int(pct * 0.27), "Chromium %d%%" % pct)
+        if chrome_progress:
+            chrome_progress(min(100, int(pct)), "Chromium %d%%" % pct)
 
+    if chrome_progress:
+        chrome_progress(0, "Chromium started")
     try:
         path = fc.ensure_installed(log=log, progress=on_pct)
         log("App Chromium OK -> " + str(path))
+        if chrome_progress:
+            chrome_progress(100, "Chromium Completed")
+        return True
     except Exception as e:
-        log("ERROR installing Chromium: " + str(e))
-        raise
-
+        log("SOURCE_FAIL all " + str(e))
+        log("Chromium skipped (app will retry from the panel). " + str(e))
+        if chrome_progress:
+            chrome_progress(0, "Chromium failed - retry in panel")
+        return False
 
 def open_firewall(log) -> None:
     cmd = [
@@ -201,7 +212,7 @@ def launch(target: Path, workdir: Path, log) -> None:
         pass
 
 
-def run_install(progress, log) -> None:
+def run_install(progress, log, chrome_progress=None) -> None:
     dest = install_dir()
     progress(8, "Preparing folder")
     dest.mkdir(parents=True, exist_ok=True)
@@ -211,9 +222,9 @@ def run_install(progress, log) -> None:
     ico_dst = dest / "app.ico"
     if ico_src.exists():
         shutil.copy2(ico_src, ico_dst)
-    progress(55, "App Chromium")
+    progress(55, "App files ready")
     workdir = dest if target.suffix.lower() == ".exe" else dest
-    install_app_chromium(target, workdir, log)
+    install_app_chromium(target, workdir, log, chrome_progress=chrome_progress)
     progress(72, "Shortcuts")
     make_shortcut(target, workdir, ico_dst if ico_dst.exists() else ico_src, log)
     progress(80, "Network")
@@ -237,7 +248,7 @@ def gui() -> int:
 
     root = tk.Tk()
     root.title(APP_NAME + " Setup")
-    root.geometry("560x420")
+    root.geometry("560x500")
     root.resizable(False, False)
     try:
         ico = app_icon()
@@ -253,7 +264,12 @@ def gui() -> int:
     status = tk.Label(root, text="Ready. Click Install.", font=("Segoe UI", 10))
     status.pack(anchor="w", padx=18, pady=(10, 0))
     bar = ttk.Progressbar(root, length=520, mode="determinate", maximum=100)
-    bar.pack(padx=18, pady=10)
+    bar.pack(padx=18, pady=(8, 4))
+    chrome_status = tk.Label(root, text="Chromium: waiting", font=("Segoe UI", 9),
+                             fg="#334")
+    chrome_status.pack(anchor="w", padx=18)
+    chrome_bar = ttk.Progressbar(root, length=520, mode="determinate", maximum=100)
+    chrome_bar.pack(padx=18, pady=(4, 8))
     logbox = tk.Text(root, height=12, font=("Consolas", 9), state="disabled")
     logbox.pack(fill="both", expand=True, padx=18, pady=6)
 
@@ -271,6 +287,12 @@ def gui() -> int:
             status.configure(text=label)
         root.after(0, _)
 
+    def chrome_progress(pct: int, label: str) -> None:
+        def _():
+            chrome_bar["value"] = pct
+            chrome_status.configure(text=label)
+        root.after(0, _)
+
     btns = tk.Frame(root)
     btns.pack(fill="x", padx=18, pady=10)
     btn = tk.Button(btns, text="Install", width=14, font=("Segoe UI", 10, "bold"))
@@ -282,7 +304,7 @@ def gui() -> int:
 
         def work():
             try:
-                run_install(progress, log)
+                run_install(progress, log, chrome_progress=chrome_progress)
                 root.after(0, lambda: status.configure(
                     text="Installed. App is starting — browser: http://127.0.0.1:8642",
                     fg="#166534"))
@@ -308,7 +330,9 @@ def main() -> int:
     if "--cli" in sys.argv:
         def prog(p, s):
             print(f"[{p:3d}%] {s}")
-        run_install(prog, print)
+        def chrome_prog(p, s):
+            print(f"[Chromium {p:3d}%] {s}")
+        run_install(prog, print, chrome_progress=chrome_prog)
         return 0
     return gui()
 

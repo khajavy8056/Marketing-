@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.15")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.16")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -260,6 +260,19 @@ def accounts_profile_delete(req: ProfileReq):
     mgr().delete_account(name)
     log("info", f"پروفایل «{name}» حذف شد")
     return {"ok": True, "message": f"پروفایل «{name}» حذف شد"}
+
+
+@app.get("/api/chromium/status")
+def chromium_status():
+    from ..app_chromium import status as chrome_status
+    return chrome_status()
+
+
+@app.post("/api/chromium/install")
+def chromium_install():
+    from ..app_chromium import start_install_async
+    st = start_install_async()
+    return {"ok": True, "message": "دانلود Chromium اختصاصی شروع شد", **st}
 
 
 @app.post("/api/accounts/collect-site")
