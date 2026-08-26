@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 DEFAULTS: Dict[str, Any] = {
     # --- نرخ‌ها: زیر آستانه‌های گزارش‌شده دیوار (~7 شماره/دقیقه) ---
-    "phone_delay_sec": 10,        # ≥10s → حداکثر ~6 شماره در دقیقه
+    "phone_delay_sec": 45,        # فاصله شماره‌گیری (ثانیه)
     "jitter_sec": 4,              # تصادفی‌بودن تاخیر (رفتار انسانی)
     "search_delay_sec": 5,
     "search_page_delay_sec": 8,
@@ -19,7 +19,7 @@ DEFAULTS: Dict[str, Any] = {
     "search_daily_limit": 300,
     # --- چند اکانت و مانیتور لحظه‌ای ---
     "watch_interval_sec": 300,    # هر ۵ دقیقه جستجوی آگهی‌های جدید
-    "per_account_daily_limit": 129,  # سقف نرم هر اکانت؛ بعدش اگر دیوار کپچا ندهد ادامه
+    "per_account_daily_limit": 60,   # سقف روزانه هر اکانت
     "adaptive_until_captcha": True,  # بعد از سقف نرم، تا کپچا/۴۲۹ دیوار ادامه بده
     "ip_daily_limit": 240,        # سقف کلی همه اکانت‌ها از یک IP (محافظ اکانت‌ها)
     # --- قطع‌کننده مدار (Circuit Breaker) ---

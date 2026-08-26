@@ -10,14 +10,12 @@ if exist ".venv\Scripts\python.exe" (
   echo Checking previous install...
   ".venv\Scripts\python.exe" -c "import fastapi,uvicorn" 1>nul 2>nul
   if not errorlevel 1 (
-    echo Starting Divar Marketing...
+    echo Starting Divar Marketing (console minimized)...
     set PYTHONUTF8=1
-    start "Divar Marketing" ".venv\Scripts\python.exe" main.py
-    ping -n 4 127.0.0.1 >nul
-    start "" "http://localhost:8642"
-    echo App started: http://localhost:8642
+    start /min "Divar Marketing" ".venv\Scripts\python.exe" main.py
+    echo App started. Panel opens in app Chromium.
     echo Phone on same Wi-Fi: http://THIS-PC-IP:8642
-    ping -n 6 127.0.0.1 >nul
+    ping -n 3 127.0.0.1 >nul
     exit /b 0
   )
   echo Previous install is incomplete. Opening installer...

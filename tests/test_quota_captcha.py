@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""سقف نرم ۱۲۹ + ادامه تا کپچا + کپچای سادهٔ پنل."""
+"""سقف نرم ۶۰ + ادامه تا کپچا + کپچای سادهٔ پنل."""
 
 import json
 import os
@@ -29,23 +29,50 @@ class TestGateCaptcha(unittest.TestCase):
 
 
 class TestSoftQuota(unittest.TestCase):
-    def test_default_is_129(self):
-        self.assertEqual(DEFAULTS["per_account_daily_limit"], 129)
+    def test_default_is_60_and_45(self):
+        self.assertEqual(DEFAULTS["per_account_daily_limit"], 60)
+        self.assertEqual(DEFAULTS["phone_delay_sec"], 45)
+        self.assertEqual(DEFAULTS["watch_interval_sec"], 300)
         self.assertTrue(DEFAULTS["adaptive_until_captcha"])
-        self.assertEqual(store.EDITABLE_SETTINGS["per_account_daily_limit"], 129)
+        self.assertEqual(store.EDITABLE_SETTINGS["per_account_daily_limit"], 60)
+        self.assertEqual(store.EDITABLE_SETTINGS["phone_delay_sec"], 45)
+        self.assertEqual(store.EDITABLE_SETTINGS["watch_interval_sec"], 300)
 
-    def test_legacy_60_migrates(self):
+    def test_legacy_129_migrates_to_60(self):
         db = os.path.join(tempfile.mkdtemp(), "q.db")
-        store.settings_set(db, "telegram_chat_id", "x")  # create tables
-        # شبیه‌سازی نصب قدیمی
+        store.settings_set(db, "telegram_chat_id", "x")
         with store._con(db) as con:
-            con.execute("DELETE FROM settings WHERE key='quota_soft_129'")
+            con.execute("DELETE FROM settings WHERE key='defaults_2_1_23'")
+            con.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)",
+                ("per_account_daily_limit", "129"))
+            con.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)",
+                ("phone_delay_sec", "10"))
+            con.commit()
+        s = store.settings_all(db)
+        self.assertEqual(int(s["per_account_daily_limit"]), 60)
+        self.assertEqual(float(s["phone_delay_sec"]), 45)
+
+    def test_custom_quota_is_kept(self):
+        db = os.path.join(tempfile.mkdtemp(), "q.db")
+        store.settings_set(db, "per_account_daily_limit", 80)
+        store.settings_set(db, "phone_delay_sec", 20)
+        s = store.settings_all(db)
+        self.assertEqual(int(s["per_account_daily_limit"]), 80)
+        self.assertEqual(float(s["phone_delay_sec"]), 20)
+
+    def test_legacy_60_stays_60(self):
+        db = os.path.join(tempfile.mkdtemp(), "q.db")
+        store.settings_set(db, "telegram_chat_id", "x")
+        with store._con(db) as con:
+            con.execute("DELETE FROM settings WHERE key='defaults_2_1_23'")
             con.execute(
                 "INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)",
                 ("per_account_daily_limit", "60"))
             con.commit()
         s = store.settings_all(db)
-        self.assertEqual(int(s["per_account_daily_limit"]), 129)
+        self.assertEqual(int(s["per_account_daily_limit"]), 60)
 
     def test_pick_hard_stop_vs_adaptive(self):
         tmp = tempfile.mkdtemp()
@@ -55,15 +82,15 @@ class TestSoftQuota(unittest.TestCase):
         db = os.path.join(tmp, "d.db")
         from marketing_divar.db import connect, bump_account_quota
         con = connect(db)
-        for _ in range(129):
+        for _ in range(60):
             bump_account_quota(con, "a")
         con.close()
         hard = AccountManager(
-            {"per_account_daily_limit": 129, "adaptive_until_captcha": False},
+            {"per_account_daily_limit": 60, "adaptive_until_captcha": False},
             os.path.join(tmp, "acc"))
         self.assertIsNone(hard.pick(db))
         soft = AccountManager(
-            {"per_account_daily_limit": 129, "adaptive_until_captcha": True},
+            {"per_account_daily_limit": 60, "adaptive_until_captcha": True},
             os.path.join(tmp, "acc"))
         self.assertEqual(soft.pick(db), "a")
 

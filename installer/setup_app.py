@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Single-file Windows installer (English console + GUI).
 
-Frozen as DivarMarketing-Setup.exe with payload.zip next to the script
-(inside _MEIPASS). Double-click installs the app — no other files needed.
+Frozen as DivarMarketing-Setup.exe with payload.zip inside.
+Double-click installs the app into a folder you pick — one file, like Office.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from pathlib import Path
 APP_ID = "DivarMarketing"
 APP_NAME = "Divar Marketing"
 PORT = 8642
+CREATE_NO_WINDOW = 0x08000000
 
 
 def _meipass() -> Path:
@@ -25,7 +26,12 @@ def _meipass() -> Path:
     return Path(__file__).resolve().parent
 
 
-def install_dir() -> Path:
+def default_install_dir() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+    return Path(base) / APP_ID / "app"
+
+
+def data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / APP_ID
 
@@ -42,6 +48,15 @@ def app_icon() -> Path:
     return Path()
 
 
+def create_layout(dest: Path, log) -> None:
+    for name in ("data", "logs", "accounts", "app-chromium"):
+        (dest / name).mkdir(parents=True, exist_ok=True)
+    persist = data_dir()
+    for name in ("accounts", "logs", "app-chromium"):
+        (persist / name).mkdir(parents=True, exist_ok=True)
+    log("Folders ready: " + str(dest))
+
+
 def extract_payload(dest: Path, log) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     zpath = payload_zip()
@@ -51,23 +66,29 @@ def extract_payload(dest: Path, log) -> Path:
             zf.extractall(dest)
         log("Files extracted to " + str(dest))
     else:
-        # Dev / source fallback: copy the repo next to this script
         root = Path(__file__).resolve().parent.parent
         log("No packed payload — copying source from " + str(root))
-        for name in ("main.py", "requirements.txt", "marketing_divar",
-                     "installer"):
+        names = ("main.py", "requirements.txt", "marketing_divar",
+                 "installer", "Start-Divar-Marketing.bat")
+        for name in names:
             src = root / name
             dst = dest / name
+            if not src.exists():
+                continue
             if src.is_dir():
                 if dst.exists():
                     shutil.rmtree(dst, ignore_errors=True)
                 shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "install-log.txt"))
-            elif src.exists():
+                    "__pycache__", "*.pyc", "install-log.txt", "payload.zip"))
+            else:
                 shutil.copy2(src, dst)
+    create_layout(dest, log)
     exe = dest / f"{APP_ID}.exe"
     if exe.exists():
         return exe
+    nested = dest / "dist" / f"{APP_ID}.exe"
+    if nested.exists():
+        return nested
     main = dest / "main.py"
     if main.exists():
         return main
@@ -84,6 +105,7 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
     except Exception:
         use_com = False
         shell = None
+    pyw = Path(sys.executable).with_name("pythonw.exe")
     for folder, fname in ((desktop, f"{APP_NAME}.lnk"),
                           (start, f"{APP_NAME}.lnk")):
         if not folder:
@@ -96,26 +118,34 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
                 if target.suffix.lower() == ".exe":
                     sc.TargetPath = str(target)
                     sc.Arguments = ""
+                elif pyw.exists() and target.suffix.lower() == ".py":
+                    sc.TargetPath = str(pyw)
+                    sc.Arguments = f'"{target}"'
                 else:
                     sc.TargetPath = sys.executable
                     sc.Arguments = f'"{target}"'
                 sc.WorkingDirectory = str(workdir)
                 sc.Description = APP_NAME
+                sc.WindowStyle = 7
                 if ico and ico.exists():
                     sc.IconLocation = str(ico)
                 sc.Save()
                 log("Shortcut: " + str(lnk))
             else:
-                # PowerShell fallback
                 icon = str(ico) if ico and ico.exists() else ""
-                tgt = str(target)
-                args = "" if target.suffix.lower() == ".exe" else f'"{target}"'
+                if target.suffix.lower() == ".exe":
+                    tgt, args = str(target), ""
+                elif pyw.exists():
+                    tgt, args = str(pyw), f'"{target}"'
+                else:
+                    tgt, args = sys.executable, f'"{target}"'
                 ps = (
                     f'$s=(New-Object -ComObject WScript.Shell).CreateShortcut("{lnk}");'
-                    f'$s.TargetPath="{tgt if target.suffix.lower()==".exe" else sys.executable}";'
-                    f'$s.Arguments=\'{args}\';'
+                    f'$s.TargetPath="{tgt}";'
+                    f"$s.Arguments='{args}';"
                     f'$s.WorkingDirectory="{workdir}";'
                     f'$s.Description="{APP_NAME}";'
+                    f"$s.WindowStyle=7;"
                 )
                 if icon:
                     ps += f'$s.IconLocation="{icon}";'
@@ -152,7 +182,7 @@ def install_app_chromium(target: Path, workdir: Path, log, chrome_progress=None)
     Dead hosts are skipped quickly. Does not spawn Playwright (that hangs).
     Returns True if chrome.exe is ready.
     """
-    dest = install_dir() / "app-chromium"
+    dest = data_dir() / "app-chromium"
     dest.mkdir(parents=True, exist_ok=True)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
     os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
@@ -179,6 +209,7 @@ def install_app_chromium(target: Path, workdir: Path, log, chrome_progress=None)
             chrome_progress(0, "Chromium failed - retry in panel")
         return False
 
+
 def open_firewall(log) -> None:
     cmd = [
         "netsh", "advfirewall", "firewall", "add", "rule",
@@ -195,22 +226,35 @@ def open_firewall(log) -> None:
         log("Firewall skipped: " + str(e))
 
 
+def _popen_hidden(args, cwd, env) -> None:
+    kwargs = {"cwd": str(cwd), "env": env}
+    if sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 6  # SW_MINIMIZE
+        kwargs["startupinfo"] = si
+        kwargs["creationflags"] = CREATE_NO_WINDOW
+    subprocess.Popen(args, **kwargs)
+
+
 def launch(target: Path, workdir: Path, log) -> None:
-    log("Starting " + APP_NAME + "...")
+    log("Starting " + APP_NAME + " (console minimized)...")
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
-    chrome = str(install_dir() / "app-chromium")
+    chrome = str(data_dir() / "app-chromium")
     env["PLAYWRIGHT_BROWSERS_PATH"] = chrome
     env["DIVAR_CHROMIUM_DIR"] = chrome
     if target.suffix.lower() == ".exe":
-        subprocess.Popen([str(target)], cwd=str(workdir), env=env)
+        _popen_hidden([str(target)], workdir, env)
     else:
-        subprocess.Popen([sys.executable, str(target)], cwd=str(workdir), env=env)
+        pyw = Path(sys.executable).with_name("pythonw.exe")
+        exe = str(pyw) if pyw.exists() else sys.executable
+        _popen_hidden([exe, str(target)], workdir, env)
     log("App will open the panel in dedicated Chromium (not Edge).")
 
 
-def run_install(progress, log, chrome_progress=None) -> None:
-    dest = install_dir()
+def run_install(progress, log, chrome_progress=None, dest: Path | None = None) -> None:
+    dest = Path(dest) if dest else default_install_dir()
     progress(8, "Preparing folder")
     dest.mkdir(parents=True, exist_ok=True)
     progress(20, "Copying files")
@@ -220,7 +264,7 @@ def run_install(progress, log, chrome_progress=None) -> None:
     if ico_src.exists():
         shutil.copy2(ico_src, ico_dst)
     progress(55, "App files ready")
-    workdir = dest if target.suffix.lower() == ".exe" else dest
+    workdir = dest
     install_app_chromium(target, workdir, log, chrome_progress=chrome_progress)
     progress(72, "Shortcuts")
     make_shortcut(target, workdir, ico_dst if ico_dst.exists() else ico_src, log)
@@ -232,20 +276,20 @@ def run_install(progress, log, chrome_progress=None) -> None:
     log("Install complete.")
     log(f"This PC:  http://127.0.0.1:{PORT}")
     log(f"Phone (same Wi-Fi): http://<this-PC-IP>:{PORT}")
-    log("Settings stay in " + str(dest))
+    log("Settings stay in " + str(data_dir()))
 
 
 def gui() -> int:
     try:
         import tkinter as tk
-        from tkinter import ttk
+        from tkinter import filedialog, ttk
     except Exception as e:
         print("GUI not available:", e)
         return 2
 
     root = tk.Tk()
     root.title(APP_NAME + " Setup")
-    root.geometry("560x500")
+    root.geometry("580x560")
     root.resizable(False, False)
     try:
         ico = app_icon()
@@ -256,18 +300,34 @@ def gui() -> int:
 
     pad = {"padx": 18, "pady": 6}
     tk.Label(root, text=APP_NAME, font=("Segoe UI", 16, "bold")).pack(anchor="w", **pad)
-    tk.Label(root, text="Installs the full app. No other files required.",
+    tk.Label(root, text="One installer. Pick a folder. Progress bar fills. App starts hidden.",
              font=("Segoe UI", 10), fg="#334").pack(anchor="w", padx=18)
+
+    dest_var = tk.StringVar(value=str(default_install_dir()))
+    row = tk.Frame(root)
+    row.pack(fill="x", padx=18, pady=(10, 4))
+    tk.Label(row, text="Install folder", font=("Segoe UI", 9)).pack(anchor="w")
+    path_row = tk.Frame(root)
+    path_row.pack(fill="x", padx=18)
+    ent = tk.Entry(path_row, textvariable=dest_var, font=("Segoe UI", 9))
+    ent.pack(side="left", fill="x", expand=True)
+    def browse() -> None:
+        picked = filedialog.askdirectory(title="Install folder",
+                                         initialdir=dest_var.get() or str(Path.home()))
+        if picked:
+            dest_var.set(picked)
+    tk.Button(path_row, text="Browse", command=browse, width=10).pack(side="right", padx=(8, 0))
+
     status = tk.Label(root, text="Ready. Click Install.", font=("Segoe UI", 10))
     status.pack(anchor="w", padx=18, pady=(10, 0))
-    bar = ttk.Progressbar(root, length=520, mode="determinate", maximum=100)
+    bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
     bar.pack(padx=18, pady=(8, 4))
     chrome_status = tk.Label(root, text="Chromium: waiting", font=("Segoe UI", 9),
                              fg="#334")
     chrome_status.pack(anchor="w", padx=18)
-    chrome_bar = ttk.Progressbar(root, length=520, mode="determinate", maximum=100)
+    chrome_bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
     chrome_bar.pack(padx=18, pady=(4, 8))
-    logbox = tk.Text(root, height=12, font=("Consolas", 9), state="disabled")
+    logbox = tk.Text(root, height=11, font=("Consolas", 9), state="disabled")
     logbox.pack(fill="both", expand=True, padx=18, pady=6)
 
     def log(msg: str) -> None:
@@ -298,10 +358,12 @@ def gui() -> int:
 
     def go() -> None:
         btn.configure(state="disabled")
+        chosen = dest_var.get().strip() or str(default_install_dir())
 
         def work():
             try:
-                run_install(progress, log, chrome_progress=chrome_progress)
+                run_install(progress, log, chrome_progress=chrome_progress,
+                            dest=Path(chosen))
                 root.after(0, lambda: status.configure(
                     text="Installed. App is starting — browser: http://127.0.0.1:8642",
                     fg="#166534"))
@@ -329,7 +391,12 @@ def main() -> int:
             print(f"[{p:3d}%] {s}")
         def chrome_prog(p, s):
             print(f"[Chromium {p:3d}%] {s}")
-        run_install(prog, print, chrome_progress=chrome_prog)
+        dest = default_install_dir()
+        if "--dest" in sys.argv:
+            i = sys.argv.index("--dest")
+            if i + 1 < len(sys.argv):
+                dest = Path(sys.argv[i + 1])
+        run_install(prog, print, chrome_progress=chrome_prog, dest=dest)
         return 0
     return gui()
 

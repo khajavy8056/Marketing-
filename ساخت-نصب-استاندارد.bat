@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal EnableExtensions
 title Divar Marketing - Build Setup EXE
 cd /d "%~dp0"
@@ -65,13 +65,12 @@ if exist "dist\DivarMarketing.exe" del /q "dist\DivarMarketing.exe"
 if errorlevel 1 goto FAIL
 if not exist "dist\DivarMarketing.exe" goto FAIL
 
-echo [4/5] Packing payload and building Setup.exe ...
-if exist "installer\_payload" rmdir /s /q "installer\_payload"
-mkdir "installer\_payload"
-copy /y "dist\DivarMarketing.exe" "installer\_payload\DivarMarketing.exe" >nul
-if exist "installer\app.ico" copy /y "installer\app.ico" "installer\_payload\app.ico" >nul
-if exist "installer\payload.zip" del /q "installer\payload.zip"
-powershell -NoProfile -Command "Compress-Archive -Path 'installer\_payload\*' -DestinationPath 'installer\payload.zip' -Force"
+echo [4/5] Packing ALL app files into one payload and building Setup.exe ...
+"%PY%" installer\pack_payload.py
+if errorlevel 1 goto FAIL
+if exist "dist\DivarMarketing.exe" (
+  "%PY%" -c "import zipfile; z=zipfile.ZipFile('installer/payload.zip','a'); z.write('dist/DivarMarketing.exe','DivarMarketing.exe'); z.close(); print('added DivarMarketing.exe')"
+)
 if not exist "installer\payload.zip" goto FAIL
 
 "%PY%" -m PyInstaller --noconfirm --clean --onefile --windowed --name DivarMarketing-Setup ^

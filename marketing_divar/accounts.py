@@ -151,7 +151,7 @@ class AccountManager:
         now = time.time()
         con = connect(db_path)
         try:
-            per_limit = int(self.cfg.get("per_account_daily_limit", 129) or 129)
+            per_limit = int(self.cfg.get("per_account_daily_limit", 60) or 60)
             adaptive = bool(self.cfg.get("adaptive_until_captcha", True))
             best, best_used = None, None
             for name in self.list_accounts():

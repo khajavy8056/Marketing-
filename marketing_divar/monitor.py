@@ -333,7 +333,7 @@ class Monitor:
                 return "wait"
             self._notified_all_stuck = False
             row = rows[0]
-            soft = int(self.cfg.get("per_account_daily_limit", 129) or 129)
+            soft = int(self.cfg.get("per_account_daily_limit", 60) or 60)
             used = account_quota_today(con, name)
             if used >= soft and self.cfg.get("adaptive_until_captcha", True):
                 extra = float(self.cfg.get("phone_delay_sec", 10) or 10)

@@ -47,11 +47,11 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "rubika_bot_token": "",
     "rubika_chat_id": "",
     "watch_interval_sec": 300,
-    "phone_delay_sec": 10,
+    "phone_delay_sec": 45,
     "search_delay_sec": 5,
     "search_page_delay_sec": 8,
     "jitter_sec": 4,
-    "per_account_daily_limit": 129,
+    "per_account_daily_limit": 60,
     "adaptive_until_captcha": True,
     "ip_daily_limit": 240,
     "cooldown_on_block_min": 30,
@@ -99,24 +99,35 @@ def _con(db_path: str) -> sqlite3.Connection:
     if "vip" not in cols:
         con.execute("ALTER TABLE keywords ADD COLUMN vip INTEGER DEFAULT 0")
         con.commit()
-    _bump_legacy_quota60(con)
+    _apply_factory_defaults_2123(con)
     return con
 
 
-def _bump_legacy_quota60(con: sqlite3.Connection) -> None:
-    """نصب‌های قدیمی سقف ۶۰ را ذخیره کرده‌اند — یک‌بار به ۱۲۹."""
+def _apply_factory_defaults_2123(con: sqlite3.Connection) -> None:
+    """کارخانه قبلی ۱۲۹/۱۰ ثانیه یک‌بار به ۶۰/۴۵ می‌رود. مقدار سفارشی نمی‌سوزد."""
     try:
-        if con.execute("SELECT 1 FROM settings WHERE key='quota_soft_129'").fetchone():
+        if con.execute("SELECT 1 FROM settings WHERE key='defaults_2_1_23'").fetchone():
             return
-        row = con.execute(
-            "SELECT value FROM settings WHERE key='per_account_daily_limit'").fetchone()
-        raw = (row["value"] if row else "") or ""
-        if row is None or str(raw).strip().strip('"') in ("60", "60.0"):
+
+        def _raw(key: str) -> str | None:
+            row = con.execute(
+                "SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+            if row is None:
+                return None
+            return str(row["value"]).strip().strip('"')
+
+        lim = _raw("per_account_daily_limit")
+        if lim is None or lim in ("129", "129.0"):
             con.execute(
-                "INSERT INTO settings (key, value) VALUES ('per_account_daily_limit', '129') "
+                "INSERT INTO settings (key, value) VALUES ('per_account_daily_limit', '60') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        delay = _raw("phone_delay_sec")
+        if delay is None or delay in ("10", "10.0"):
+            con.execute(
+                "INSERT INTO settings (key, value) VALUES ('phone_delay_sec', '45') "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
         con.execute(
-            "INSERT INTO settings (key, value) VALUES ('quota_soft_129', '1') "
+            "INSERT INTO settings (key, value) VALUES ('defaults_2_1_23', '1') "
             "ON CONFLICT(key) DO NOTHING")
         con.commit()
     except Exception:

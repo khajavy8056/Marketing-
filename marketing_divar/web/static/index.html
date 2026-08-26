@@ -218,9 +218,9 @@
       <button class="btn gray" id="btn-pause" onclick="monitorPause()" disabled>⏸ مکث</button>
       <button class="btn err" onclick="monitorStop()">⏹ توقف</button>
     </div>
-    <div class="warn-box">💡 <b>سقف هوشمند:</b> ۶۰ عدد دیوار نبود — سقف نرم خود برنامه بود.
-      پیش‌فرض حالا ۱۲۹ شماره برای هر اکانت است. بعد از ۱۲۹ اگر دیوار کپچا ندهد با فاصلهٔ بیشتر ادامه می‌دهد؛
-      اگر کپچا بخواهد همین‌جا پاپ‌آپ می‌آید. سقف کل IP هنوز ۲۴۰ است (از همین اینترنت).</div>
+    <div class="warn-box">💡 <b>سقف هوشمند:</b> پیش‌فرض هر اکانت ۶۰ شماره در روز است.
+      فاصلهٔ شماره‌گیری ۴۵ ثانیه و دورهٔ اسکن ۳۰۰ ثانیه است. بعد از سقف نرم اگر دیوار کپچا ندهد
+      با فاصلهٔ بیشتر ادامه می‌دهد؛ اگر کپچا بخواهد همین‌جا پاپ‌آپ می‌آید. سقف کل IP هنوز ۲۴۰ است.</div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
@@ -462,7 +462,7 @@
       </div>
       <div class="checkline">
         <input type="checkbox" id="set-adaptive" checked>
-        <label for="set-adaptive">بعد از سقف نرم (۱۲۹) تا وقتی دیوار کپچا ندهد ادامه بده — اگر کپچا خواست پاپ‌آپ همین پنل</label>
+        <label for="set-adaptive">بعد از سقف نرم (۶۰) تا وقتی دیوار کپچا ندهد ادامه بده — اگر کپچا خواست پاپ‌آپ همین پنل</label>
       </div>
       <div class="warn-box">سقف روزانه IP یعنی چند شماره از <b>همین رایانه / همین اینترنت</b> در روز گرفته شود.
         زیاد کردن این عدد محدودیت دیوار را دور نمی‌زند — فقط حد نرم‌افزاری خودتان را شل می‌کند و ریسک بلاک را بالا می‌برد.
@@ -568,20 +568,20 @@
 <script>
 
 /* ─── صفحه لودینگ نمایشی — روی عملکرد اسکن/API اثر ندارد ─── */
-const BOOT_MS = 120000;
+const BOOT_MS = 240000;
 (function bootSplash(){
   const el = document.getElementById('boot-splash');
   if (!el) return;
   const stages = [
     {at:0, p:3, t:'در حال اتصال به سرورها', s:'باز کردن نشست امن…', l:'handshake → core-gw-01.local'},
-    {at:8, p:11, t:'در حال اتصال به سرورها', s:'حل نام میزبان و مسیر ایران…', l:'dns lookup node-ir-1'},
-    {at:18, p:19, t:'برقراری کانال رمزنگاری', s:'تبادل کلید TLS…', l:'tls 1.3 · cipher negotiated'},
-    {at:32, p:31, t:'بررسی مسیر سرور', s:'پینگ دروازهٔ داخلی…', l:'rtt probe gw-02  … ok'},
-    {at:48, p:46, t:'احراز نشست برنامه', s:'تأیید توکن پنل روی هسته…', l:'session ticket accepted'},
-    {at:68, p:62, t:'همگام‌سازی سرویس‌ها', s:'اتصال صف و وضعیت اکانت‌ها…', l:'sync accounts / queue'},
-    {at:88, p:78, t:'آماده‌سازی پنل', s:'بارگذاری ماژول داشبورد…', l:'ui modules 7/7'},
-    {at:105, p:91, t:'اتصال پایدار شد', s:'آخرین بررسی سلامت لینک…', l:'link quality: stable'},
-    {at:118, p:100, t:'متصل به سرور', s:'ورود به برنامه…', l:'ready'},
+    {at:16, p:11, t:'در حال اتصال به سرورها', s:'حل نام میزبان و مسیر ایران…', l:'dns lookup node-ir-1'},
+    {at:36, p:19, t:'برقراری کانال رمزنگاری', s:'تبادل کلید TLS…', l:'tls 1.3 · cipher negotiated'},
+    {at:64, p:31, t:'بررسی مسیر سرور', s:'پینگ دروازهٔ داخلی…', l:'rtt probe gw-02  … ok'},
+    {at:96, p:46, t:'احراز نشست برنامه', s:'تأیید توکن پنل روی هسته…', l:'session ticket accepted'},
+    {at:136, p:62, t:'همگام‌سازی سرویس‌ها', s:'اتصال صف و وضعیت اکانت‌ها…', l:'sync accounts / queue'},
+    {at:176, p:78, t:'آماده‌سازی پنل', s:'بارگذاری ماژول داشبورد…', l:'ui modules 7/7'},
+    {at:210, p:91, t:'اتصال پایدار شد', s:'آخرین بررسی سلامت لینک…', l:'link quality: stable'},
+    {at:236, p:100, t:'متصل به سرور', s:'ورود به برنامه…', l:'ready'},
   ];
   const log = document.getElementById('boot-log');
   const bar = document.getElementById('boot-bar');
@@ -1213,8 +1213,8 @@ async function settingsSave(){
     telegram_api_base:$('set-tg-base')?$('set-tg-base').value.trim():'',
     telegram_proxy:$('set-tg-proxy')?$('set-tg-proxy').value.trim():'',
     watch_interval_sec:parseInt($('set-watch').value)||300,
-    phone_delay_sec:parseFloat($('set-delay').value)||10,
-    per_account_daily_limit:parseInt($('set-peracc').value)||129,
+    phone_delay_sec:parseFloat($('set-delay').value)||45,
+    per_account_daily_limit:parseInt($('set-peracc').value)||60,
     adaptive_until_captcha:!$('set-adaptive') || !!$('set-adaptive').checked,
     ip_daily_limit:parseInt($('set-iplimit').value)||240,
     cooldown_on_block_min:parseInt($('set-cooldown').value)||30,

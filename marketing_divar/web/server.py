@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.22")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.23")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -779,7 +779,7 @@ def status():
         "stats_by_keyword": st,
         "captcha_needed": [a["name"] for a in acc_snap if a.get("status") == "captcha"],
         "per_account_daily_limit": store.settings_all(DB_PATH).get(
-            "per_account_daily_limit", 129),
+            "per_account_daily_limit", 60),
         "adaptive_until_captcha": bool(store.settings_all(DB_PATH).get(
             "adaptive_until_captcha", True)),
         "telegram": _telegram_status(),

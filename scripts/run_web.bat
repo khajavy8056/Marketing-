@@ -1,9 +1,10 @@
-@echo off
-REM اجرای رابط وب روی ویندوز (سیستم داخل ایران)
+﻿@echo off
+REM Run the panel on Windows. Console is minimized.
 cd /d "%~dp0.."
+set PYTHONUTF8=1
 if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" main.py
+  start /min "Divar Marketing" ".venv\Scripts\python.exe" main.py
 ) else (
-  python main.py
+  start /min "Divar Marketing" python main.py
 )
-pause
+exit /b 0

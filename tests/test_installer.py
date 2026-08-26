@@ -39,6 +39,10 @@ class TestWindowsInstaller(unittest.TestCase):
             "SHA256",
             "CHROMIUM_START",
             "DOWNLOAD_COMPLETED",
+            "FolderBrowserDialog",
+            "Publish-AppFiles",
+            "WindowStyle Minimized",
+            "Install folder",
         ):
             self.assertIn(needle, ps1, f"installer missing: {needle}")
         self.assertFalse(any("\u0600" <= ch <= "\u06FF" for ch in ps1),

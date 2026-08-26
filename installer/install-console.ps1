@@ -146,7 +146,7 @@ try {
         $sc.TargetPath = $venvPy
         $sc.Arguments = "main.py"
         $sc.WorkingDirectory = $Root
-        $sc.WindowStyle = 1
+        $sc.WindowStyle = 7
         $sc.Description = "Divar Marketing"
         $sc.IconLocation = $icon
         $sc.Save()
@@ -156,7 +156,7 @@ try {
     try { netsh advfirewall firewall add rule name="Divar Marketing" dir=in action=allow protocol=TCP localport=8642 | Out-Null } catch {}
 
     L "Starting app ..."
-    Start-Process -FilePath $venvPy -ArgumentList "main.py" -WorkingDirectory $Root
+    Start-Process -FilePath $venvPy -ArgumentList "main.py" -WorkingDirectory $Root -WindowStyle Minimized
     Start-Sleep -Seconds 3
     L "App will open the panel in dedicated Chromium (not Edge)"
     L "DONE. Panel URL: http://localhost:8642"

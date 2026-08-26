@@ -20,6 +20,7 @@ try {
         "=== Divar Marketing install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
         $script:LogFile = $localLog
     } catch {}
+    $script:Root = $Root
     Write-InstallLog ("root=" + $Root + " ps=" + $PSVersionTable.PSVersion)
 } catch {
     Write-InstallLog "startup failed: $_"
@@ -66,7 +67,7 @@ Get-ChildItem -LiteralPath $Root -Recurse -Include *.ps1,*.bat -ErrorAction Sile
 try {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Divar Marketing Setup"
-$form.Size = New-Object System.Drawing.Size(640, 600)
+$form.Size = New-Object System.Drawing.Size(640, 660)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -108,26 +109,50 @@ $barChrome.Location = New-Object System.Drawing.Point(20, 156)
 $barChrome.Size = New-Object System.Drawing.Size(586, 22)
 $barChrome.Minimum = 0; $barChrome.Maximum = 100; $barChrome.Value = 0
 
+$lblDir = New-Object System.Windows.Forms.Label
+$lblDir.Location = New-Object System.Drawing.Point(20, 184)
+$lblDir.Size = New-Object System.Drawing.Size(586, 18)
+$lblDir.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblDir.Text = "Install folder (program files go here)"
+
+$txtDir = New-Object System.Windows.Forms.TextBox
+$txtDir.Location = New-Object System.Drawing.Point(20, 204)
+$txtDir.Size = New-Object System.Drawing.Size(470, 24)
+$txtDir.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$defaultDest = Join-Path $env:LOCALAPPDATA "DivarMarketing\app"
+$txtDir.Text = $defaultDest
+
+$btnBrowse = New-Object System.Windows.Forms.Button
+$btnBrowse.Location = New-Object System.Drawing.Point(496, 202)
+$btnBrowse.Size = New-Object System.Drawing.Size(110, 28)
+$btnBrowse.Text = "Browse"
+
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Object System.Drawing.Point(20, 184)
-$logBox.Size = New-Object System.Drawing.Size(586, 260)
+$logBox.Location = New-Object System.Drawing.Point(20, 238)
+$logBox.Size = New-Object System.Drawing.Size(586, 220)
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = "Vertical"
 $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
 
 $btnStart = New-Object System.Windows.Forms.Button
-$btnStart.Location = New-Object System.Drawing.Point(20, 516)
+$btnStart.Location = New-Object System.Drawing.Point(20, 572)
 $btnStart.Size = New-Object System.Drawing.Size(180, 36)
 $btnStart.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $btnStart.Text = "Start Install"
 
 $btnClose = New-Object System.Windows.Forms.Button
-$btnClose.Location = New-Object System.Drawing.Point(426, 516)
+$btnClose.Location = New-Object System.Drawing.Point(426, 572)
 $btnClose.Size = New-Object System.Drawing.Size(180, 36)
 $btnClose.Text = "Close"
 
-$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $logBox, $btnStart, $btnClose))
+$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $lblDir, $txtDir, $btnBrowse, $logBox, $btnStart, $btnClose))
+$btnBrowse.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Install folder"
+    if (Test-Path -LiteralPath $txtDir.Text) { $dlg.SelectedPath = $txtDir.Text }
+    if ($dlg.ShowDialog() -eq "OK") { $txtDir.Text = $dlg.SelectedPath }
+})
 } catch {
     Write-InstallLog "GUI build failed: $_"
     try { Write-Host "GUI build failed: $_" } catch {}
@@ -214,19 +239,20 @@ function Install-Python {
 }
 
 function Ensure-Venv([string]$pyExe) {
-    if (Test-Path $VenvPy) {
-        Log "[2b] venv exists: $VenvPy"
-        return $VenvPy
+    $vp = Join-Path $script:Root ".venv\Scripts\python.exe"
+    if (Test-Path $vp) {
+        Log "[2b] venv exists: $vp"
+        return $vp
     }
     Log "[2b] Creating app virtual environment"
     Set-Step "Creating app virtual environment" -1
-    $venvDir = Join-Path $Root ".venv"
+    $venvDir = Join-Path $script:Root ".venv"
     & $pyExe -m venv $venvDir
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPy)) {
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $vp)) {
         throw "venv creation failed (code $LASTEXITCODE)"
     }
-    Log "[2b] OK: $VenvPy"
-    return $VenvPy
+    Log "[2b] OK: $vp"
+    return $vp
 }
 
 function Stream-File([string]$path, [int]$alreadyLogged) {
@@ -253,7 +279,7 @@ function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "cmd.exe"
     $pinfo.Arguments = '/c "' + $inner + '"'
-    $pinfo.WorkingDirectory = $Root
+    $pinfo.WorkingDirectory = $script:Root
     $pinfo.UseShellExecute = $false
     $pinfo.CreateNoWindow = $true
     $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
@@ -273,6 +299,36 @@ function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
     return $proc.ExitCode
 }
 
+function Publish-AppFiles([string]$src, [string]$dst) {
+    if (-not $dst) { throw "Install folder is empty" }
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    $srcFull = [System.IO.Path]::GetFullPath($src)
+    $dstFull = [System.IO.Path]::GetFullPath($dst)
+    if ($srcFull.TrimEnd("\") -ieq $dstFull.TrimEnd("\")) {
+        Log "[copy] install folder is the extracted folder — no copy"
+    } else {
+        Log "[copy] $srcFull -> $dstFull"
+        foreach ($name in @("main.py","requirements.txt","marketing_divar","installer","Start-Divar-Marketing.bat","Install-and-Run.bat")) {
+            $from = Join-Path $src $name
+            $to = Join-Path $dst $name
+            if (-not (Test-Path -LiteralPath $from)) { continue }
+            if (Test-Path -LiteralPath $from -PathType Container) {
+                if (Test-Path -LiteralPath $to) { Remove-Item -LiteralPath $to -Recurse -Force -ErrorAction SilentlyContinue }
+                Copy-Item -LiteralPath $from -Destination $to -Recurse -Force
+            } else {
+                Copy-Item -LiteralPath $from -Destination $to -Force
+            }
+        }
+    }
+    foreach ($d in @("data","logs","accounts","app-chromium")) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $dst $d) | Out-Null
+    }
+    $persist = Join-Path $env:LOCALAPPDATA "DivarMarketing"
+    foreach ($d in @("accounts","logs","app-chromium")) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $persist $d) | Out-Null
+    }
+}
+
 function New-DesktopShortcut([string]$pyExe) {
     Set-Step "Desktop shortcut" 90
     $dataDir = Join-Path $env:LOCALAPPDATA "DivarMarketing"
@@ -288,8 +344,8 @@ function New-DesktopShortcut([string]$pyExe) {
         $sc = $w.CreateShortcut($lnk)
         $sc.TargetPath = $pyExe
         $sc.Arguments = "main.py"
-        $sc.WorkingDirectory = $Root
-        $sc.WindowStyle = 1
+        $sc.WorkingDirectory = $script:Root
+        $sc.WindowStyle = 7
         $sc.Description = "Divar Marketing"
         $sc.IconLocation = $icon
         $sc.Save()
@@ -305,6 +361,21 @@ $btnStart.Add_Click({
     $btnStart.Enabled = $false
     $pyExe = $null
     try {
+        $srcRoot = $Root
+        $dest = $txtDir.Text.Trim()
+        if (-not $dest) { $dest = Join-Path $env:LOCALAPPDATA "DivarMarketing\app" }
+        Log "[0] Install folder: $dest"
+        Set-Step "Copying files to install folder" 4
+        Publish-AppFiles $srcRoot $dest
+        $script:Root = $dest
+        $Root = $dest
+        Set-Location -LiteralPath $Root
+        $script:VenvPy = Join-Path $Root ".venv\Scripts\python.exe"
+        $VenvPy = $script:VenvPy
+        $script:IconFile = Join-Path $Root "installer\app.ico"
+        $IconFile = $script:IconFile
+        $bar.Value = 8
+
         Log "[1] Checking Python"
         Set-Step "Checking Python" 5
         $pyExe = Find-Python
@@ -351,7 +422,7 @@ $btnStart.Add_Click({
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = "cmd.exe"
         $pinfo.Arguments = '/c "' + $inner + '"'
-        $pinfo.WorkingDirectory = $Root
+        $pinfo.WorkingDirectory = $script:Root
         $pinfo.UseShellExecute = $false
         $pinfo.CreateNoWindow = $true
         $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
@@ -416,7 +487,7 @@ Log "[4] Health check"
         Set-Step "Health check" 80
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"
-        $pinfo.WorkingDirectory = $Root
+        $pinfo.WorkingDirectory = $script:Root
         $pinfo.UseShellExecute = $false
         $pinfo.RedirectStandardOutput = $true
         $pinfo.RedirectStandardError = $true
@@ -442,7 +513,7 @@ Log "[4] Health check"
         Log "[5] Launching app"
         Set-Step "Launching app" 100
         $env:PYTHONUTF8 = "1"
-        Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root
+        Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $script:Root -WindowStyle Minimized
         Start-Sleep -Seconds 3
         Log "App will open the panel in dedicated Chromium (not Edge)"
         $lblStatus.Text = "Install complete. App is running — http://localhost:8642  (phone: this-PC-IP:8642)"
