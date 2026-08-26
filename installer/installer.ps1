@@ -325,42 +325,52 @@ $btnStart.Add_Click({
 
 
 
-                Log "[3b] Installing app-only Chromium (not system Chrome/Edge)"
-        Set-Step "Installing app Chromium (DivarMarketing\\app-chromium)" -1
+                        Log "[3b] Installing app Chromium (ungoogled-chromium from GitHub)"
+        Set-Step "Downloading Chromium 0%" 55
         $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
         New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
+        $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
+        $env:DIVAR_CHROMIUM_DIR = $chromeDir
+        $env:PYTHONUNBUFFERED = "1"
+        $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarchrome-" + [guid]::NewGuid().ToString("N") + ".log")
+        $inner = '"' + $appPy + '" main.py --install-chromium > "' + $outFile + '" 2>&1'
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.FileName = $appPy
-        $pinfo.Arguments = "main.py --install-chromium"
+        $pinfo.FileName = "cmd.exe"
+        $pinfo.Arguments = '/c "' + $inner + '"'
         $pinfo.WorkingDirectory = $Root
         $pinfo.UseShellExecute = $false
-        $pinfo.RedirectStandardOutput = $true
-        $pinfo.RedirectStandardError = $true
         $pinfo.CreateNoWindow = $true
         $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+        $pinfo.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
         $pinfo.EnvironmentVariables["PLAYWRIGHT_BROWSERS_PATH"] = $chromeDir
         $pinfo.EnvironmentVariables["DIVAR_CHROMIUM_DIR"] = $chromeDir
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $pinfo
         [void]$proc.Start()
-        $pout = $proc.StandardOutput.ReadToEnd()
-        $perr = $proc.StandardError.ReadToEnd()
-        $proc.WaitForExit()
-        foreach ($line in ($pout + "`n" + $perr).Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
-        if ($proc.ExitCode -ne 0) {
-            Log "[3b] main.py --install-chromium failed -> playwright install chromium"
-            $pinfo.Arguments = "-m playwright install chromium"
-            $proc = New-Object System.Diagnostics.Process
-            $proc.StartInfo = $pinfo
-            [void]$proc.Start()
-            $pout = $proc.StandardOutput.ReadToEnd()
-            $perr = $proc.StandardError.ReadToEnd()
-            $proc.WaitForExit()
-            foreach ($line in ($pout + "`n" + $perr).Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
-            if ($proc.ExitCode -ne 0) { throw "playwright install chromium failed (code $($proc.ExitCode))" }
+        $logged = 0
+        while (-not $proc.HasExited) {
+            Start-Sleep -Milliseconds 400
+            [System.Windows.Forms.Application]::DoEvents()
+            $logged = Stream-File $outFile $logged
+            try {
+                $tail = Get-Content -LiteralPath $outFile -Tail 8 -ErrorAction SilentlyContinue
+                foreach ($ln in $tail) {
+                    if ($ln -match "PROGRESS\s+(\d+)") {
+                        $p = [int]$Matches[1]
+                        $bar.Style = "Blocks"
+                        $bar.Value = [Math]::Min(82, 55 + [int]($p * 0.27))
+                        $lblStep.Text = "Downloading Chromium $p%"
+                    }
+                }
+            } catch {}
         }
+        $proc.WaitForExit()
+        $logged = Stream-File $outFile $logged
+        Remove-Item $outFile -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -ne 0) { throw "Chromium download failed (code $($proc.ExitCode)) — see log. Need GitHub access." }
         Log "[3b] Chromium OK -> $chromeDir"
         $bar.Value = 82
+
 
 
 

@@ -29,7 +29,10 @@ class TestWindowsInstaller(unittest.TestCase):
             "DivarMarketing",
             "divar-marketing-install.log",
             "Write-InstallLog",
-            "playwright install chromium",
+            "--install-chromium",
+            "ungoogled-chromium",
+            "PROGRESS",
+            "app-chromium",
         ):
             self.assertIn(needle, ps1, f"installer missing: {needle}")
         self.assertFalse(any("\u0600" <= ch <= "\u06FF" for ch in ps1),
@@ -43,8 +46,8 @@ class TestWindowsInstaller(unittest.TestCase):
         self.assertTrue(all(ord(c) < 128 for c in body), "console installer must be ASCII")
         for needle in ("Find-Python", "venv", "requirements.txt", "main.py --check",
                        "DivarMarketing", "localhost:8642", "mirror-pypi",
-                       "playwright install chromium",
-                       "--install-chromium", "app-chromium"):
+                       "--install-chromium", "app-chromium",
+                       "ungoogled-chromium"):
             self.assertIn(needle, body)
 
     def test_entry_bats_are_windows_safe(self):

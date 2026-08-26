@@ -96,6 +96,45 @@ class TestBrowsersPath(unittest.TestCase):
         from marketing_divar.chromium_profile import profile_ready
         self.assertTrue(profile_ready(str(acc), "acc1"))
 
+    def test_ungoogled_zip_layout(self):
+        dest = Path(self.tmp) / "app-chromium"
+        dest.mkdir()
+        zpath = dest / "u.zip"
+        with zipfile.ZipFile(zpath, "w") as zf:
+            zf.writestr("ungoogled-chromium_win/chrome.exe", b"bin")
+        found = ac._extract_zip(zpath, dest / "current", lambda m: None)
+        self.assertTrue(found.name.lower().startswith("chrome"))
+
+    def test_github_urls_work_offline(self):
+        with mock.patch.object(ac._fc, "_get", side_effect=OSError("offline")):
+            urls = ac.github_zip_urls()
+        self.assertTrue(any("ungoogled-chromium" in u for u in urls))
+        self.assertTrue(any("github.com" in u for u in urls))
+
+    def test_download_reports_percent(self):
+        class Fake:
+            headers = {"Content-Length": str(20 * 1024 * 1024)}
+            def __init__(self):
+                self.left = 20 * 1024 * 1024
+            def read(self, n):
+                if self.left <= 0:
+                    return b""
+                take = min(n, self.left)
+                self.left -= take
+                return b"x" * take
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        seen = []
+        dest = Path(self.tmp) / "dl.zip"
+        with mock.patch.object(ac._fc, "_get", return_value=Fake()):
+            ac._fc._download("https://example.test/c.zip", dest,
+                             lambda m: seen.append(m), lambda p: None)
+        self.assertTrue(any(x.startswith("PROGRESS ") for x in seen))
+        self.assertTrue(dest.exists())
+        self.assertGreater(dest.stat().st_size, 8_000_000)
+
     def test_save_without_login_keeps_window(self):
         acc = Path(self.tmp) / "accounts"
         save_meta(str(acc), "acc1", {})

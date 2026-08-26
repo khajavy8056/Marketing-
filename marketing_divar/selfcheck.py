@@ -34,8 +34,8 @@ def _check_windows_installer() -> None:
     for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
                    "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
                    "DivarMarketing", "divar-marketing-install.log",
-                   "playwright install chromium",
-                   "--install-chromium", "app-chromium"):
+                   "--install-chromium", "app-chromium",
+                   "ungoogled-chromium", "PROGRESS"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -44,7 +44,8 @@ def _check_windows_installer() -> None:
         raise FileNotFoundError("Extract warning missing from bat")
     for needle in ("Find-Python", ".venv", "requirements.txt", "main.py --check",
                    "DivarMarketing", "localhost:8642",
-                   "--install-chromium", "app-chromium"):
+                   "--install-chromium", "app-chromium",
+                   "ungoogled-chromium"):
         if needle not in console:
             raise FileNotFoundError(f"console installer incomplete — missing {needle}")
     setup = (root / "installer" / "setup_app.py").read_text(encoding="utf-8")
@@ -53,11 +54,16 @@ def _check_windows_installer() -> None:
             raise FileNotFoundError("setup_app.py has no progress bar")
     if "DivarMarketing" not in setup:
         raise FileNotFoundError("setup_app.py missing product id")
-    if "--install-chromium" not in setup or "app-chromium" not in setup:
-        raise FileNotFoundError("setup_app.py must install app-only Chromium")
+    if "fetch_chromium" not in setup or "ungoogled-chromium" not in setup:
+        raise FileNotFoundError("setup_app.py must download ungoogled-chromium")
+    if "app-chromium" not in setup:
+        raise FileNotFoundError("setup_app.py missing app-chromium folder")
+    fetch = (root / "installer" / "fetch_chromium.py").read_text(encoding="utf-8")
+    if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
+        raise FileNotFoundError("fetch_chromium.py incomplete")
     bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
-    if "--collect-all playwright" not in bat_setup:
-        raise FileNotFoundError("Setup build must collect playwright driver")
+    if "fetch_chromium.py" not in bat_setup:
+        raise FileNotFoundError("Setup build must bundle fetch_chromium.py")
 
 
 def _check_static_ui() -> None:

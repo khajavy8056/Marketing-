@@ -60,6 +60,7 @@ if exist "dist\DivarMarketing.exe" del /q "dist\DivarMarketing.exe"
   --hidden-import marketing_divar.app_chromium ^
   --hidden-import marketing_divar.chromium_profile ^
   --add-data "marketing_divar\web\static;marketing_divar\web\static" ^
+  --add-data "installer\fetch_chromium.py;." ^
   main.py
 if errorlevel 1 goto FAIL
 if not exist "dist\DivarMarketing.exe" goto FAIL
@@ -77,6 +78,7 @@ if not exist "installer\payload.zip" goto FAIL
   --icon "installer\app.ico" ^
   --add-data "installer\payload.zip;." ^
   --add-data "installer\app.ico;." ^
+  --add-data "installer\fetch_chromium.py;." ^
   installer\setup_app.py
 if errorlevel 1 goto FAIL
 if not exist "dist\DivarMarketing-Setup.exe" goto FAIL

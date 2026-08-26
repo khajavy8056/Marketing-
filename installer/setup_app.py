@@ -126,34 +126,43 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
             log("Shortcut skipped: " + str(e))
 
 
-def install_app_chromium(target: Path, workdir: Path, log) -> None:
-    """Download Chromium into %LOCALAPPDATA%\\DivarMarketing\\app-chromium.
+def _load_fetch_chromium():
+    import importlib.util
+    cands = [
+        _meipass() / "fetch_chromium.py",
+        Path(__file__).resolve().parent / "fetch_chromium.py",
+        Path(__file__).resolve().parent.parent / "installer" / "fetch_chromium.py",
+    ]
+    for p in cands:
+        if p.exists():
+            spec = importlib.util.spec_from_file_location("fetch_chromium", p)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return mod
+    raise FileNotFoundError("fetch_chromium.py missing from installer")
 
-    Never uses the user's Chrome/Edge. The frozen exe looks in _MEI unless
-    PLAYWRIGHT_BROWSERS_PATH is this folder.
+
+def install_app_chromium(target: Path, workdir: Path, log, progress=None) -> None:
+    """Download ungoogled-chromium into %LOCALAPPDATA%\\DivarMarketing\\app-chromium.
+
+    Live percent on the Setup bar. Does not spawn Playwright (that hangs).
     """
     dest = install_dir() / "app-chromium"
     dest.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env["PYTHONUTF8"] = "1"
-    env["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
-    env["DIVAR_CHROMIUM_DIR"] = str(dest)
-    log("Installing app-only Chromium (not your system browser) ...")
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
+    os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
+    log("Installing app-only Chromium from GitHub (ungoogled-chromium) ...")
+    fc = _load_fetch_chromium()
+
+    def on_pct(pct: int) -> None:
+        if progress:
+            # map 0-100 download onto overall 55-82
+            progress(55 + int(pct * 0.27), "Chromium %d%%" % pct)
+
     try:
-        if target.suffix.lower() == ".exe":
-            cmd = [str(target), "--install-chromium"]
-        else:
-            cmd = [sys.executable, str(target), "--install-chromium"]
-        r = subprocess.run(
-            cmd, cwd=str(workdir), env=env, capture_output=True,
-            text=True, timeout=900)
-        out = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()
-        for line in out.splitlines()[-12:]:
-            if line.strip():
-                log("  " + line.strip())
-        if r.returncode != 0:
-            raise RuntimeError("chromium install exit " + str(r.returncode))
-        log("App Chromium OK -> " + str(dest))
+        path = fc.ensure_installed(log=log, progress=on_pct)
+        log("App Chromium OK -> " + str(path))
     except Exception as e:
         log("ERROR installing Chromium: " + str(e))
         raise

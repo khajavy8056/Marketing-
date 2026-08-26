@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.15 — دانلود Chromium از GitHub با درصد پیشرفت (۱۴۰۵/۰۶/۰۴)
+
+نصب دیگر روی «App Chromium» گیر نمی‌کند.
+به‌جای CDN فیلترشدهٔ Playwright، **ungoogled-chromium** متن‌باز از GitHub
+(با آینه) با نوار درصد دانلود می‌شود و در
+`%LOCALAPPDATA%\\DivarMarketing\\app-chromium` می‌ماند.
+پنجرهٔ دیوار فقط همین مرورگر اختصاصی است، نه Chrome/Edge کاربر.
+
 ## 2.1.14 — Chromium اختصاصی برنامه، نه پوشهٔ موقت exe (۱۴۰۵/۰۶/۰۴)
 
 خطای `Executable doesn't exist ... Temp\\_MEI...\\chrome.exe` از exe یک‌فایلی بود:

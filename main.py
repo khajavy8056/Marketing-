@@ -9,7 +9,8 @@ if getattr(sys, "frozen", False):
 
 def _pause_on_crash(msg: str) -> None:
     print(msg)
-    if sys.platform == "win32" and "--check" not in sys.argv:
+    if sys.platform == "win32" and "--check" not in sys.argv \
+            and "--install-chromium" not in sys.argv:
         try:
             input("Press Enter to close this window...")
         except Exception:
