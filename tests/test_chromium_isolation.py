@@ -91,17 +91,12 @@ class TestProfileIsolation(unittest.TestCase):
         src = Path(ROOT, "marketing_divar", "chromium_profile.py").read_text(
             encoding="utf-8")
         self.assertNotIn("add_cookies", src)
-        self.assertIn("launch_persistent_context", src)
+        self.assertIn("subprocess.Popen", src)
+        self.assertIn("user-data-dir", src)
         self.assertIn("executable_path", src)
         self.assertIn(HOME_URL, src)
-        with mock.patch("marketing_divar.chromium_profile.ensure_installed"
-                        if False else "marketing_divar.app_chromium.ensure_installed",
-                        return_value=Path("/opt/app/chrome")), \
-             mock.patch("marketing_divar.chromium_profile.close_live"), \
-             mock.patch("marketing_divar.chromium_profile._run_browser"):
-            # open_profile will try real playwright; just assert dir reuse
-            self.assertEqual(chromium_dir(self.acc, "keep"), d)
-            self.assertTrue(profile_ready(self.acc, "keep"))
+        self.assertEqual(chromium_dir(self.acc, "keep"), d)
+        self.assertTrue(profile_ready(self.acc, "keep"))
 
     def test_create_opens_tehran_and_isolated_folder(self):
         with mock.patch("marketing_divar.chromium_profile.open_profile",

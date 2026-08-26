@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.16")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.17")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -434,7 +434,7 @@ def accounts_open_puzzle(req: AccountPuzzle):
                 str(m.session_path(req.name)), req.name)
             if ok:
                 log("warning",
-                    f"تصویر داخل پنل نیامد — پنجرهٔ Edge برای «{req.name}» باز شد")
+                    f"تصویر داخل پنل نیامد — پنجرهٔ Chromium برای «{req.name}» باز شد")
                 return {"ok": True, "embed": False, "fallback": True,
                         "url": start_url,
                         "message": (win_msg + " پازل را در همان پنجره حل کنید، "
@@ -442,7 +442,7 @@ def accounts_open_puzzle(req: AccountPuzzle):
             msg = str(e)
             if "timed out" in msg.lower() or "CDP" in msg or "آماده نشد" in msg:
                 msg = ("مرورگر روی رایانه برای پازل آماده نشد. "
-                       "همه پنجره‌های Edge/Chrome را ببندید، پروکسی را خاموش کنید، "
+                       "پنجرهٔ Chromium اختصاصی را ببندید، پروکسی را خاموش کنید، "
                        "بعد دوباره «نمایش پازل همین‌جا» را بزنید. " + msg)
             raise HTTPException(400, msg)
         _state["puzzles"] = {req.name: live}

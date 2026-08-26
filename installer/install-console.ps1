@@ -158,8 +158,8 @@ try {
     L "Starting app ..."
     Start-Process -FilePath $venvPy -ArgumentList "main.py" -WorkingDirectory $Root
     Start-Sleep -Seconds 3
-    try { Start-Process "http://localhost:8642" } catch {}
-    L "DONE. Browser: http://localhost:8642"
+    L "App will open the panel in dedicated Chromium (not Edge)"
+    L "DONE. Panel URL: http://localhost:8642"
     L "Phone on same Wi-Fi: http://<this-PC-IP>:8642"
     Write-Host ""
     Write-Host "Install complete. This window can stay open."

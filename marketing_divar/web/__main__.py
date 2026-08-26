@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Start the local web panel — python -m marketing_divar.web"""
 import threading
-import webbrowser
 
 import uvicorn
 
@@ -29,7 +28,18 @@ def main() -> None:
     print("The panel is Persian. This window stays English.")
     print("Press Ctrl+C to stop.")
     start_background()
-    threading.Timer(1.2, lambda: webbrowser.open(info["local"])).start()
+
+    def _open_panel() -> None:
+        from ..app_chromium import open_in_app_chromium
+        res = open_in_app_chromium(info["local"])
+        if res.get("ok"):
+            print("Panel opened in app Chromium (not Edge/Chrome).")
+        else:
+            print(res.get("message") or "App Chromium not ready.")
+            print("Open this URL yourself (do not rely on the system default browser):")
+            print(" ", info["local"])
+
+    threading.Timer(1.2, _open_panel).start()
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
 
 

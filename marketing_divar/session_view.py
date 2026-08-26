@@ -2,9 +2,8 @@
 """باز کردن دیوار با سشن همان اکانت برنامه (نه تب مهمان).
 
 دیوار داخل iframe پنل باز نمی‌شود (refused to connect). تب معمولی هم
-با اکانت برنامه لاگین نیست. این ماژول Edge/Chrome را با پروفایل همان
-اکانت باز می‌کند و کوکی/توکن ذخیره‌شده را تزریق می‌کند تا پازل واقعی
-همان حساب دیده شود.
+با اکانت برنامه لاگین نیست. این ماژول فقط Chromium اختصاصی برنامه را
+با پروفایل همان اکانت باز می‌کند.
 """
 
 from __future__ import annotations
@@ -526,7 +525,7 @@ class PuzzleLive:
               inject: bool = True) -> None:
         browsers = find_browsers()
         if not browsers:
-            raise RuntimeError("Edge یا Chrome روی این رایانه پیدا نشد")
+            raise RuntimeError("Chromium اختصاصی برنامه پیدا نشد — اول آن را نصب کنید")
         cookies = cookies_from_session(session_path) if inject else []
         if inject and not cookies:
             raise RuntimeError("سشن این اکانت خالی است — دوباره لاگین کنید")
@@ -597,7 +596,7 @@ class PuzzleLive:
             return
         raise RuntimeError(
             "پازل روی رایانه باز نشد. پروکسی/وی‌پی‌ان سیستم را برای این برنامه "
-            "خاموش کنید، Edge/Chrome را ببندید و دوباره «نمایش پازل» را بزنید"
+            "خاموش کنید و دوباره «نمایش پازل» را بزنید"
             + (f" — {last}" if last else "")
         )
 

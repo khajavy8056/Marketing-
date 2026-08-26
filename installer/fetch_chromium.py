@@ -1,22 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Download a portable Chromium build into the app folder.
+"""Download a portable **Chromium** build (not Google Chrome, not Edge).
 
-This is NOT a Chromium source fork. Official / open zip builds are enough:
-Playwright launch_persistent_context + per-account user-data-dir keeps
-Divar login. The app always uses THIS copy (never system Chrome/Edge).
+Chrome for Testing is Google Chrome. This installer rejects that product.
+Sources are official Chromium snapshots, Playwright Chromium builds, and
+ungoogled-chromium. We do not fork Chromium source.
 
-Sources are probed with a short timeout. A dead host is skipped in seconds.
-Partial files are deleted. Zip CRC (and SHA256 when known) is checked
-before extract. Progress is independent of the rest of Setup:
-
-    CHROMIUM_START
-    SOURCE <name>
-    PROGRESS <0-100>
-    BYTES <done>/<total>
-    SPEED <n> MB/s
-    SOURCE_FAIL <name> <reason>
-    DOWNLOAD_COMPLETED
-    CHROMIUM_OK <path>
+After extract the exe must exist, look like Chromium, and be registered in
+INSTALLED.json. A leftover chrome.exe is not enough to mark Installed.
 """
 from __future__ import annotations
 
@@ -33,12 +23,10 @@ from urllib.request import Request, urlopen
 
 APP_ID = "DivarMarketing"
 APP_BROWSER_DIRNAME = "app-chromium"
+MARKER_NAME = "INSTALLED.json"
 
-# Pinned portable zips (Windows x64). Latest ungoogled still ships a zip.
 UNGOOGLED_TAG = "151.0.7922.173-1.1"
-UNGOOGLED_ZIP = (
-    "ungoogled-chromium_%s_windows_x64.zip" % UNGOOGLED_TAG
-)
+UNGOOGLED_ZIP = "ungoogled-chromium_%s_windows_x64.zip" % UNGOOGLED_TAG
 UNGOOGLED_URL = (
     "https://github.com/ungoogled-software/ungoogled-chromium-windows/"
     "releases/download/%s/%s" % (UNGOOGLED_TAG, UNGOOGLED_ZIP)
@@ -52,22 +40,24 @@ GITHUB_API = (
     "https://api.github.com/repos/ungoogled-software/"
     "ungoogled-chromium-windows/releases/latest"
 )
-CFT_VER = "131.0.6778.87"
-CFT_WIN = (
-    "https://storage.googleapis.com/chrome-for-testing-public/"
-    "%s/win64/chrome-win64.zip" % CFT_VER
+
+# Playwright's chromium-* zip is Chromium, not Chrome for Testing.
+PW_REV = "1148"
+PW_WIN = "https://playwright.azureedge.net/builds/chromium/%s/chromium-win64.zip" % PW_REV
+PW_WIN_CDN = "https://cdn.playwright.dev/dbazure/download/playwright/builds/chromium/%s/chromium-win64.zip" % PW_REV
+PW_WIN_NPM = "https://cdn.npmmirror.com/binaries/playwright/builds/chromium/%s/chromium-win64.zip" % PW_REV
+PW_LIN = "https://playwright.azureedge.net/builds/chromium/%s/chromium-linux.zip" % PW_REV
+PW_LIN_NPM = "https://cdn.npmmirror.com/binaries/playwright/builds/chromium/%s/chromium-linux.zip" % PW_REV
+
+# Official Chromium continuous snapshot (chrome-win.zip = Chromium).
+SNAP_REV = "1313161"
+SNAP_WIN = (
+    "https://commondatastorage.googleapis.com/chromium-browser-snapshots/"
+    "Win_x64/%s/chrome-win.zip" % SNAP_REV
 )
-CFT_WIN_NPM = (
-    "https://cdn.npmmirror.com/binaries/chrome-for-testing/"
-    "%s/win64/chrome-win64.zip" % CFT_VER
-)
-CFT_LIN = (
-    "https://storage.googleapis.com/chrome-for-testing-public/"
-    "%s/linux64/chrome-linux64.zip" % CFT_VER
-)
-CFT_LIN_NPM = (
-    "https://cdn.npmmirror.com/binaries/chrome-for-testing/"
-    "%s/linux64/chrome-linux64.zip" % CFT_VER
+SNAP_LIN = (
+    "https://commondatastorage.googleapis.com/chromium-browser-snapshots/"
+    "Linux_x64/%s/chrome-linux.zip" % SNAP_REV
 )
 
 PROBE_SEC = 6.0
@@ -75,6 +65,7 @@ CONNECT_SEC = 8.0
 STALL_SEC = 12.0
 SOURCE_MAX_SEC = 180.0
 MIN_ZIP_BYTES = 8_000_000
+CHROMIUM_PRODUCTS = frozenset({"chromium", "ungoogled-chromium"})
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int], None]
@@ -107,51 +98,149 @@ def _is_bad_install_path(p: Path) -> bool:
     return "/_mei" in s or s.startswith("_mei")
 
 
+def _looks_like_google_chrome_path(p: Path) -> bool:
+    s = str(p).replace("\\", "/").lower()
+    if "chrome-for-testing" in s or "chrome-win64" in s or "chrome-linux64" in s:
+        return True
+    if "/google/chrome/" in s or "program files" in s:
+        return True
+    return False
+
+
 def find_chrome(root: Optional[Path] = None) -> Optional[Path]:
-    """Only look inside the app Chromium folder — never Program Files."""
+    """Only look inside the app Chromium folder — never Program Files / Edge."""
     root = Path(root) if root else browsers_dir()
     if not root.exists() or _is_bad_install_path(root):
         return None
     rels = (
         Path("chrome-win") / "chrome.exe",
-        Path("chrome-win64") / "chrome.exe",
         Path("Chrome-bin") / "chrome.exe",
         Path("chrome.exe"),
         Path("chrome-linux") / "chrome",
-        Path("chrome-linux64") / "chrome",
     )
     folders = [root] + sorted(
         [p for p in root.iterdir() if p.is_dir()], reverse=True)
     for folder in folders:
+        if _looks_like_google_chrome_path(folder):
+            continue
         for rel in rels:
             cand = folder / rel
             if cand.is_file() and not _is_bad_install_path(cand):
                 if "headless" in str(cand).lower():
                     continue
+                if _looks_like_google_chrome_path(cand):
+                    continue
                 return cand
         direct = folder / "chrome.exe"
         if direct.is_file() and not _is_bad_install_path(direct):
-            return direct
+            if not _looks_like_google_chrome_path(direct):
+                return direct
     for cand in root.rglob("chrome.exe"):
         if cand.is_file() and "headless" not in str(cand).lower():
-            if not _is_bad_install_path(cand):
-                return cand
+            if _is_bad_install_path(cand) or _looks_like_google_chrome_path(cand):
+                continue
+            return cand
     for cand in root.rglob("chrome"):
         if cand.is_file() and os.access(cand, os.X_OK):
-            if "headless" not in str(cand).lower() and not _is_bad_install_path(cand):
-                return cand
+            if "headless" in str(cand).lower() or _is_bad_install_path(cand):
+                continue
+            if _looks_like_google_chrome_path(cand):
+                continue
+            return cand
     return None
+
+
+def marker_path(root: Optional[Path] = None) -> Path:
+    return (Path(root) if root else browsers_dir()) / MARKER_NAME
+
+
+def read_marker(root: Optional[Path] = None) -> Dict:
+    p = marker_path(root)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_marker(root: Path, rec: Dict) -> None:
+    rec = dict(rec)
+    rec["verified"] = True
+    rec["registered_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    marker_path(root).write_text(
+        json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def is_ready(root: Optional[Path] = None) -> bool:
+    root = Path(root) if root else browsers_dir()
+    exe = find_chrome(root)
+    if not exe or not exe.is_file():
+        return False
+    if exe.stat().st_size < 50_000:
+        return False
+    rec = read_marker(root)
+    if rec.get("product") not in CHROMIUM_PRODUCTS:
+        return False
+    if rec.get("path") and not Path(str(rec["path"])).exists():
+        return False
+    return True
 
 
 def executable_path() -> str:
     apply_browser_env()
+    if not is_ready():
+        raise RuntimeError(
+            "App Chromium is not installed (or a Chrome/CFT leftover was found). "
+            "Run the installer / panel download so a real Chromium is extracted "
+            "into DivarMarketing\\app-chromium."
+        )
     found = find_chrome()
     if not found:
-        raise RuntimeError(
-            "App Chromium is not installed. Run the installer again "
-            "(it downloads ungoogled-chromium into DivarMarketing\\app-chromium)."
-        )
+        raise RuntimeError("App Chromium executable missing after register")
     return str(found)
+
+
+def zip_product(zpath: Path) -> str:
+    """Classify a browser zip. chrome-for-testing is Google Chrome — reject."""
+    if not zipfile.is_zipfile(zpath):
+        return "unknown"
+    with zipfile.ZipFile(zpath, "r") as zf:
+        names = zf.namelist()
+        blob = " ".join(names).lower()
+        about = ""
+        for n in names:
+            ln = n.lower()
+            if ln.endswith("about") or ln.endswith("about.txt") or ln.endswith("version"):
+                try:
+                    about += " " + zf.read(n)[:4000].decode("utf-8", "replace").lower()
+                except Exception:
+                    pass
+        text = blob + about
+        if "chrome-for-testing" in text or "google chrome for testing" in text:
+            return "chrome-for-testing"
+        if "google chrome" in about and "chromium" not in about:
+            return "google-chrome"
+        if ("chrome-win64/" in blob or "chrome-linux64/" in blob) and "ungoogled" not in blob:
+            return "chrome-for-testing"
+        if "ungoogled" in blob:
+            return "ungoogled-chromium"
+        if "chrome-win/" in blob or "chrome-linux/" in blob:
+            return "chromium"
+        if any(n.lower().endswith("chrome.exe") or n.endswith("/chrome") or n.endswith("\\chrome")
+               for n in names):
+            return "chromium"
+    return "unknown"
+
+
+def assert_chromium_zip(zpath: Path) -> str:
+    prod = zip_product(zpath)
+    if prod not in CHROMIUM_PRODUCTS:
+        raise RuntimeError(
+            "downloaded binary is %s, not Chromium (Chrome/CFT rejected)" % prod
+        )
+    return prod
 
 
 def _ssl_ctx():
@@ -164,7 +253,7 @@ def _ssl_ctx():
 
 def _get(url: str, timeout: float = CONNECT_SEC, headers: Optional[Dict] = None):
     hdrs = {
-        "User-Agent": "DivarMarketing/2.1.16",
+        "User-Agent": "DivarMarketing/2.1.17",
         "Accept": "*/*",
     }
     if headers:
@@ -187,10 +276,13 @@ def _github_mirrors(url: str) -> List[str]:
 
 
 def sources(platform: Optional[str] = None) -> List[Dict[str, str]]:
-    """Ordered download sources. Dead hosts are probed then skipped."""
+    """Chromium-only sources. No Chrome for Testing."""
     plat = platform or sys.platform
     out: List[Dict[str, str]] = []
     if plat == "win32":
+        out.append({"name": "pw-chromium-npm", "url": PW_WIN_NPM, "kind": "chromium"})
+        out.append({"name": "pw-chromium-azure", "url": PW_WIN, "kind": "chromium"})
+        out.append({"name": "pw-chromium-cdn", "url": PW_WIN_CDN, "kind": "chromium"})
         for url in _github_mirrors(UNGOOGLED_URL):
             name = "ungoogled"
             if "ghproxy.net" in url:
@@ -206,16 +298,15 @@ def sources(platform: Optional[str] = None) -> List[Dict[str, str]]:
             out.append({"name": name, "url": url, "kind": "ungoogled-chromium"})
         out.append({"name": "ungoogled-old", "url": UNGOOGLED_OLD,
                     "kind": "ungoogled-chromium"})
-        out.append({"name": "cft-npmmirror", "url": CFT_WIN_NPM, "kind": "cft"})
-        out.append({"name": "cft-google", "url": CFT_WIN, "kind": "cft"})
+        out.append({"name": "chromium-snapshot", "url": SNAP_WIN, "kind": "chromium"})
     else:
-        out.append({"name": "cft-linux-npm", "url": CFT_LIN_NPM, "kind": "cft"})
-        out.append({"name": "cft-linux", "url": CFT_LIN, "kind": "cft"})
+        out.append({"name": "pw-chromium-linux-npm", "url": PW_LIN_NPM, "kind": "chromium"})
+        out.append({"name": "pw-chromium-linux", "url": PW_LIN, "kind": "chromium"})
+        out.append({"name": "chromium-snapshot-linux", "url": SNAP_LIN, "kind": "chromium"})
     return out
 
 
 def github_zip_urls() -> List[str]:
-    """Back-compat: flat URL list (API latest + pinned + mirrors + CFT)."""
     urls: List[str] = []
     try:
         with _get(GITHUB_API, timeout=8) as r:
@@ -238,14 +329,13 @@ def github_zip_urls() -> List[str]:
         for m in _github_mirrors(u):
             if m not in expanded:
                 expanded.append(m)
-    for extra in (CFT_WIN_NPM, CFT_WIN):
+    for extra in (PW_WIN_NPM, PW_WIN, PW_WIN_CDN, SNAP_WIN):
         if extra not in expanded:
             expanded.append(extra)
     return expanded
 
 
 def probe_url(url: str, timeout: float = PROBE_SEC) -> bool:
-    """Return True if the host answers quickly. Never hang."""
     try:
         with _get(url, timeout=timeout, headers={"Range": "bytes=0-31"}) as r:
             chunk = r.read(32)
@@ -353,18 +443,29 @@ def _download(url: str, dest: Path, log: LogFn,
 
 
 def _extract_zip(zpath: Path, dest_folder: Path, log: LogFn) -> Path:
+    prod = assert_chromium_zip(zpath)
     if dest_folder.exists():
         import shutil
         shutil.rmtree(dest_folder, ignore_errors=True)
     dest_folder.mkdir(parents=True, exist_ok=True)
-    log("Extracting Chromium zip ...")
+    log("Extracting Chromium zip (%s) ..." % prod)
     with zipfile.ZipFile(zpath, "r") as zf:
         zf.extractall(dest_folder)
-    (dest_folder / "INSTALLATION_COMPLETE").write_text("ok", encoding="utf-8")
     found = find_chrome(dest_folder) or find_chrome(dest_folder.parent)
     if not found:
-        raise RuntimeError("zip extracted but chrome.exe was not inside it")
+        raise RuntimeError("zip extracted but Chromium chrome.exe was not inside it")
+    if found.stat().st_size < 50_000:
+        raise RuntimeError("extracted executable is too small to be Chromium")
+    rec = {
+        "product": prod,
+        "path": str(found),
+        "source_zip": str(zpath.name),
+    }
+    write_marker(dest_folder.parent if dest_folder.name == "current" else dest_folder, rec)
+    write_marker(dest_folder, rec)
+    (dest_folder / "INSTALLATION_COMPLETE").write_text(prod, encoding="utf-8")
     log("Extracted Chromium -> " + str(found))
+    log("REGISTERED product=" + prod)
     return found
 
 
@@ -373,17 +474,17 @@ def ensure_installed(log: Optional[LogFn] = None,
                      force: bool = False) -> Path:
     log = log or (lambda m: print(m, flush=True))
     dest = apply_browser_env()
-    if not force:
+    if not force and is_ready(dest):
         found = find_chrome(dest)
-        if found:
-            log("App Chromium ready: " + str(found))
-            if progress:
-                progress(100)
-            return found
+        log("App Chromium ready: " + str(found))
+        if progress:
+            progress(100)
+        return found  # type: ignore[return-value]
+    if find_chrome(dest) and not is_ready(dest):
+        log("Leftover Chrome/CFT (or unmarked) install ignored — fetching Chromium")
     log("CHROMIUM_START")
-    log("Installing app-only Chromium (ungoogled / Chrome for Testing) into " + str(dest))
+    log("Installing app-only Chromium (not Chrome, not Edge) into " + str(dest))
     srcs = sources()
-    # Also try any extra GitHub-latest URLs not already listed.
     extra = []
     try:
         extra = github_zip_urls()
@@ -392,12 +493,15 @@ def ensure_installed(log: Optional[LogFn] = None,
     seen = {s["url"] for s in srcs}
     for u in extra:
         if u not in seen:
-            srcs.append({"name": "extra", "url": u, "kind": "ungoogled-chromium"})
+            srcs.append({"name": "extra", "url": u, "kind": "chromium"})
             seen.add(u)
     zpath = dest / "chromium-download.zip"
     last_err = "no url"
     for src in srcs:
         name, url = src["name"], src["url"]
+        if "chrome-for-testing" in url:
+            log("SOURCE_FAIL %s rejected Chrome for Testing URL" % name)
+            continue
         log("SOURCE " + name)
         log("SOURCE_URL " + url)
         if not probe_url(url, timeout=PROBE_SEC):
@@ -408,11 +512,17 @@ def ensure_installed(log: Optional[LogFn] = None,
         try:
             _download(url, zpath, log, progress,
                       expected_sha256=src.get("sha256") or None)
+            verify_zip(zpath, expected_sha256=src.get("sha256") or None)
+            prod = assert_chromium_zip(zpath)
+            log("VALIDATED product=" + prod)
             found = _extract_zip(zpath, dest / "current", log)
+            write_marker(dest, {"product": prod, "path": str(found), "source": name})
             try:
                 zpath.unlink()
             except Exception:
                 pass
+            if not is_ready(dest):
+                raise RuntimeError("extract finished but Chromium did not register")
             log("CHROMIUM_OK " + str(found))
             log("App Chromium ready: " + str(found))
             return found
@@ -421,7 +531,8 @@ def ensure_installed(log: Optional[LogFn] = None,
             log("SOURCE_FAIL %s %s" % (name, e))
             _cleanup(zpath)
     raise RuntimeError(
-        "Could not download app Chromium (all sources failed fast). " + last_err
+        "Could not download Chromium (Chrome/CFT rejected; all Chromium sources failed). "
+        + last_err
     )
 
 

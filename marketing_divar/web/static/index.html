@@ -628,7 +628,7 @@ function bindPuzzleFrame(){
   im.addEventListener('error', ()=>{
     const msg = $('cap-stage-msg');
     if (msg){ msg.style.display = 'flex';
-      msg.textContent = 'تصویر داخل پنل نیامد. اگر پنجرهٔ Edge باز شد پازل را همان‌جا حل کنید و «الان با همین اکانت بزن» را بزنید.'; }
+      msg.textContent = 'تصویر داخل پنل نیامد. پازل را در همان پنجرهٔ Chromium اختصاصی حل کنید و «الان با همین اکانت بزن» را بزنید.'; }
   });
   im.addEventListener('click', ev=>{
     if (!_capShown) return;
@@ -803,13 +803,15 @@ async function createProfile(){
     if(!st.installed){
       await api('/api/chromium/install',{method:'POST',body:'{}'});
       refreshChromium();
-      toast('اول Chromium اختصاصی دانلود شود — نوار پیشرفت را ببینید', false);
+      toast('اول Chromium اختصاصی دانلود و ثبت شود — بعد از Completed دوباره افزودن را بزنید', false);
+      $('otp-hint').textContent = st.error || 'Chromium هنوز Installed نیست (دانلود Chrome کافی نیست)';
       return;
     }
     const r = await api('/api/accounts/profile/create',{method:'POST',body:JSON.stringify({name,phone})});
-    toast(r.message||'Chromium باز شد'); $('otp-hint').textContent='در پنجره لاگین کنید، بعد ذخیره پروفایل';
+    toast(r.message||'Chromium باز شد', !!r.ok);
+    $('otp-hint').textContent=r.message||'در پنجره لاگین کنید، بعد ذخیره پروفایل';
     accRefresh();
-  }catch(e){ toast('❌ '+e.message,false); }
+  }catch(e){ toast('❌ '+e.message,false); $('otp-hint').textContent=e.message||'خطای ایجاد پروفایل'; }
 }
 async function saveProfile(name){
   try{

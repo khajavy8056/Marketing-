@@ -444,7 +444,7 @@ Log "[4] Health check"
         $env:PYTHONUTF8 = "1"
         Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root
         Start-Sleep -Seconds 3
-        Start-Process "http://localhost:8642"
+        Log "App will open the panel in dedicated Chromium (not Edge)"
         $lblStatus.Text = "Install complete. App is running — http://localhost:8642  (phone: this-PC-IP:8642)"
         $lblStatus.ForeColor = [System.Drawing.Color]::Green
         Log "Install complete. Browser: http://localhost:8642"

@@ -66,9 +66,13 @@ def _check_windows_installer() -> None:
     if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
         raise FileNotFoundError("fetch_chromium.py incomplete")
     for needle in ("SHA256", "SOURCE_FAIL", "BYTES", "SPEED",
-                   "probe_url", "verify_zip", "CHROMIUM_START"):
+                   "probe_url", "verify_zip", "CHROMIUM_START",
+                   "INSTALLED.json", "zip_product", "chrome-for-testing",
+                   "assert_chromium_zip"):
         if needle not in fetch:
             raise FileNotFoundError(f"fetch_chromium.py missing {needle}")
+    if "chrome-for-testing-public" in fetch or "CFT_WIN" in fetch:
+        raise FileNotFoundError("fetch_chromium.py must not download Chrome for Testing")
     bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
     if "fetch_chromium.py" not in bat_setup:
         raise FileNotFoundError("Setup build must bundle fetch_chromium.py")

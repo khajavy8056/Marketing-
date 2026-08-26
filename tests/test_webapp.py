@@ -237,8 +237,8 @@ class TestAccountFlow(unittest.TestCase):
         self.assertIn("prof-one", names)
         with mock.patch("marketing_divar.chromium_profile._cookies_from_live",
                         return_value=[]), \
-             mock.patch("marketing_divar.chromium_profile._cookies_via_temp_launch",
-                        return_value=[]):
+             mock.patch("marketing_divar.chromium_profile.is_open",
+                        return_value=False):
             r = client.post("/api/accounts/profile/save", json={"name": "prof-one"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertFalse(r.json().get("ready"))

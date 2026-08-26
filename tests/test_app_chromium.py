@@ -51,6 +51,14 @@ class TestBrowsersPath(unittest.TestCase):
         exe.write_bytes(b"fake")
         self.assertEqual(ac.find_chrome(root), exe)
 
+    def test_rejects_chrome_for_testing_layout(self):
+        root = Path(self.tmp) / "app-chromium"
+        exe = root / "current" / "chrome-win64" / "chrome.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"x" * 80_000)
+        self.assertIsNone(ac.find_chrome(root))
+        self.assertFalse(ac.is_ready(root))
+
     def test_rejects_mei_path(self):
         mei = Path(self.tmp) / "_MEI123" / "playwright" / "chromium-1155" / "chrome-win"
         mei.mkdir(parents=True)
@@ -71,7 +79,7 @@ class TestBrowsersPath(unittest.TestCase):
         dest.mkdir()
         zpath = dest / "chromium-win64.zip"
         with zipfile.ZipFile(zpath, "w") as zf:
-            zf.writestr("chrome-win/chrome.exe", b"bin")
+            zf.writestr("chrome-win/chrome.exe", b"B" * 60_000)
         folder = dest / "chromium-1155"
         found = ac._extract_zip(zpath, folder, lambda m: None)
         self.assertTrue(found.is_file())
@@ -111,7 +119,7 @@ class TestBrowsersPath(unittest.TestCase):
         dest.mkdir()
         zpath = dest / "u.zip"
         with zipfile.ZipFile(zpath, "w") as zf:
-            zf.writestr("ungoogled-chromium_win/chrome.exe", b"bin")
+            zf.writestr("ungoogled-chromium_win/chrome.exe", b"B" * 60_000)
         found = ac._extract_zip(zpath, dest / "current", lambda m: None)
         self.assertTrue(found.name.lower().startswith("chrome"))
 
@@ -120,6 +128,28 @@ class TestBrowsersPath(unittest.TestCase):
             urls = ac.github_zip_urls()
         self.assertTrue(any("ungoogled-chromium" in u for u in urls))
         self.assertTrue(any("github.com" in u for u in urls))
+        self.assertFalse(any("chrome-for-testing" in u for u in urls))
+        srcs = ac._fc.sources("win32")
+        self.assertFalse(any("chrome-for-testing" in s["url"] for s in srcs))
+        self.assertTrue(any("chromium" in s["kind"] for s in srcs))
+
+    def test_zip_product_rejects_cft_accepts_chromium(self):
+        dest = Path(self.tmp)
+        cft = dest / "cft.zip"
+        with zipfile.ZipFile(cft, "w") as zf:
+            zf.writestr("chrome-win64/chrome.exe", b"bin")
+            zf.writestr("chrome-win64/ABOUT", b"Google Chrome for Testing")
+        self.assertEqual(ac._fc.zip_product(cft), "chrome-for-testing")
+        with self.assertRaises(RuntimeError):
+            ac._fc.assert_chromium_zip(cft)
+        good = dest / "cr.zip"
+        with zipfile.ZipFile(good, "w") as zf:
+            zf.writestr("chrome-win/chrome.exe", b"bin")
+        self.assertEqual(ac._fc.zip_product(good), "chromium")
+        ug = dest / "ug.zip"
+        with zipfile.ZipFile(ug, "w") as zf:
+            zf.writestr("ungoogled-chromium_win/chrome.exe", b"bin")
+        self.assertEqual(ac._fc.zip_product(ug), "ungoogled-chromium")
 
     def test_download_reports_percent(self):
         class Fake:
@@ -215,7 +245,7 @@ class TestBrowsersPath(unittest.TestCase):
         os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
         zpath = Path(self.tmp) / "good.zip"
         with zipfile.ZipFile(zpath, "w") as zf:
-            zf.writestr("chrome-win/chrome.exe", b"bin")
+            zf.writestr("chrome-win/chrome.exe", b"B" * 60_000)
         # pad to min size after extract path: _download min 8MB so we mock
         # ensure_installed at source loop
         srcs = [
@@ -241,6 +271,19 @@ class TestBrowsersPath(unittest.TestCase):
         self.assertTrue(any("SOURCE_FAIL dead" in n for n in notes))
         self.assertTrue(any(n.startswith("CHROMIUM_OK") or "ready" in n.lower()
                             for n in notes))
+
+    def test_save_without_open_window_does_not_spawn(self):
+        acc = Path(self.tmp) / "accounts"
+        save_meta(str(acc), "acc1", {})
+        with mock.patch("marketing_divar.chromium_profile.is_open",
+                        return_value=False), \
+             mock.patch("marketing_divar.chromium_profile._cookies_from_live") as ck, \
+             mock.patch("marketing_divar.chromium_profile.close_live") as cl:
+            res = save_profile(str(acc), "acc1")
+        self.assertFalse(res["ok"])
+        self.assertEqual(res.get("stage"), "window")
+        ck.assert_not_called()
+        cl.assert_not_called()
 
     def test_save_without_login_keeps_window(self):
         acc = Path(self.tmp) / "accounts"

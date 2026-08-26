@@ -157,7 +157,7 @@ def install_app_chromium(target: Path, workdir: Path, log, chrome_progress=None)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
     os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
     log("CHROMIUM_START")
-    log("Installing app-only Chromium (ungoogled-chromium / Chrome for Testing) ...")
+    log("Installing app-only Chromium (not Google Chrome, not Edge) ...")
     fc = _load_fetch_chromium()
 
     def on_pct(pct: int) -> None:
@@ -206,10 +206,7 @@ def launch(target: Path, workdir: Path, log) -> None:
         subprocess.Popen([str(target)], cwd=str(workdir), env=env)
     else:
         subprocess.Popen([sys.executable, str(target)], cwd=str(workdir), env=env)
-    try:
-        os.startfile(f"http://127.0.0.1:{PORT}")  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    log("App will open the panel in dedicated Chromium (not Edge).")
 
 
 def run_install(progress, log, chrome_progress=None) -> None:

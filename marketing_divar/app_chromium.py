@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Chromium اختصاصی برنامه — جدا از مرورگر و پروفایل کاربر.
+"""Chromium اختصاصی برنامه — نه Chrome گوگل، نه Edge سیستم.
 
-دانلود از چند منبع (ungoogled-chromium / Chrome for Testing). فورک سورس
-Chromium لازم نیست: Playwright + user-data-dir جدا برای هر اکانت کافی است.
-پوشه: %LOCALAPPDATA%\\\\DivarMarketing\\\\app-chromium
-پروفایل لاگین هر اکانت جداست: accounts/<name>/chromium/
+دانلود فقط باینری Chromium (snapshot / Playwright Chromium / ungoogled).
+Chrome for Testing رد می‌شود. Installed فقط بعد از extract + ثبت INSTALLED.json.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -32,6 +31,7 @@ _STATUS: Dict[str, object] = {
     "source": "",
     "error": "",
     "note": "",
+    "product": "",
 }
 _LOCK = threading.Lock()
 
@@ -80,14 +80,20 @@ def find_chrome(root: Optional[Path] = None):
     return _fc.find_chrome(root or browsers_dir())
 
 
+def is_ready(root: Optional[Path] = None) -> bool:
+    return bool(_fc.is_ready(root or browsers_dir()))
+
+
 def executable_path() -> str:
     apply_browser_env()
+    if not is_ready():
+        raise RuntimeError(
+            "Chromium اختصاصی نصب/ثبت نشده. Chrome گوگل و Edge سیستم استفاده نمی‌شوند. "
+            "از پنل «شروع دانلود Chromium» را بزنید."
+        )
     found = find_chrome()
     if not found:
-        raise RuntimeError(
-            "Chromium اختصاصی برنامه نصب نیست. نصب‌کننده باید ungoogled-chromium "
-            "را در پوشهٔ DivarMarketing\\\\app-chromium بگذارد."
-        )
+        raise RuntimeError("فایل Chromium بعد از ثبت پیدا نشد")
     return str(found)
 
 
@@ -122,6 +128,10 @@ def _parse_log(msg: str) -> None:
             _STATUS["note"] = "source " + str(_STATUS["source"])
         elif line.startswith("SOURCE_FAIL "):
             _STATUS["note"] = line
+        elif line.startswith("VALIDATED "):
+            _STATUS["note"] = line
+        elif line.startswith("REGISTERED "):
+            _STATUS["note"] = line
         elif line.startswith("DOWNLOAD_COMPLETED"):
             _STATUS["percent"] = 100
             _STATUS["note"] = "Completed"
@@ -135,15 +145,24 @@ def _parse_log(msg: str) -> None:
 
 def status() -> Dict[str, object]:
     apply_browser_env()
-    found = find_chrome()
+    ready = is_ready()
+    found = find_chrome() if ready else None
+    rec = {}
+    try:
+        rec = _fc.read_marker(browsers_dir())
+    except Exception:
+        rec = {}
     with _LOCK:
         out = dict(_STATUS)
-    out["installed"] = bool(found)
+    out["installed"] = bool(ready)
+    out["product"] = rec.get("product") or ""
     if found:
         out["path"] = str(found)
         if not out.get("percent"):
             out["percent"] = 100
             out["note"] = out.get("note") or "Completed"
+    elif out.get("note") in ("Completed",) and not ready:
+        out["note"] = "downloaded but not registered Chromium"
     return out
 
 
@@ -204,3 +223,30 @@ def start_install_async() -> Dict[str, object]:
 
     threading.Thread(target=work, daemon=True).start()
     return status()
+
+
+def open_in_app_chromium(url: str, profile_dir: Optional[Path] = None,
+                         extra_args: Optional[list] = None) -> Dict[str, object]:
+    """Open a URL in the app Chromium only. Never Edge/Chrome/default browser."""
+    apply_browser_env()
+    if not is_ready():
+        return {"ok": False, "stage": "executable",
+                "message": "Chromium اختصاصی نصب نیست — Edge/Chrome سیستم باز نمی‌شود."}
+    exe = executable_path()
+    prof = Path(profile_dir) if profile_dir else (browsers_dir() / "panel-ui")
+    prof.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        str(exe),
+        "--user-data-dir=" + str(prof),
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-sync",
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+    cmd.append(str(url))
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        return {"ok": False, "stage": "launch", "message": str(e), "exe": exe}
+    return {"ok": True, "exe": exe, "profile": str(prof), "url": url}

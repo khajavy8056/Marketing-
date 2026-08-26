@@ -54,6 +54,8 @@ class TestBranding(unittest.TestCase):
                       encoding="utf-8").read()
         self.assertIn("0.0.0.0", banner)
         self.assertIn("Phone", banner)
+        self.assertNotIn("webbrowser", banner)
+        self.assertIn("open_in_app_chromium", banner)
 
 
 if __name__ == "__main__":
