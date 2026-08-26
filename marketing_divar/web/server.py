@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.19")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.20")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -366,11 +366,33 @@ class AccountProbe(BaseModel):
     name: str
 
 
+@app.post("/api/accounts/captcha-cleared")
+def accounts_captcha_cleared(req: AccountProbe):
+    """کپچا حل شد: همین اکانت آزاد شود و فوراً یک شماره از صف گرفته شود."""
+    from ..unlock import confirm_captcha_phone
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(400, "نام اکانت الزامی است")
+    mon = _state.get("monitor")
+    if mon is not None:
+        try:
+            mon._acct_errors[name] = 0
+        except Exception:
+            pass
+    res = confirm_captcha_phone(mgr(), name, DB_PATH, base_url=_base_url())
+    if res.get("cleared"):
+        _state.get("gates", {}).pop(name, None)
+        log("success", f"کپچا «{name}»: {res.get('message')}")
+    else:
+        log("warning", f"کپچا «{name}»: {res.get('message')}")
+    return res
+
+
 @app.post("/api/accounts/probe")
 def accounts_probe(req: AccountProbe):
     """با همان اکانت مسدود به دیوار بزن — اگر پازل رفته بود خودکار آزاد شود."""
     m = mgr()
-    if not m.has_full_login(req.name):
+    if not m.has_full_login(req.name) and not m.has_token(req.name):
         raise HTTPException(404, "سشن کامل این اکانت نیست — دوباره لاگین کنید")
     live = (_state.get("puzzles") or {}).get(req.name)
     if live:

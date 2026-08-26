@@ -485,7 +485,7 @@
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
     <button class="btn ok" type="button" id="openPuzzle" onclick="openPuzzle()">نمایش پازل همین‌جا</button>
-    <button class="btn ok" type="button" onclick="capProbe()">کپچا حل شد</button>
+    <button class="btn ok" type="button" onclick="capCleared()">کپچا حل شد</button>
     <button class="btn gray" type="button" onclick="capProbe()">الان با همین اکانت بزن</button>
     <button class="btn gray" type="button" onclick="capSolve()">تأیید جمع</button>
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
@@ -587,7 +587,8 @@ async function refreshStatus(){
         <span>${ic}</span><b>${esc(a.name)}</b>
         <span class="tag ${m}">${esc(a.status)}</span>
         <span class="hint">امروز: ${a.phones_today}</span>
-        ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button>`:''}
+        ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button>
+        <button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>`:''}
         ${a.status!=='active'?`<button class="btn sm" onclick="accAction('${a.name}','release')">آزادسازی</button>`:''}
       </div>`;}).join('') : '<div class="empty">اکانتی ثبت نشده — تب اکانت‌ها</div>';
     // رخدادها
@@ -693,6 +694,22 @@ async function openPuzzle(name){
 async function maybeCapPopup(names){
   /* عمداً خالی: پازل فقط با دکمهٔ کنار اکانت باز می‌شود */
 }
+async function capCleared(name){
+  name = name || _capShown;
+  if (!name){ toast('اول اکانت کپچا را انتخاب کنید', false); return; }
+  try{
+    const r = await api('/api/accounts/captcha-cleared',{method:'POST', body: JSON.stringify({name})});
+    if ($('cap-live')) $('cap-live').textContent = r.message || '';
+    toast(r.message||'انجام شد', !!r.cleared);
+    if (r.cleared){
+      stopFramePoll();
+      const dlg = $('cap-dlg'); if (dlg && dlg.open) dlg.close();
+      _capShown = '';
+      _puzzleLaunched = '';
+    }
+    accRefresh(); refreshStatus();
+  }catch(e){ toast('❌ '+e.message, false); }
+}
 async function capProbe(){
   const name = _capShown;
   if (!name){ toast('اکانتی در انتظار نیست', false); return; }
@@ -745,6 +762,7 @@ async function accRefresh(){
           «باز کردن دیوار» همین پروفایل لاگین‌شده را می‌آورد.<br>
           <div class="row" style="margin-top:8px">
             <button class="btn sm" type="button" onclick="openDivar('${a.name}')">باز کردن دیوار</button>
+            <button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>
             <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
           </div>
         </div>` : '';

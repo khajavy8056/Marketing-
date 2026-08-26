@@ -92,6 +92,8 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn("playAlert", r.text)
         self.assertNotIn('id="cap-frame"', r.text)
         self.assertIn("/api/accounts/probe", r.text)
+        self.assertIn("/api/accounts/captcha-cleared", r.text)
+        self.assertIn("capCleared", r.text)
         self.assertIn('id="set-tg-base"', r.text)
         self.assertIn("requeueHidden", r.text)
         self.assertIn("/api/leads/requeue-hidden", r.text)
@@ -237,6 +239,8 @@ class TestAccountFlow(unittest.TestCase):
         self.assertIn("prof-one", names)
         with mock.patch("marketing_divar.chromium_profile._cookies_from_live",
                         return_value=[]), \
+             mock.patch("marketing_divar.chromium_profile._cdp_alive",
+                        return_value=False), \
              mock.patch("marketing_divar.chromium_profile.is_open",
                         return_value=False):
             r = client.post("/api/accounts/profile/save", json={"name": "prof-one"})

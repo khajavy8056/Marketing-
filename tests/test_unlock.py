@@ -16,7 +16,8 @@ from marketing_divar.accounts import AccountManager  # noqa: E402
 from marketing_divar.client import DivarClient  # noqa: E402
 from marketing_divar.config import DEFAULTS  # noqa: E402
 from marketing_divar.rate import RateLimiter  # noqa: E402
-from marketing_divar.unlock import next_probe_wait, try_release_account  # noqa: E402
+from marketing_divar.unlock import (  # noqa: E402
+    confirm_captcha_phone, next_probe_wait, try_release_account)
 from mock_divar import MockDivar, start_mock  # noqa: E402
 
 
@@ -76,6 +77,57 @@ class TestProbeGate(unittest.TestCase):
     def test_backoff_is_not_half_hour_first(self):
         self.assertLessEqual(next_probe_wait(60), 180)
         self.assertGreaterEqual(next_probe_wait(40 * 60), 10 * 60)
+
+    def test_confirm_cleared_gets_one_queued_phone(self):
+        from marketing_divar.db import connect, upsert_lead
+        db = os.path.join(self.tmp, "leads.db")
+        con = connect(db)
+        upsert_lead(con, {"token": "ph1aaaa", "title": "آگهی",
+                          "subtitle": "", "url": "https://divar.ir/v/ph1aaaa",
+                          "has_chat": True}, "kw", "1")
+        con.commit()
+        con.close()
+        mgr = AccountManager(DEFAULTS, self.acc)
+        mgr.set_status("ac1", "captcha", note="blocked")
+        r = confirm_captcha_phone(mgr, "ac1", db, base_url=self.base)
+        self.assertTrue(r["ok"], r)
+        self.assertTrue(r["cleared"], r)
+        self.assertTrue(r["phone_tried"], r)
+        self.assertEqual(r.get("status"), "found")
+        self.assertTrue(str(r.get("phone") or "").startswith("0912"))
+        self.assertEqual(
+            mgr.snapshot(db)[0]["status"], "active")
+        con = connect(db)
+        row = con.execute(
+            "SELECT phone_status, phone FROM leads WHERE token='ph1aaaa'"
+        ).fetchone()
+        con.close()
+        self.assertEqual(row["phone_status"], "found")
+        self.assertTrue(str(row["phone"]).startswith("0912"))
+
+    def test_confirm_still_captcha_keeps_queue(self):
+        from marketing_divar.db import connect, upsert_lead
+        db = os.path.join(self.tmp, "leads2.db")
+        con = connect(db)
+        upsert_lead(con, {"token": "ph2bbbb", "title": "آگهی",
+                          "subtitle": "", "url": "u",
+                          "has_chat": True}, "kw", "1")
+        con.commit()
+        con.close()
+        MockDivar.captcha_after = {"ac1": 0}
+        mgr = AccountManager(DEFAULTS, self.acc)
+        mgr.set_status("ac1", "captcha")
+        r = confirm_captcha_phone(mgr, "ac1", db, base_url=self.base)
+        self.assertFalse(r["cleared"], r)
+        self.assertTrue(r["phone_tried"], r)
+        self.assertEqual(r.get("state"), "captcha")
+        self.assertEqual(mgr.snapshot(db)[0]["status"], "captcha")
+        con = connect(db)
+        st = con.execute(
+            "SELECT phone_status FROM leads WHERE token='ph2bbbb'"
+        ).fetchone()["phone_status"]
+        con.close()
+        self.assertEqual(st, "pending")
 
 
 if __name__ == "__main__":

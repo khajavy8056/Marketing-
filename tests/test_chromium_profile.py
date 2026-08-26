@@ -46,6 +46,11 @@ class TestMetaAndReady(unittest.TestCase):
             [{"name": "foo", "domain": ".divar.ir"}]))
         self.assertTrue(cookies_look_logged_in(
             [{"name": "sRefreshToken", "value": "R", "domain": ".divar.ir"}]))
+        self.assertTrue(cookies_look_logged_in(
+            [{"name": "sAccessToken", "value": "", "host_key": ".divar.ir"}]))
+        self.assertTrue(cookies_look_logged_in(
+            [{"name": "st-last-access-token", "value": "x",
+              "domain": ".divar.ir"}]))
 
     def test_harvest_writes_session(self):
         d = tempfile.mkdtemp()
@@ -136,6 +141,53 @@ class TestCreateOpenMocked(unittest.TestCase):
         self.assertIn("chromium-profiles", str(p).replace("\\", "/"))
         logical = Path(d) / "محمد-تهران-01" / "chromium"
         self.assertNotEqual(p.resolve(), logical)
+
+
+def _write_cookie_db(path, rows):
+    import sqlite3
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(path))
+    con.execute("CREATE TABLE cookies (name TEXT, host_key TEXT, value TEXT)")
+    con.executemany("INSERT INTO cookies VALUES (?,?,?)", rows)
+    con.commit()
+    con.close()
+
+
+class TestSqliteSave(unittest.TestCase):
+    def test_disk_cookies_save_without_cdp(self):
+        from marketing_divar import chromium_profile as cp
+        d = tempfile.mkdtemp()
+        save_meta(d, "acc1", {"phone": "09120000000"})
+        prof = cp.chromium_dir(d, "acc1")
+        _write_cookie_db(
+            prof / "Default" / "Network" / "Cookies",
+            [("sRefreshToken", ".divar.ir", ""),
+             ("sAccessToken", ".divar.ir", ""),
+             ("sid", ".google.com", "x")])
+        with mock.patch.object(cp, "is_open", return_value=False), \
+             mock.patch.object(cp, "_cdp_alive", return_value=False), \
+             mock.patch.object(cp, "_cookies_from_live") as live, \
+             mock.patch.object(cp, "close_live") as cl:
+            res = cp.save_profile(d, "acc1")
+        self.assertTrue(res["ok"], res)
+        self.assertTrue(res["ready"])
+        live.assert_not_called()
+        cl.assert_called_once_with("acc1")
+        self.assertTrue(profile_ready(d, "acc1"))
+
+    def test_window_closed_without_disk_still_refuses(self):
+        from marketing_divar import chromium_profile as cp
+        d = tempfile.mkdtemp()
+        save_meta(d, "acc1", {})
+        with mock.patch.object(cp, "is_open", return_value=False), \
+             mock.patch.object(cp, "_cdp_alive", return_value=False), \
+             mock.patch.object(cp, "_cookies_from_live") as live, \
+             mock.patch.object(cp, "close_live") as cl:
+            res = cp.save_profile(d, "acc1")
+        self.assertFalse(res["ok"])
+        self.assertEqual(res.get("stage"), "window")
+        live.assert_not_called()
+        cl.assert_not_called()
 
 
 if __name__ == "__main__":

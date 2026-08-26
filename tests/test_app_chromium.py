@@ -363,6 +363,8 @@ class TestBrowsersPath(unittest.TestCase):
         save_meta(str(acc), "acc1", {})
         with mock.patch("marketing_divar.chromium_profile.is_open",
                         return_value=False), \
+             mock.patch("marketing_divar.chromium_profile._cdp_alive",
+                        return_value=False), \
              mock.patch("marketing_divar.chromium_profile._cookies_from_live") as ck, \
              mock.patch("marketing_divar.chromium_profile.close_live") as cl:
             res = save_profile(str(acc), "acc1")
@@ -377,6 +379,8 @@ class TestBrowsersPath(unittest.TestCase):
         with mock.patch("marketing_divar.chromium_profile.is_open",
                         return_value=True), \
              mock.patch("marketing_divar.chromium_profile._cookies_from_live",
+                        return_value=[]), \
+             mock.patch("marketing_divar.chromium_profile._cookies_from_cdp",
                         return_value=[]), \
              mock.patch("marketing_divar.chromium_profile.close_live") as cl:
             res = save_profile(str(acc), "acc1")

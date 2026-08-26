@@ -28,8 +28,8 @@ _LOCK = threading.Lock()
 
 _LOGIN_COOKIE_HINTS = (
     "sRefreshToken", "sAccessToken", "sFrontToken",
-    "st-refresh-token", "st-access-token", "front-token",
-    "token",
+    "st-refresh-token", "st-access-token", "st-last-access-token",
+    "front-token", "token",
 )
 
 
@@ -112,11 +112,74 @@ def cookies_look_logged_in(cookies: List[Dict[str, Any]]) -> bool:
     for c in cookies or []:
         if not isinstance(c, dict):
             continue
-        domain = str(c.get("domain") or "")
+        domain = str(c.get("domain") or c.get("host_key") or "")
         if domain and "divar.ir" not in domain.lower():
             continue
         names.add(str(c.get("name") or ""))
-    return any(n in names for n in _LOGIN_COOKIE_HINTS)
+    if any(n in names for n in _LOGIN_COOKIE_HINTS):
+        return True
+    low = {n.lower() for n in names}
+    for n in low:
+        if "refreshtoken" in n or "accesstoken" in n or "fronttoken" in n:
+            return True
+        if n.replace("-", "") in ("staccesstoken", "strefreshtoken"):
+            return True
+    return False
+
+
+def _cookies_from_sqlite(profile: Path) -> List[Dict[str, Any]]:
+    """Read cookie names from the on-disk Chromium profile (CDP is optional).
+
+    Values may be DPAPI-encrypted on Windows; names/host_key are plaintext.
+    The dedicated profile folder is the source of truth for Divar login.
+    """
+    import os
+    import shutil
+    import sqlite3
+    import tempfile
+    out: List[Dict[str, Any]] = []
+    cands = [
+        Path(profile) / "Default" / "Network" / "Cookies",
+        Path(profile) / "Default" / "Cookies",
+    ]
+    for src in cands:
+        if not src.is_file():
+            continue
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+        tmp.close()
+        try:
+            shutil.copy2(src, tmp.name)
+            for extra in ("-wal", "-shm"):
+                side = Path(str(src) + extra)
+                if side.is_file():
+                    try:
+                        shutil.copy2(side, tmp.name + extra)
+                    except Exception:
+                        pass
+            con = sqlite3.connect(tmp.name)
+            try:
+                rows = con.execute(
+                    "SELECT name, host_key, value FROM cookies"
+                ).fetchall()
+            except Exception:
+                rows = []
+            con.close()
+            for row in rows:
+                name = str(row[0] or "")
+                host = str(row[1] or "")
+                val = str(row[2] or "") if len(row) > 2 else ""
+                if name:
+                    out.append({"name": name, "domain": host, "value": val,
+                                "host_key": host})
+        except Exception:
+            pass
+        finally:
+            for extra in ("", "-wal", "-shm"):
+                try:
+                    os.unlink(tmp.name + extra)
+                except Exception:
+                    pass
+    return out
 
 
 def launch_kwargs(user_data: Path, headless: bool = False) -> Dict[str, Any]:
@@ -414,9 +477,10 @@ def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str,
             "message": "پروفایل «%s» ساخته شد و دیوار روی همان پروفایل باز است. در همان پنجره لاگین کنید، بعد ذخیره پروفایل." % name}
 
 
-def _cookies_from_cdp(profile: Path, proc: Optional[subprocess.Popen]) -> List[Dict[str, Any]]:
+def _cookies_from_cdp(profile: Path, proc: Optional[subprocess.Popen],
+                     port: int = 0) -> List[Dict[str, Any]]:
     from .session_view import CdpClient, _wait_cdp
-    ws = _wait_cdp(0, tries=40, profile=profile, proc=proc)
+    ws = _wait_cdp(int(port or 0), tries=40, profile=profile, proc=proc)
     cdp = CdpClient(ws)
     try:
         cdp.call("Network.enable")
@@ -442,6 +506,7 @@ def _cookies_from_live(name: str) -> List[Dict[str, Any]]:
         ctx = live.get("context")
         proc = live.get("proc")
         profile = live.get("profile")
+        port = int(live.get("port") or 0)
     if ctx is not None:
         try:
             return list(ctx.cookies())
@@ -449,7 +514,7 @@ def _cookies_from_live(name: str) -> List[Dict[str, Any]]:
             _clog("cookies", "playwright cookies failed: %s" % e, "warning")
     if profile:
         try:
-            return _cookies_from_cdp(Path(profile), proc)
+            return _cookies_from_cdp(Path(profile), proc, port)
         except Exception as e:
             _clog("cookies", "cdp failed: %s" % e, "warning")
             return []
@@ -473,7 +538,7 @@ def harvest_to_session(accounts_dir: str, name: str,
     for c in cookies or []:
         if not isinstance(c, dict) or not c.get("name"):
             continue
-        domain = str(c.get("domain") or "")
+        domain = str(c.get("domain") or c.get("host_key") or "")
         if domain and "divar.ir" not in domain.lower():
             continue
         full.append({
@@ -497,7 +562,29 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
     used_live = is_open(name) or _cdp_alive(prof)
     _clog("save", "start name=%s window_open=%s profile=%s" % (
         name, used_live, prof))
-    if not used_live:
+    cookies: List[Dict[str, Any]] = []
+    if used_live:
+        cookies = _cookies_from_live(name)
+        if not cookies:
+            try:
+                with _LOCK:
+                    live = _LIVE.get(name) or {}
+                    proc = live.get("proc")
+                    port = int(live.get("port") or 0)
+                cookies = _cookies_from_cdp(prof, proc, port)
+            except Exception as e:
+                _clog("save", "cdp retry: %s" % e, "warning")
+                cookies = []
+    disk: List[Dict[str, Any]] = []
+    try:
+        disk = _cookies_from_sqlite(prof)
+    except Exception as e:
+        _clog("save", "sqlite cookies: %s" % e, "warning")
+        disk = []
+    if not cookies:
+        cookies = disk
+    ok = cookies_look_logged_in(cookies) or cookies_look_logged_in(disk)
+    if not ok and not used_live and not disk:
         rec = save_meta(accounts_dir, name, {
             "profile_ready": False,
             "status": "login_required",
@@ -507,17 +594,6 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
         return {"ok": False, "ready": False, **rec,
                 "stage": "window",
                 "message": "پنجره Chromium این اکانت باز نیست. اول «باز کردن دیوار» را بزنید، لاگین کنید، بعد ذخیره."}
-    cookies = _cookies_from_live(name)
-    if not cookies:
-        try:
-            with _LOCK:
-                live = _LIVE.get(name) or {}
-                proc = live.get("proc")
-            cookies = _cookies_from_cdp(prof, proc)
-        except Exception as e:
-            _clog("save", "cdp retry: %s" % e, "warning")
-            cookies = []
-    ok = cookies_look_logged_in(cookies)
     harvest_to_session(accounts_dir, name, cookies)
     rec = save_meta(accounts_dir, name, {
         "profile_ready": bool(ok),

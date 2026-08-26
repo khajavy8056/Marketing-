@@ -54,6 +54,105 @@ def try_release_account(mgr: AccountManager, name: str,
     return out
 
 
+def confirm_captcha_phone(mgr: AccountManager, name: str, db_path: str,
+                         base_url: Optional[str] = None) -> Dict[str, Any]:
+    """Operator says captcha is solved: free this account and try ONE queued phone."""
+    name = (name or "").strip()
+    if not name:
+        return {"ok": False, "cleared": False, "phone_tried": False,
+                "message": "نام اکانت خالی است"}
+    try:
+        from .chromium_profile import safe_name
+        name = safe_name(name)
+    except Exception:
+        name = name.replace(" ", "-")
+    mgr.release(name)
+    if not mgr.has_token(name):
+        return {"ok": True, "cleared": True, "phone_tried": False, "state": "clear",
+                "message": "اکانت آزاد شد. برای گرفتن شماره، کد پیامک (توکن API) همین اکانت لازم است."}
+    from .client import DivarAuthError, DivarBlockedError, DivarClient
+    from .db import (bump_quota, connect, log_operation, mark_processing,
+                     pending_phone, set_phone)
+    from .rate import RateLimiter
+    con = connect(db_path)
+    try:
+        rows = pending_phone(con, limit=1, newest_first=True)
+        if not rows:
+            return {"ok": True, "cleared": True, "phone_tried": False, "state": "clear",
+                    "message": "اکانت آزاد شد. صف شماره خالی است — اسکن را روشن کنید."}
+        row = rows[0]
+        token = row["token"]
+        mark_processing(con, token)
+        cl = DivarClient(
+            session_path=str(mgr.session_path(name)),
+            base_url=base_url,
+            limiter=RateLimiter(phone_delay=0, search_delay=0, jitter=0))
+        started = time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            res = cl.get_phone(token)
+        except DivarBlockedError as e:
+            con.execute(
+                "UPDATE leads SET phone_status='pending', last_error=? WHERE token=?",
+                (str(e)[:200], token))
+            con.commit()
+            mgr.set_status(name, "captcha", note=str(e))
+            mgr.record_block(
+                name, getattr(e, "body", "") or "",
+                token=token,
+                url=(row["url"] if "url" in row.keys() else "") or "")
+            log_operation(con, token=token, account=name, operation="contact",
+                          result="captcha", error=str(e), started_at=started)
+            return {"ok": True, "cleared": False, "phone_tried": True,
+                    "state": "captcha",
+                    "message": "هنوز پازل می‌خواهد — در همان پروفایل حل کنید و دوباره «کپچا حل شد» را بزنید."}
+        except DivarAuthError as e:
+            con.execute(
+                "UPDATE leads SET phone_status='pending', last_error=? WHERE token=?",
+                (str(e)[:200], token))
+            con.commit()
+            mgr.set_status(name, "relogin", note=str(e))
+            return {"ok": False, "cleared": False, "phone_tried": True,
+                    "state": "relogin",
+                    "message": "توکن API رد شد — دوباره کد پیامک بگیرید."}
+        except Exception as e:
+            con.execute(
+                "UPDATE leads SET phone_status='pending', last_error=? WHERE token=?",
+                (str(e)[:200], token))
+            con.commit()
+            return {"ok": False, "cleared": True, "phone_tried": True,
+                    "state": "error",
+                    "message": "آزاد شد ولی این آگهی خطا داد: %s" % e}
+        st = res.get("status")
+        if st == "error":
+            con.execute(
+                "UPDATE leads SET phone_status='pending', last_error=? WHERE token=?",
+                ((res.get("message") or "شماره گرفته نشد")[:200], token))
+            con.commit()
+            log_operation(con, token=token, account=name, operation="contact",
+                          result="error", error=res.get("message"),
+                          started_at=started)
+            return {"ok": True, "cleared": True, "phone_tried": True,
+                    "state": "clear",
+                    "message": "اکانت آزاد است. این آگهی شماره نداد و در صف ماند — دوباره بزنید."}
+        set_phone(con, token, res)
+        log_operation(con, token=token, account=name, operation="contact",
+                      result=st, phone=res.get("phone"),
+                      error=res.get("message"), started_at=started)
+        bump_quota(con, "phones")
+        mgr.record_use(db_path, name)
+        con.commit()
+        if st == "found":
+            msg = "کپچا رفع شد — شماره گرفته شد: %s" % (res.get("phone") or "")
+        elif st == "hidden":
+            msg = "کپچا رفع شد — این آگهی فقط چت است. شماره‌گیری ادامه می‌یابد."
+        else:
+            msg = "کپچا رفع شد — نتیجه: %s" % st
+        return {"ok": True, "cleared": True, "phone_tried": True, "state": "clear",
+                "status": st, "phone": res.get("phone") or "", "message": msg}
+    finally:
+        con.close()
+
+
 def next_probe_wait(captcha_age_sec: float) -> float:
     """بعد از پیام تلگرام زود چک کن (گوشی)؛ بعد هر ۱۲ دقیقه."""
     if captcha_age_sec < 20 * 60:
