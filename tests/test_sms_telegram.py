@@ -127,6 +127,8 @@ class TestTelegramCommands(unittest.TestCase):
     def test_bottom_buttons(self):
         self.assertIn("سقف IP", handle_command("📊 گزارش امروز", self.db, self.cfg))
         self.assertIn("09145822150", handle_command("سرنخ‌های امروز", self.db, self.cfg))
+        self.assertIn("09145822150", handle_command("📋 همه شماره‌ها", self.db, self.cfg))
+        self.assertIn("آلارم", handle_command("🚨 آلارم‌های مهم", self.db, self.cfg))
         out = handle_update("⬇️ خروجی اکسل", self.db, self.cfg)
         self.assertTrue(out["document"])
         self.assertIn("تاریخ‌ساعت استخراج شماره", out["document"].decode("utf-8-sig"))
@@ -146,6 +148,9 @@ class TestBaleRubika(unittest.TestCase):
         self.assertTrue(bale_configured(cfg))
         self.assertTrue(rubika_configured(cfg))
         self.assertFalse(bale_configured({"notify": {}}))
+        self.assertFalse(bale_configured({
+            "notify": {"bale_bot_token": "t", "bale_chat_id": "1",
+                       "bale_enabled": False}}))
 
     def test_send_official_urls(self):
         seen = []
@@ -155,7 +160,8 @@ class TestBaleRubika(unittest.TestCase):
             def json(self):
                 return {"ok": True, "status": "OK"}
 
-        def poster(url, json=None, timeout=12):
+        def poster(url, json=None, data=None, files=None, params=None,
+                   timeout=12, headers=None, proxies=None, **kw):
             seen.append((url, json))
             return R()
 
@@ -175,6 +181,35 @@ class TestBaleRubika(unittest.TestCase):
         urls = [u for u, _ in seen]
         self.assertTrue(any("tapi.bale.ai/botBT/sendMessage" in u for u in urls))
         self.assertTrue(any("botapi.rubika.ir/v3/RT/sendMessage" in u for u in urls))
+
+    def test_channel_probe_uses_getme(self):
+        seen = []
+
+        class R:
+            status_code = 200
+            def json(self):
+                return {"ok": True, "status": "OK", "result": {"username": "x"}}
+
+        def poster(url, json=None, data=None, files=None, params=None,
+                   timeout=12, headers=None, proxies=None):
+            seen.append(url)
+            return R()
+
+        import marketing_divar.notifier as n
+        old = n.requests
+        class Fake:
+            post = staticmethod(poster)
+        n.requests = Fake
+        try:
+            from marketing_divar.notifier import test_channel
+            cfg = {"notify": {"bale_bot_token": "BT", "bale_chat_id": "9",
+                              "bale_enabled": True}}
+            r = test_channel(cfg, "bale")
+            self.assertTrue(r["ok"], r)
+            self.assertTrue(any("tapi.bale.ai/botBT/getMe" in u for u in seen))
+            self.assertTrue(any("sendMessage" in u for u in seen))
+        finally:
+            n.requests = old
 
 
 if __name__ == "__main__":

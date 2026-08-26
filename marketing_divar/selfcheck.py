@@ -103,6 +103,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("Chromium profile buttons missing from panel")
     if "/api/accounts/captcha-cleared" not in html or "capCleared" not in html:
         raise FileNotFoundError("captcha-cleared button missing from panel")
+    if "/api/channels/test" not in html or "set-bale-on" not in html:
+        raise FileNotFoundError("channel enable/test buttons missing from panel")
+    if "divar.ir/user" not in html:
+        raise FileNotFoundError("login URL divar.ir/user missing from panel")
     cp = Path(__file__).parent / "chromium_profile.py"
     src = cp.read_text(encoding="utf-8")
     if "--user-data-dir=" not in src or "--profile-directory=Default" not in src:

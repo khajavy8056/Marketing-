@@ -3,7 +3,7 @@
 
 پنجره با خودِ chrome.exe اختصاصی باز می‌شود (نه Playwright thread، نه Edge).
 سشن تزریق نمی‌شود. user-data-dir همان accounts/<name>/chromium/ است.
-صفحهٔ اول همیشه https://divar.ir/s/tehran است.
+صفحهٔ اول همیشه https://divar.ir/user است (لاگین دیوار).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-HOME_URL = "https://divar.ir/s/tehran"
+HOME_URL = "https://divar.ir/user"
 META_NAME = "account.json"
 CHROMIUM_DIR = "chromium"
 

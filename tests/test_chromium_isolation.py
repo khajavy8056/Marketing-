@@ -127,7 +127,7 @@ class TestProfileIsolation(unittest.TestCase):
         self.assertNotIn("OTHER", blob)
 
     def test_home_url_is_tehran(self):
-        self.assertEqual(HOME_URL, "https://divar.ir/s/tehran")
+        self.assertEqual(HOME_URL, "https://divar.ir/user")
 
 
 if __name__ == "__main__":

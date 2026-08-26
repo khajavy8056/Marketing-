@@ -302,10 +302,13 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
                      "telegram_chat_id": s["telegram_chat_id"],
                      "telegram_api_base": s.get("telegram_api_base") or "",
                      "telegram_proxy": s.get("telegram_proxy") or "",
+                     "telegram_enabled": s.get("telegram_enabled", True),
                      "bale_bot_token": s.get("bale_bot_token") or "",
                      "bale_chat_id": s.get("bale_chat_id") or "",
+                     "bale_enabled": s.get("bale_enabled", True),
                      "rubika_bot_token": s.get("rubika_bot_token") or "",
-                     "rubika_chat_id": s.get("rubika_chat_id") or ""}
+                     "rubika_chat_id": s.get("rubika_chat_id") or "",
+                     "rubika_enabled": s.get("rubika_enabled", True)}
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "adaptive_until_captcha"):

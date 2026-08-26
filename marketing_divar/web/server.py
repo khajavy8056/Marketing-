@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.20")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.21")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -1031,6 +1031,39 @@ def sms_test(req: SmsTest):
     log("info" if r.get("ok") else "error",
         f"ملی‌پیامک: {r.get('message')}")
     return r
+
+
+class ChannelTest(BaseModel):
+    channel: str
+    token: str = ""
+    chat_id: str = ""
+    enabled: Optional[bool] = True
+
+
+@app.post("/api/channels/test")
+def channel_test(req: ChannelTest):
+    """ذخیره توکن/شناسه همان پلتفرم و ارسال پیام «ارتباط برقرار شد»."""
+    from ..notifier import channels_status, test_channel
+    ch = (req.channel or "").strip().lower()
+    key_map = {
+        "telegram": ("telegram_bot_token", "telegram_chat_id", "telegram_enabled"),
+        "bale": ("bale_bot_token", "bale_chat_id", "bale_enabled"),
+        "rubika": ("rubika_bot_token", "rubika_chat_id", "rubika_enabled"),
+    }
+    if ch not in key_map:
+        raise HTTPException(400, "پلتفرم باید telegram یا bale یا rubika باشد")
+    tok_k, chat_k, en_k = key_map[ch]
+    if req.token.strip():
+        store.settings_set(DB_PATH, tok_k, req.token.strip())
+    if req.chat_id.strip():
+        store.settings_set(DB_PATH, chat_k, req.chat_id.strip())
+    store.settings_set(DB_PATH, en_k, True if req.enabled is None else bool(req.enabled))
+    cfg = store.effective_config(DB_PATH, load_config())
+    res = test_channel(cfg, ch)
+    res["channels"] = channels_status(cfg)
+    log("success" if res.get("ok") else "warning",
+        f"تست {ch}: {res.get('message')}")
+    return res
 
 
 @app.post("/api/telegram/test")

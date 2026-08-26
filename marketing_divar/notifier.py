@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""اعلان‌ها — کنسول + اختیاری تلگرام (مثلاً برای کپچا/بلاک وقتی دور از سیستمید)."""
+"""اعلان‌ها — کنسول + اختیاری تلگرام / بله / روبیکا طبق API رسمی هر پلتفرم."""
 
 from __future__ import annotations
 
@@ -65,8 +65,16 @@ def telegram_proxy_tries(cfg: Optional[Dict[str, Any]]) -> List[Optional[Dict[st
     return [{"http": p, "https": p}, None]
 
 
+def _flag_on(n: Dict[str, Any], key: str) -> bool:
+    if key not in n:
+        return True
+    return bool(n.get(key))
+
+
 def telegram_configured(cfg: Optional[Dict[str, Any]]) -> bool:
     n = telegram_notify_cfg(cfg)
+    if not _flag_on(n, "telegram_enabled"):
+        return False
     token = n.get("telegram_bot_token") or ""
     chat = n.get("telegram_chat_id") or ""
     return bool(token and chat and ":" in str(token))
@@ -93,6 +101,14 @@ def telegram_request(cfg: Optional[Dict[str, Any]], method: str, *,
                 r = requests.post(url, json=json, data=data, files=files,
                                   params=params, timeout=timeout, proxies=proxies)
                 if r.status_code == 200:
+                    body: Any = {}
+                    try:
+                        body = r.json() or {}
+                    except Exception:
+                        body = {}
+                    if isinstance(body, dict) and body.get("ok") is False:
+                        last_err = f"تلگرام: {body.get('description') or body}"
+                        continue
                     _set_last(ok=True, configured=True, path=via,
                               message="تلگرام وصل شد")
                     return r
@@ -150,63 +166,72 @@ def _set_chan(store: Dict[str, Any], **kw: Any) -> None:
 
 def bale_configured(cfg: Optional[Dict[str, Any]]) -> bool:
     n = telegram_notify_cfg(cfg)
+    if not _flag_on(n, "bale_enabled"):
+        return False
     return bool((n.get("bale_bot_token") or "").strip()
                 and (n.get("bale_chat_id") or "").strip())
 
 
 def rubika_configured(cfg: Optional[Dict[str, Any]]) -> bool:
     n = telegram_notify_cfg(cfg)
+    if not _flag_on(n, "rubika_enabled"):
+        return False
     return bool((n.get("rubika_bot_token") or "").strip()
                 and (n.get("rubika_chat_id") or "").strip())
 
 
-def send_bale(cfg: Optional[Dict[str, Any]], text: str) -> bool:
-    """API رسمی بله: https://tapi.bale.ai/bot<token>/sendMessage"""
+def bale_request(cfg: Optional[Dict[str, Any]], method: str, *,
+                 json: Any = None, data: Any = None, files: Any = None,
+                 params: Any = None, timeout: float = 15) -> Any:
+    """API رسمی بله: https://tapi.bale.ai/bot<token>/METHOD_NAME"""
     if requests is None:
         _set_chan(_LAST_BALE, ok=False, configured=False, message="requests نیست")
-        return False
+        return None
     n = telegram_notify_cfg(cfg)
     token = (n.get("bale_bot_token") or "").strip()
-    chat = (n.get("bale_chat_id") or "").strip()
-    if not token or not chat:
-        _set_chan(_LAST_BALE, ok=False, configured=False,
-                  message="توکن یا Chat ID بله نیست")
-        return False
-    url = f"{BALE_API}/bot{token}/sendMessage"
+    if not token:
+        _set_chan(_LAST_BALE, ok=False, configured=False, message="توکن بله نیست")
+        return None
+    url = f"{BALE_API}/bot{token}/{method.lstrip('/')}"
     try:
-        r = requests.post(url, json={"chat_id": chat, "text": text}, timeout=12)
-        body = {}
+        r = requests.post(url, json=json, data=data, files=files,
+                          params=params, timeout=timeout)
+        body: Any = {}
         try:
             body = r.json() or {}
         except Exception:
             body = {}
-        if r.status_code == 200 and body.get("ok") is not False:
+        if r.status_code == 200 and (not isinstance(body, dict) or body.get("ok") is not False):
             _set_chan(_LAST_BALE, ok=True, configured=True, path=BALE_API,
                       message="بله وصل شد")
-            return True
+            return r
+        desc = ""
+        if isinstance(body, dict):
+            desc = str(body.get("description") or body)[:160]
         _set_chan(_LAST_BALE, ok=False, configured=True, path=BALE_API,
-                  message=f"بله HTTP {r.status_code}: {str(body)[:120]}")
+                  message=f"بله HTTP {r.status_code}: {desc}")
     except Exception as e:
         _set_chan(_LAST_BALE, ok=False, configured=True,
-                  message=f"{type(e).__name__}: {str(e)[:120]}")
-    return False
+                  message=f"{type(e).__name__}: {str(e)[:160]}")
+    return None
 
 
-def send_rubika(cfg: Optional[Dict[str, Any]], text: str) -> bool:
-    """API رسمی روبیکا: POST https://botapi.rubika.ir/v3/{token}/sendMessage"""
+def rubika_request(cfg: Optional[Dict[str, Any]], method: str, *,
+                   json: Any = None, timeout: float = 15) -> Any:
+    """API رسمی روبیکا: POST https://botapi.rubika.ir/v3/{token}/{method}"""
     if requests is None:
         _set_chan(_LAST_RUBIKA, ok=False, configured=False, message="requests نیست")
-        return False
+        return None
     n = telegram_notify_cfg(cfg)
     token = (n.get("rubika_bot_token") or "").strip()
-    chat = (n.get("rubika_chat_id") or "").strip()
-    if not token or not chat:
-        _set_chan(_LAST_RUBIKA, ok=False, configured=False,
-                  message="توکن یا Chat ID روبیکا نیست")
-        return False
-    url = f"{RUBIKA_API}/{token}/sendMessage"
+    if not token:
+        _set_chan(_LAST_RUBIKA, ok=False, configured=False, message="توکن روبیکا نیست")
+        return None
+    url = f"{RUBIKA_API}/{token}/{method.lstrip('/')}"
     try:
-        r = requests.post(url, json={"chat_id": chat, "text": text}, timeout=12)
+        r = requests.post(url, json=json if json is not None else {},
+                          headers={"Content-Type": "application/json"},
+                          timeout=timeout)
         body: Any = {}
         try:
             body = r.json() or {}
@@ -214,39 +239,125 @@ def send_rubika(cfg: Optional[Dict[str, Any]], text: str) -> bool:
             body = {}
         status = ""
         if isinstance(body, dict):
-            status = str(body.get("status") or body.get("ok") or "")
+            status = str(body.get("status") or "")
         if r.status_code == 200 and str(status).upper() not in ("ERROR", "FAIL", "FALSE"):
             _set_chan(_LAST_RUBIKA, ok=True, configured=True, path=RUBIKA_API,
                       message="روبیکا وصل شد")
-            return True
+            return r
         _set_chan(_LAST_RUBIKA, ok=False, configured=True, path=RUBIKA_API,
-                  message=f"روبیکا HTTP {r.status_code}: {str(body)[:120]}")
+                  message=f"روبیکا HTTP {r.status_code}: {str(body)[:160]}")
     except Exception as e:
         _set_chan(_LAST_RUBIKA, ok=False, configured=True,
-                  message=f"{type(e).__name__}: {str(e)[:120]}")
-    return False
+                  message=f"{type(e).__name__}: {str(e)[:160]}")
+    return None
+
+
+def send_bale(cfg: Optional[Dict[str, Any]], text: str,
+              extra: Optional[Dict[str, Any]] = None) -> bool:
+    """API رسمی بله: https://tapi.bale.ai/bot<token>/sendMessage"""
+    n = telegram_notify_cfg(cfg)
+    chat = (n.get("bale_chat_id") or "").strip()
+    if not bale_configured(cfg):
+        _set_chan(_LAST_BALE, ok=False, configured=False,
+                  message="توکن یا Chat ID بله نیست یا تیک استفاده خاموش است")
+        return False
+    payload: Dict[str, Any] = {"chat_id": chat, "text": text}
+    if extra:
+        payload.update(extra)
+    return bale_request(cfg, "sendMessage", json=payload, timeout=12) is not None
+
+
+def send_rubika(cfg: Optional[Dict[str, Any]], text: str,
+                extra: Optional[Dict[str, Any]] = None) -> bool:
+    """API رسمی روبیکا: POST https://botapi.rubika.ir/v3/{token}/sendMessage"""
+    n = telegram_notify_cfg(cfg)
+    chat = (n.get("rubika_chat_id") or "").strip()
+    if not rubika_configured(cfg):
+        _set_chan(_LAST_RUBIKA, ok=False, configured=False,
+                  message="توکن یا Chat ID روبیکا نیست یا تیک استفاده خاموش است")
+        return False
+    payload: Dict[str, Any] = {"chat_id": chat, "text": text}
+    if extra:
+        payload.update(extra)
+    return rubika_request(cfg, "sendMessage", json=payload, timeout=12) is not None
+
+
+def test_channel(cfg: Optional[Dict[str, Any]], channel: str) -> Dict[str, Any]:
+    """getMe + پیام «ارتباط برقرار شد» طبق مستندات همان پلتفرم."""
+    from .telegram_bot import REPLY_KEYBOARD, RUBIKA_CHAT_KEYPAD
+    ch = (channel or "").strip().lower()
+    hello = ("ارتباط با مارکتینگ دیوار برقرار شد.\n"
+             "دکمه‌های پایین ربات: گزارش امروز، همه شماره‌ها، "
+             "آلارم مهم، خروجی اکسل.")
+    if ch == "telegram":
+        n = telegram_notify_cfg(cfg)
+        if not (n.get("telegram_bot_token") or "").strip():
+            return {"ok": False, "channel": ch, "message": "توکن تلگرام را بگذارید"}
+        r = telegram_request(cfg, "getMe", timeout=12)
+        if r is None:
+            return {"ok": False, "channel": ch, **telegram_last(),
+                    "message": telegram_last().get("message") or "تلگرام پاسخ نداد"}
+        if not (n.get("telegram_chat_id") or "").strip():
+            return {"ok": False, "channel": ch,
+                    "message": "توکن معتبر است — شناسه گفتگو (Chat ID) را بگذارید"}
+        ok = send_telegram(cfg, hello, extra={"reply_markup": REPLY_KEYBOARD})
+        return {"ok": ok, "channel": ch, **telegram_last(),
+                "message": "ارتباط با تلگرام برقرار شد — پیام آزمایشی فرستاده شد"
+                if ok else (telegram_last().get("message") or "ارسال نشد")}
+    if ch == "bale":
+        n = telegram_notify_cfg(cfg)
+        if not (n.get("bale_bot_token") or "").strip():
+            return {"ok": False, "channel": ch, "message": "توکن بله را بگذارید"}
+        r = bale_request(cfg, "getMe", timeout=12)
+        if r is None:
+            return {"ok": False, "channel": ch, **bale_last(),
+                    "message": bale_last().get("message") or "بله پاسخ نداد"}
+        if not (n.get("bale_chat_id") or "").strip():
+            return {"ok": False, "channel": ch,
+                    "message": "توکن معتبر است — شناسه گفتگو بله را بگذارید"}
+        ok = send_bale(cfg, hello, extra={"reply_markup": REPLY_KEYBOARD})
+        return {"ok": ok, "channel": ch, **bale_last(),
+                "message": "ارتباط با بله برقرار شد — پیام آزمایشی فرستاده شد"
+                if ok else (bale_last().get("message") or "ارسال نشد")}
+    if ch == "rubika":
+        n = telegram_notify_cfg(cfg)
+        if not (n.get("rubika_bot_token") or "").strip():
+            return {"ok": False, "channel": ch, "message": "توکن روبیکا را بگذارید"}
+        r = rubika_request(cfg, "getMe", json={}, timeout=12)
+        if r is None:
+            return {"ok": False, "channel": ch, **rubika_last(),
+                    "message": rubika_last().get("message") or "روبیکا پاسخ نداد"}
+        if not (n.get("rubika_chat_id") or "").strip():
+            return {"ok": False, "channel": ch,
+                    "message": "توکن معتبر است — شناسه گفتگو روبیکا را بگذارید"}
+        ok = send_rubika(cfg, hello, extra={
+            "chat_keypad_type": "New", "chat_keypad": RUBIKA_CHAT_KEYPAD})
+        return {"ok": ok, "channel": ch, **rubika_last(),
+                "message": "ارتباط با روبیکا برقرار شد — پیام آزمایشی فرستاده شد"
+                if ok else (rubika_last().get("message") or "ارسال نشد")}
+    return {"ok": False, "channel": ch, "message": "پلتفرم ناشناخته"}
 
 
 def channels_status(cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     tg = telegram_last()
     tg["configured"] = telegram_configured(cfg)
     if not tg["configured"]:
-        tg["message"] = "توکن/Chat ID تلگرام ذخیره نشده"
+        tg["message"] = "توکن/Chat ID تلگرام ذخیره نشده یا تیک استفاده خاموش است"
     bl = bale_last()
     bl["configured"] = bale_configured(cfg)
     if not bl["configured"]:
-        bl["message"] = "توکن/Chat ID بله ذخیره نشده"
+        bl["message"] = "توکن/Chat ID بله ذخیره نشده یا تیک استفاده خاموش است"
     rb = rubika_last()
     rb["configured"] = rubika_configured(cfg)
     if not rb["configured"]:
-        rb["message"] = "توکن/Chat ID روبیکا ذخیره نشده"
+        rb["message"] = "توکن/Chat ID روبیکا ذخیره نشده یا تیک استفاده خاموش است"
     return {"telegram": tg, "bale": bl, "rubika": rb}
 
 
 def notify(cfg: Dict[str, Any], message: str, important: bool = True,
            account: str = "", problem: str = "", operation: str = "",
            action: str = "") -> None:
-    """پیام مهم را به تلگرام + بله + روبیکا (هر کدام که وصل باشد) می‌فرستد."""
+    """پیام مهم را به تلگرام + بله + روبیکا (هر کدام که تیک و وصل باشد) می‌فرستد."""
     prefix = "🚨" if important else "ℹ️"
     text = format_alert(message, account=account, problem=problem,
                         operation=operation, action=action)

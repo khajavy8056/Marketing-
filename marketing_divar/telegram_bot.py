@@ -23,9 +23,29 @@ _thread: Optional[threading.Thread] = None
 REPLY_KEYBOARD = {
     "keyboard": [
         [{"text": "📊 گزارش امروز"}, {"text": "📞 سرنخ‌های امروز"}],
+        [{"text": "📋 همه شماره‌ها"}, {"text": "🚨 آلارم‌های مهم"}],
         [{"text": "⬇️ خروجی اکسل"}, {"text": "ℹ️ راهنما"}],
     ],
     "resize_keyboard": True,
+}
+
+RUBIKA_CHAT_KEYPAD = {
+    "rows": [
+        {"buttons": [
+            {"id": "status", "type": "Simple", "button_text": "📊 گزارش امروز"},
+            {"id": "leads", "type": "Simple", "button_text": "📞 سرنخ‌های امروز"},
+        ]},
+        {"buttons": [
+            {"id": "all", "type": "Simple", "button_text": "📋 همه شماره‌ها"},
+            {"id": "alerts", "type": "Simple", "button_text": "🚨 آلارم‌های مهم"},
+        ]},
+        {"buttons": [
+            {"id": "export", "type": "Simple", "button_text": "⬇️ خروجی اکسل"},
+            {"id": "help", "type": "Simple", "button_text": "ℹ️ راهنما"},
+        ]},
+    ],
+    "resize_keyboard": True,
+    "one_time_keyboard": False,
 }
 
 _ALIASES = {
@@ -35,8 +55,14 @@ _ALIASES = {
     "گزارش": "status", "گزارش امروز": "status", "📊 گزارش امروز": "status",
     "/leads": "leads", "سرنخ‌ها": "leads", "سرنخ‌های امروز": "leads",
     "📞 سرنخ‌های امروز": "leads",
+    "/all": "all", "همه شماره‌ها": "all", "📋 همه شماره‌ها": "all",
+    "همه شماره‌ها را بفرست": "all",
+    "/alerts": "alerts", "آلارم": "alerts", "آلارم‌های مهم": "alerts",
+    "🚨 آلارم‌های مهم": "alerts",
     "/export": "export", "اکسل": "export", "خروجی اکسل": "export",
     "⬇️ خروجی اکسل": "export",
+    "status": "status", "leads": "leads", "all": "all",
+    "alerts": "alerts", "export": "export", "help": "help",
 }
 
 
@@ -83,6 +109,45 @@ def build_status_text(db_path: str, cfg: Dict[str, Any],
             lines.append(f"اکانت {a['name']}: {a['status']} (امروز {a['phones_today']})")
     except Exception:
         pass
+    return "\n".join(lines)
+
+
+def build_all_phones_text(db_path: str) -> str:
+    from .db import connect
+    con = connect(db_path)
+    try:
+        rows = con.execute(
+            "SELECT title, phone, phone_checked_at, first_seen_at FROM leads "
+            "WHERE phone_status='found' AND phone IS NOT NULL AND phone!='' "
+            "ORDER BY id DESC LIMIT 40").fetchall()
+        n = con.execute(
+            "SELECT COUNT(*) c FROM leads WHERE phone_status='found' "
+            "AND phone IS NOT NULL AND phone!=''").fetchone()["c"]
+    finally:
+        con.close()
+    if not rows:
+        return "هنوز شمارهٔ استخراج‌شده‌ای نیست"
+    lines = [f"همه شماره‌ها ({n} مورد — تا ۴۰ تای آخر):"]
+    for r in rows:
+        when = r["phone_checked_at"] or r["first_seen_at"] or "—"
+        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]}\n  {when}")
+    return "\n".join(lines)
+
+
+def build_alerts_text(db_path: str, cfg: Dict[str, Any]) -> str:
+    from .accounts import AccountManager
+    lines = ["آلارم‌های مهم"]
+    try:
+        accs = AccountManager(cfg).snapshot(db_path)
+    except Exception:
+        accs = []
+    hot = [a for a in accs if a.get("status") in ("captcha", "relogin")]
+    if not hot:
+        lines.append("الان اکانت منتظر واکنش نیست.")
+    for a in hot:
+        lines.append(f"• {a.get('name')}: {a.get('status')} — {a.get('note') or ''}")
+        if a.get("last_ad_url"):
+            lines.append(f"  {a['last_ad_url']}")
     return "\n".join(lines)
 
 
@@ -144,12 +209,18 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
                 "/status گزارش امروز\n"
                 "/today همان گزارش\n"
                 "/leads سرنخ‌های شماره‌دار امروز\n"
+                "/all همه شماره‌ها\n"
+                "/alerts آلارم‌های مهم (کپچا / لاگین)\n"
                 "/export خروجی اکسل با تاریخ و ساعت استخراج\n"
                 "/release نام‌اکانت  آزادسازی بعد از حل کپچا")
     if mapped == "status":
         return build_status_text(db_path, cfg, running=running, tick=tick)
     if mapped == "leads":
         return build_leads_text(db_path)
+    if mapped == "all":
+        return build_all_phones_text(db_path)
+    if mapped == "alerts":
+        return build_alerts_text(db_path, cfg)
     if mapped == "export":
         _data, name, n = export_excel_bytes(db_path)
         return f"خروجی اکسل آماده است ({n} ردیف) — {name}"
@@ -238,47 +309,151 @@ def _send_doc(cfg: Dict[str, Any], chat_id: str, data: bytes,
                      timeout=30)
 
 
+def _dispatch(cfg: Dict[str, Any], db_path: str, text: str,
+              state_fn: Optional[Callable[[], Dict[str, Any]]],
+              send_text, send_doc) -> None:
+    st = state_fn() if state_fn else {}
+    out = handle_update(text or "", db_path, cfg,
+                        running=bool(st.get("running")),
+                        tick=int(st.get("tick") or 0))
+    if out.get("document"):
+        send_doc(out["document"], out["filename"], out.get("text") or "خروجی اکسل")
+    else:
+        send_text(out.get("text") or "")
+
+
+def _poll_telegram_like(cfg: Dict[str, Any], db_path: str,
+                        state_fn, offset: int, kind: str) -> int:
+    from .notifier import bale_request, send_bale, telegram_request
+    n = cfg.get("notify") or {}
+    if kind == "telegram":
+        allow = str(n.get("telegram_chat_id") or "")
+        r = telegram_request(cfg, "getUpdates",
+                             params={"timeout": 12, "offset": offset},
+                             timeout=20)
+    else:
+        allow = str(n.get("bale_chat_id") or "")
+        r = bale_request(cfg, "getUpdates",
+                         json={"timeout": 8, "offset": offset, "limit": 50},
+                         timeout=16)
+    if r is None:
+        return offset
+    try:
+        data = r.json() if r.status_code == 200 else {}
+    except Exception:
+        return offset
+    for upd in data.get("result") or []:
+        try:
+            offset = max(offset, int(upd.get("update_id", 0)) + 1)
+        except Exception:
+            continue
+        msg = upd.get("message") or {}
+        chat = str((msg.get("chat") or {}).get("id") or "")
+        if allow and chat != allow:
+            continue
+        text = msg.get("text") or ""
+        dest = chat or allow
+        if kind == "telegram":
+            def stxt(t, _chat=dest):
+                _send_text(cfg, _chat, t)
+
+            def sdoc(blob, name, cap, _chat=dest):
+                _send_doc(cfg, _chat, blob, name, cap)
+        else:
+            def stxt(t):
+                send_bale(cfg, t, extra={"reply_markup": REPLY_KEYBOARD})
+
+            def sdoc(blob, name, cap, _chat=dest):
+                bale_request(cfg, "sendDocument",
+                             data={"chat_id": _chat, "caption": cap},
+                             files={"document": (name, blob, "text/csv")},
+                             timeout=30)
+        try:
+            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc)
+        except Exception:
+            pass
+    return offset
+
+
+def _poll_rubika(cfg: Dict[str, Any], db_path: str, state_fn,
+                 offset_id: str) -> str:
+    from .notifier import rubika_request, send_rubika
+    payload: Dict[str, Any] = {"limit": 50}
+    if offset_id:
+        payload["offset_id"] = offset_id
+    r = rubika_request(cfg, "getUpdates", json=payload, timeout=16)
+    if r is None:
+        return offset_id
+    try:
+        body = r.json() or {}
+    except Exception:
+        return offset_id
+    data = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(data, dict):
+        data = body if isinstance(body, dict) else {}
+    nxt = str(data.get("next_offset_id") or offset_id or "")
+    updates = data.get("updates") or body.get("updates") or []
+    allow = str((cfg.get("notify") or {}).get("rubika_chat_id") or "")
+    for upd in updates:
+        if not isinstance(upd, dict):
+            continue
+        inner = upd.get("update") if isinstance(upd.get("update"), dict) else upd
+        chat = str(inner.get("chat_id") or "")
+        msg = inner.get("new_message") or inner.get("message") or {}
+        if not isinstance(msg, dict):
+            msg = {}
+        text = str(msg.get("text") or "")
+        aux = msg.get("aux_data") or inner.get("aux_data") or {}
+        if isinstance(aux, dict) and aux.get("button_id"):
+            text = str(aux.get("button_id"))
+        if allow and chat and chat != allow:
+            continue
+
+        def stxt(t):
+            send_rubika(cfg, t, extra={
+                "chat_keypad_type": "New", "chat_keypad": RUBIKA_CHAT_KEYPAD})
+
+        def sdoc(_blob, _name, cap):
+            send_rubika(cfg, cap or "خروجی اکسل آماده است — از پنل دانلود کنید")
+
+        try:
+            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc)
+        except Exception:
+            pass
+    return nxt or offset_id
+
+
 def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
                state_fn: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
-    offset = 0
+    tg_off = 0
+    bale_off = 0
+    rub_off = ""
     while not _stop.is_set():
         cfg = cfg_fn() or {}
-        notify = cfg.get("notify") or {}
-        token = notify.get("telegram_bot_token") or ""
-        allow = str(notify.get("telegram_chat_id") or "")
-        if not token or not allow or requests is None:
-            _stop.wait(8)
-            continue
+        n = cfg.get("notify") or {}
+        did = False
         try:
-            from .notifier import telegram_request
-            r = telegram_request(cfg, "getUpdates",
-                                 params={"timeout": 20, "offset": offset},
-                                 timeout=30)
-            data = r.json() if r is not None and r.status_code == 200 else {}
+            from .notifier import (bale_configured, rubika_configured,
+                                   telegram_configured)
+            if telegram_configured(cfg) or (
+                    n.get("telegram_enabled", True)
+                    and n.get("telegram_bot_token") and n.get("telegram_chat_id")):
+                tg_off = _poll_telegram_like(cfg, db_path, state_fn, tg_off, "telegram")
+                did = True
+            if bale_configured(cfg) or (
+                    n.get("bale_enabled", True)
+                    and n.get("bale_bot_token") and n.get("bale_chat_id")):
+                bale_off = _poll_telegram_like(cfg, db_path, state_fn, bale_off, "bale")
+                did = True
+            if rubika_configured(cfg) or (
+                    n.get("rubika_enabled", True)
+                    and n.get("rubika_bot_token") and n.get("rubika_chat_id")):
+                rub_off = _poll_rubika(cfg, db_path, state_fn, rub_off)
+                did = True
         except Exception:
-            _stop.wait(6)
-            continue
-        if r is None:
+            pass
+        if not did:
             _stop.wait(8)
-            continue
-        for upd in data.get("result") or []:
-            offset = max(offset, int(upd.get("update_id", 0)) + 1)
-            msg = upd.get("message") or {}
-            chat = str((msg.get("chat") or {}).get("id") or "")
-            if chat != allow:
-                continue
-            st = state_fn() if state_fn else {}
-            out = handle_update(msg.get("text") or "", db_path, cfg,
-                                running=bool(st.get("running")),
-                                tick=int(st.get("tick") or 0))
-            try:
-                if out.get("document"):
-                    _send_doc(cfg, allow, out["document"], out["filename"],
-                              out.get("text") or "خروجی اکسل")
-                else:
-                    _send_text(cfg, allow, out.get("text") or "")
-            except Exception:
-                pass
 
 
 def start_bot(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,

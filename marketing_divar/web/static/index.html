@@ -201,7 +201,7 @@
     <div class="warn-box">برای هر اکانت یک <b>پروفایل جدا</b> ساخته می‌شود
       (<code dir="ltr">accounts/نام/chromium</code>). برنامه Chromium اختصاصی خودش را
       باز می‌کند (نه Chrome/Edge شما) روی
-      <b dir="ltr">divar.ir/s/tehran</b>. شما همان‌جا لاگین می‌کنید، بعد
+      <b dir="ltr">divar.ir/user</b>. شما همان‌جا لاگین می‌کنید، بعد
       <b>ذخیره پروفایل</b> را می‌زنید — پنجره بسته می‌شود و لاگین می‌ماند.
       کوکی تزریق نمی‌شود.</div>
     <div id="chromium-box" class="warn-box" style="display:none">
@@ -221,7 +221,7 @@
         <div class="lbl">شماره موبایل (اختیاری — برای توکن API شماره‌گیری)</div>
         <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11">
         <div class="row" style="margin-top:12px">
-          <button class="btn ok" onclick="createProfile()">افزودن پروفایل + باز کردن تهران</button>
+          <button class="btn ok" onclick="createProfile()">افزودن پروفایل + باز کردن صفحه لاگین</button>
         </div>
         <div class="hint" id="otp-hint" style="margin-top:10px">بعد از لاگین در Chromium، روی کارت «ذخیره پروفایل» را بزنید.</div>
       </div>
@@ -359,6 +359,10 @@
     </div>
     <div class="card">
       <h3>📢 اتصال تلگرام (اعلان‌ها)</h3>
+      <div class="checkline">
+        <input type="checkbox" id="set-tg-on" checked>
+        <label for="set-tg-on"><b>از این پلتفرم استفاده شود</b></label>
+      </div>
       <div class="lbl">توکن ربات — از <b>@BotFather</b> بگیرید</div>
       <input id="set-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
       <div class="lbl">شناسه گفتگو (Chat ID)</div>
@@ -367,37 +371,50 @@
       <input id="set-tg-base" dir="ltr" placeholder="خالی = https://api.telegram.org">
       <div class="lbl">پروکسی تلگرام (اختیاری)</div>
       <input id="set-tg-proxy" dir="ltr" placeholder="http://127.0.0.1:1080 یا socks5://...">
-      <div class="hint">در ایران <b>api.telegram.org</b> اغلب فیلتر است. اگر ربات پیام نداد:
-        ۱) پروکسی محلی بگذارید ۲) یا آدرس Bot API خودتان (مثلاً local Bot API).
-        <b>بدون تلگرام برنامه کامل کار می‌کند</b> — سرنخ و شماره‌گیری در همین پنل می‌مانند.</div>
+      <div class="hint">API رسمی: <code dir="ltr">https://api.telegram.org/botTOKEN/sendMessage</code>
+        در ایران اغلب فیلتر است — پروکسی یا آدرس سفارشی بگذارید.
+        بعد از گذاشتن شناسه، دکمهٔ زیر را بزنید تا پیام «ارتباط برقرار شد» بیاید.</div>
       <div class="hint" id="tg-status">وضعیت تلگرام: هنوز آزمایش نشده</div>
       <div class="row" style="margin-top:10px">
-        <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش آزمایشی</button>
+        <button class="btn sm ok" type="button" onclick="chanTest('telegram')">بررسی اتصال تلگرام</button>
+        <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش به همهٔ کانال‌های تیک‌خورده</button>
       </div>
     </div>
     <div class="card">
-      <h3>💬 بله (جایگزین تلگرام فیلترشده)</h3>
-      <div class="hint">API رسمی بله مثل تلگرام است.
-        در پیام‌رسان <b>بله</b> به <b dir="ltr">@botfather</b> بروید → ساخت بازوی جدید →
-        توکن شبیه <code dir="ltr">123456:abcd…</code> را اینجا بگذارید.
-        بازو را استارت کنید، یک پیام بفرستید؛ <b>Chat ID</b> همان گفتگو است.</div>
+      <h3>💬 بله (API رسمی tapi.bale.ai)</h3>
+      <div class="checkline">
+        <input type="checkbox" id="set-bale-on" checked>
+        <label for="set-bale-on"><b>از این پلتفرم استفاده شود</b></label>
+      </div>
+      <div class="hint">طبق مستندات بله: در <b>بله</b> به <b dir="ltr">@botfather</b> بروید،
+        بازو بسازید، توکن را بگذارید، بازو را استارت کنید و شناسه گفتگو را وارد کنید.
+        درخواست‌ها به <code dir="ltr">https://tapi.bale.ai/botTOKEN/METHOD</code> می‌روند.</div>
       <div class="lbl">توکن بازوی بله</div>
       <input id="set-bale-token" dir="ltr" placeholder="123456:abcd…">
-      <div class="lbl">Chat ID بله</div>
+      <div class="lbl">شناسه گفتگو بله</div>
       <input id="set-bale-chat" dir="ltr" placeholder="مثلاً 123456789">
       <div class="hint" id="bale-status">وضعیت بله: هنوز ذخیره نشده</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm ok" type="button" onclick="chanTest('bale')">بررسی اتصال بله</button>
+      </div>
     </div>
     <div class="card">
-      <h3>🟣 روبیکا (جایگزین رسمی)</h3>
-      <div class="hint">روبیکا از ۱۴۰۴ API رسمی بات دارد.
-        در روبیکا به <b dir="ltr">@BotFather</b> بروید → ساخت بات → توکن را کپی کنید.
-        Chat ID گفتگوی خودتان با بات را بگذارید.
-        ارسال: <code dir="ltr">https://botapi.rubika.ir/v3/TOKEN/sendMessage</code></div>
+      <h3>🟣 روبیکا (API رسمی botapi.rubika.ir)</h3>
+      <div class="checkline">
+        <input type="checkbox" id="set-rubika-on" checked>
+        <label for="set-rubika-on"><b>از این پلتفرم استفاده شود</b></label>
+      </div>
+      <div class="hint">طبق مستندات روبیکا: در روبیکا <b dir="ltr">@BotFather</b> → ساخت بات.
+        ارسال: <code dir="ltr">POST https://botapi.rubika.ir/v3/TOKEN/sendMessage</code>
+        دکمه‌های پایین ربات با <code>chat_keypad</code> رسمی می‌آیند.</div>
       <div class="lbl">توکن بات روبیکا</div>
       <input id="set-rubika-token" dir="ltr" placeholder="توکن BotFather روبیکا">
-      <div class="lbl">Chat ID روبیکا</div>
+      <div class="lbl">شناسه گفتگو روبیکا</div>
       <input id="set-rubika-chat" dir="ltr" placeholder="شناسه گفتگو">
       <div class="hint" id="rubika-status">وضعیت روبیکا: هنوز ذخیره نشده</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm ok" type="button" onclick="chanTest('rubika')">بررسی اتصال روبیکا</button>
+      </div>
     </div>
     <div class="card">
       <h3>🛡️ پارامترهای ضد بلاک و سهمیه IP</h3>
@@ -1069,10 +1086,13 @@ async function settingsLoad(){
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
+    if($('set-tg-on')) $('set-tg-on').checked = s.telegram_enabled!==false;
     if($('set-bale-token')) $('set-bale-token').value = s.bale_bot_token||'';
     if($('set-bale-chat')) $('set-bale-chat').value = s.bale_chat_id||'';
+    if($('set-bale-on')) $('set-bale-on').checked = s.bale_enabled!==false;
     if($('set-rubika-token')) $('set-rubika-token').value = s.rubika_bot_token||'';
     if($('set-rubika-chat')) $('set-rubika-chat').value = s.rubika_chat_id||'';
+    if($('set-rubika-on')) $('set-rubika-on').checked = s.rubika_enabled!==false;
   }catch(e){}
 }
 async function settingsSave(){
@@ -1096,10 +1116,13 @@ async function settingsSave(){
     sms_daily_limit:parseInt($('set-sms-limit').value)||40,
     sms_auto_on_new:!!$('set-sms-auto').checked,
     vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
+    telegram_enabled:!$('set-tg-on') || !!$('set-tg-on').checked,
     bale_bot_token:$('set-bale-token')?$('set-bale-token').value.trim():'',
     bale_chat_id:$('set-bale-chat')?$('set-bale-chat').value.trim():'',
+    bale_enabled:!$('set-bale-on') || !!$('set-bale-on').checked,
     rubika_bot_token:$('set-rubika-token')?$('set-rubika-token').value.trim():'',
     rubika_chat_id:$('set-rubika-chat')?$('set-rubika-chat').value.trim():'',
+    rubika_enabled:!$('set-rubika-on') || !!$('set-rubika-on').checked,
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
 }
@@ -1181,6 +1204,29 @@ function watchPanelAlerts(s){
   if (cap && cap !== _seenCap)
     pushNote('help', 'اکانت نیاز به واکنش', 'پازل/آزادسازی: '+cap);
   _seenPhones = phones; _seenVip = vip; _seenCap = cap;
+}
+async function chanTest(channel){
+  const map = {
+    telegram: {token:'set-tg-token', chat:'set-tg-chat', on:'set-tg-on'},
+    bale: {token:'set-bale-token', chat:'set-bale-chat', on:'set-bale-on'},
+    rubika: {token:'set-rubika-token', chat:'set-rubika-chat', on:'set-rubika-on'},
+  };
+  const m = map[channel]; if(!m) return;
+  const onEl = $(m.on);
+  if (onEl && !onEl.checked){
+    toast('اول تیک «از این پلتفرم استفاده شود» را بزنید', false);
+    return;
+  }
+  try{
+    const r = await api('/api/channels/test',{method:'POST', body: JSON.stringify({
+      channel,
+      token: ($(m.token)||{}).value||'',
+      chat_id: ($(m.chat)||{}).value||'',
+      enabled: true,
+    })});
+    if (r.channels) showChanStatus(r.channels);
+    toast(r.message||'انجام شد', !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 async function tgTest(){
   try{
