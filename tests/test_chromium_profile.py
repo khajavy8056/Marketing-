@@ -92,6 +92,51 @@ class TestCreateOpenMocked(unittest.TestCase):
         self.assertTrue((Path(d) / "ali-tehran-02" / "chromium").is_dir())
         self.assertEqual(load_meta(d, "ali-tehran-02").get("phone"), "09120000000")
 
+    def test_open_prepares_named_profile_and_user_data_dir(self):
+        from marketing_divar import chromium_profile as cp
+        d = tempfile.mkdtemp()
+        cmds = []
+
+        class Proc:
+            pid = 9
+            def poll(self):
+                return None
+
+        def popen(cmd, **kw):
+            cmds.append(cmd)
+            return Proc()
+
+        with mock.patch.object(cp.subprocess, "Popen", side_effect=popen), \
+             mock.patch.object(cp, "_cdp_alive", return_value=True), \
+             mock.patch("marketing_divar.app_chromium.is_ready", return_value=True), \
+             mock.patch("marketing_divar.app_chromium.ensure_installed"), \
+             mock.patch("marketing_divar.app_chromium.apply_browser_env"), \
+             mock.patch("marketing_divar.app_chromium.executable_path",
+                        return_value="/opt/app/chrome"):
+            res = cp.open_profile(d, "acc1", HOME_URL)
+        self.assertTrue(res["ok"])
+        cmd = cmds[0]
+        joined = " ".join(cmd)
+        self.assertIn("--user-data-dir=", joined)
+        self.assertIn("--profile-directory=Default", cmd)
+        self.assertNotIn("--new-window", cmd)
+        udd = [x.split("=", 1)[1] for x in cmd if x.startswith("--user-data-dir=")][0]
+        self.assertTrue(os.path.isabs(udd))
+        self.assertIn("acc1", udd.replace("\\", "/"))
+        prefs = Path(d) / "acc1" / "chromium" / "Default" / "Preferences"
+        self.assertTrue(prefs.exists())
+        data = json.loads(prefs.read_text(encoding="utf-8"))
+        self.assertEqual(data["profile"]["name"], "acc1")
+
+    def test_persian_name_uses_ascii_user_data_dir(self):
+        from marketing_divar import chromium_profile as cp
+        d = tempfile.mkdtemp()
+        p = cp.chromium_dir(d, "محمد تهران 01")
+        self.assertTrue(all(ord(c) < 128 for c in p.name))
+        self.assertIn("chromium-profiles", str(p).replace("\\", "/"))
+        logical = Path(d) / "محمد-تهران-01" / "chromium"
+        self.assertNotEqual(p.resolve(), logical)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -244,7 +244,8 @@ def open_in_app_chromium(url: str, profile_dir: Optional[Path] = None,
     prof.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(exe),
-        "--user-data-dir=" + str(prof),
+        "--user-data-dir=" + str(prof.resolve()),
+        "--profile-directory=Default",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-sync",

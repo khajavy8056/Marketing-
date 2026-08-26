@@ -758,7 +758,7 @@ async function accRefresh(){
           <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره پروفایل')}
             ${a.phones_today?(' · شماره‌های امروز: '+a.phones_today):''}</div>
         </div><div class="row">
-          ${ready?'':`<button class="btn sm ok" type="button" onclick="saveProfile('${a.name}')">💾 ذخیره پروفایل</button>`}
+          <button class="btn sm ok" type="button" onclick="saveProfile('${a.name}')">💾 ذخیره پروفایل</button>
           <button class="btn sm" type="button" onclick="openDivar('${a.name}')">🌐 باز کردن دیوار</button>
           <button class="btn sm gray" type="button" onclick="updateProfile('${a.name}')">🔄 به‌روزرسانی Session</button>
           ${ready?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>`:''}

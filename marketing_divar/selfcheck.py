@@ -101,6 +101,14 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("logged-in puzzle window missing from panel")
     if "createProfile" not in html or "/api/accounts/profile/create" not in html:
         raise FileNotFoundError("Chromium profile buttons missing from panel")
+    cp = Path(__file__).parent / "chromium_profile.py"
+    src = cp.read_text(encoding="utf-8")
+    if "--user-data-dir=" not in src or "--profile-directory=Default" not in src:
+        raise FileNotFoundError("account Chromium must bind a named user-data-dir")
+    if "--new-window" in src:
+        raise FileNotFoundError("account launch must not use --new-window (steals panel profile)")
+    if "_prepare_profile" not in src:
+        raise FileNotFoundError("Chromium profile must be created before the window opens")
     logo = Path(__file__).parent / "web" / "static" / "logo.png"
     if not logo.exists() or logo.stat().st_size < 1000:
         raise FileNotFoundError("app logo missing")

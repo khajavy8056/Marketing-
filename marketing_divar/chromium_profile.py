@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -27,6 +29,7 @@ _LOCK = threading.Lock()
 _LOGIN_COOKIE_HINTS = (
     "sRefreshToken", "sAccessToken", "sFrontToken",
     "st-refresh-token", "st-access-token", "front-token",
+    "token",
 )
 
 
@@ -53,6 +56,17 @@ def account_dir(accounts_dir: str, name: str) -> Path:
 
 
 def chromium_dir(accounts_dir: str, name: str) -> Path:
+    """Folder Chromium launches with.
+
+    Windows Chromium drops --user-data-dir when the path has non-ASCII
+    letters, so Persian account names keep meta in accounts/<name>/ and
+    the browser profile uses an ASCII sibling folder.
+    """
+    name = safe_name(name)
+    if any(ord(c) > 127 for c in name):
+        h = hashlib.sha1(name.encode("utf-8")).hexdigest()[:12]
+        root = Path(accounts_dir).resolve()
+        return root.parent / "chromium-profiles" / ("p" + h)
     return account_dir(accounts_dir, name) / CHROMIUM_DIR
 
 
@@ -132,13 +146,95 @@ def launch_kwargs(user_data: Path, headless: bool = False) -> Dict[str, Any]:
 
 def _clear_locks(profile: Path) -> None:
     for name in ("SingletonLock", "SingletonSocket", "SingletonCookie",
-                 "lockfile"):
+                 "lockfile", "DevToolsActivePort"):
         p = profile / name
         try:
             if p.exists() or p.is_symlink():
                 p.unlink()
         except Exception:
             pass
+
+
+def _prepare_profile(profile: Path, display_name: str) -> Path:
+    """Create the Chromium user-data-dir (named for this account) before launch."""
+    profile = Path(profile).resolve()
+    default = profile / "Default"
+    default.mkdir(parents=True, exist_ok=True)
+    try:
+        (profile / "First Run").write_bytes(b"")
+    except Exception:
+        pass
+    prefs_p = default / "Preferences"
+    prefs: Dict[str, Any] = {}
+    if prefs_p.exists():
+        try:
+            loaded = json.loads(prefs_p.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                prefs = loaded
+        except Exception:
+            prefs = {}
+    prof = prefs.setdefault("profile", {})
+    prof["name"] = display_name
+    prof["is_using_default_name"] = False
+    prof["exit_type"] = "Normal"
+    prefs.setdefault("browser", {})["has_seen_welcome_page"] = True
+    try:
+        prefs_p.write_text(json.dumps(prefs, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    local_p = profile / "Local State"
+    local: Dict[str, Any] = {}
+    if local_p.exists():
+        try:
+            loaded = json.loads(local_p.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                local = loaded
+        except Exception:
+            local = {}
+    pinfo = local.setdefault("profile", {})
+    cache = pinfo.setdefault("info_cache", {})
+    cache["Default"] = {
+        "name": display_name,
+        "is_using_default_name": False,
+        "user_name": display_name,
+        "gaia_name": display_name,
+    }
+    pinfo["last_used"] = "Default"
+    try:
+        local_p.write_text(json.dumps(local, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    return profile
+
+
+def _debug_port_for(name: str) -> int:
+    h = int(hashlib.sha1(safe_name(name).encode("utf-8")).hexdigest()[:6], 16)
+    base = 9330 + (h % 700)
+    for i in range(16):
+        cand = base + i
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", cand))
+            s.close()
+            return cand
+        except OSError:
+            try:
+                s.close()
+            except Exception:
+                pass
+    return base
+
+
+def _cdp_alive(profile: Path, port: int = 0) -> bool:
+    try:
+        from .session_view import _devtools_port_file, _http_get_local
+        use = int(_devtools_port_file(Path(profile)) or 0) or int(port or 0)
+        if use <= 0:
+            return False
+        _http_get_local(use, "/json/version", timeout=0.7)
+        return True
+    except Exception:
+        return False
 
 
 def close_live(name: str) -> None:
@@ -191,39 +287,47 @@ def is_open(name: str) -> bool:
     except ValueError:
         return False
     with _LOCK:
-        live = _LIVE.get(name)
-        proc = live.get("proc") if live else None
+        live = _LIVE.get(name) or {}
+        proc = live.get("proc")
+        profile = live.get("profile")
+        port = int(live.get("port") or 0)
     if proc is not None:
         try:
             if proc.poll() is None:
                 return True
         except Exception:
             pass
+    if profile and _cdp_alive(Path(profile), port):
+        return True
+    if proc is not None:
         with _LOCK:
             cur = _LIVE.get(name)
             if cur and cur.get("proc") is proc:
                 _LIVE.pop(name, None)
-        return False
-    with _LOCK:
-        return name in _LIVE
+    return False
 
 
-def _spawn_chromium(exe: str, profile: Path, url: str) -> subprocess.Popen:
+def _spawn_chromium(exe: str, profile: Path, url: str,
+                    port: int = 0) -> subprocess.Popen:
+    profile = Path(profile).resolve()
     profile.mkdir(parents=True, exist_ok=True)
     _clear_locks(profile)
     err = profile / "browser.err"
     err_f = open(err, "ab")
+    # Do not request a "new window" on the existing chrome.exe: the panel
+    # instance would steal the URL into the empty panel-ui profile.
     cmd = [
         exe,
         "--user-data-dir=" + str(profile),
-        "--remote-debugging-port=0",
+        "--profile-directory=Default",
+        "--remote-debugging-port=" + str(int(port or 0)),
         "--remote-debugging-address=127.0.0.1",
         "--remote-allow-origins=*",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-sync",
         "--disable-features=Translate",
-        "--new-window",
+        "--noerrdialogs",
         url or HOME_URL,
     ]
     kw: Dict[str, Any] = {"stdout": subprocess.DEVNULL, "stderr": err_f}
@@ -256,37 +360,58 @@ def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str,
         _clog("open", "executable: %s" % e, "error")
         raise RuntimeError("مرحله executable: %s" % e) from e
     close_live(name)
-    prof = chromium_dir(accounts_dir, name)
-    prof.mkdir(parents=True, exist_ok=True)
+    logical = account_dir(accounts_dir, name) / CHROMIUM_DIR
+    logical.mkdir(parents=True, exist_ok=True)
+    prof = _prepare_profile(chromium_dir(accounts_dir, name), name)
+    if prof.resolve() != logical.resolve():
+        try:
+            (logical / "LAUNCH_DIR.txt").write_text(str(prof), encoding="utf-8")
+        except Exception:
+            pass
+    port = _debug_port_for(name)
     save_meta(accounts_dir, name, {
         "status": "opening", "last_url": url or HOME_URL, "exe": exe,
-        "last_error": "",
+        "chromium_dir": str(prof), "debug_port": port, "last_error": "",
     })
     try:
-        proc = _spawn_chromium(exe, prof, url or HOME_URL)
+        proc = _spawn_chromium(exe, prof, url or HOME_URL, port)
     except Exception as e:
         _clog("open", "spawn failed: %s" % e, "error")
         save_meta(accounts_dir, name, {"status": "error", "last_error": str(e)})
         raise RuntimeError("مرحله launch: Chromium اجرا نشد — %s" % e) from e
-    time.sleep(0.6)
-    if proc.poll() is not None:
-        hint = ""
-        try:
-            hint = (prof / "browser.err").read_text(encoding="utf-8", errors="replace")[-240:]
-        except Exception:
-            pass
-        msg = "Chromium بلافاصله بسته شد (exit %s)%s" % (
-            proc.returncode, (": " + hint if hint else ""))
-        _clog("open", msg, "error")
-        save_meta(accounts_dir, name, {"status": "error", "last_error": msg})
-        raise RuntimeError("مرحله launch: " + msg)
+    bound = False
+    last = ""
+    for _ in range(28):
+        if proc.poll() is not None:
+            hint = ""
+            try:
+                hint = (prof / "browser.err").read_text(
+                    encoding="utf-8", errors="replace")[-240:]
+            except Exception:
+                pass
+            msg = "Chromium بلافاصله بسته شد (exit %s)%s" % (
+                proc.returncode, (": " + hint if hint else ""))
+            _clog("open", msg, "error")
+            save_meta(accounts_dir, name, {"status": "error", "last_error": msg})
+            raise RuntimeError("مرحله launch: " + msg)
+        if _cdp_alive(prof, port):
+            bound = True
+            break
+        last = "cdp not ready"
+        time.sleep(0.25)
+    if not bound:
+        _clog("open", "window up but profile CDP not bound: %s" % last, "warning")
     with _LOCK:
         _LIVE[name] = {"proc": proc, "exe": exe, "profile": str(prof),
-                       "url": url or HOME_URL, "opened_at": time.time()}
-    save_meta(accounts_dir, name, {"status": "open", "last_error": ""})
-    _clog("open", "ok exe=%s profile=%s" % (exe, prof))
+                       "url": url or HOME_URL, "opened_at": time.time(),
+                       "port": port}
+    save_meta(accounts_dir, name, {
+        "status": "open", "last_error": "", "chromium_dir": str(prof),
+    })
+    _clog("open", "ok exe=%s profile=%s port=%s" % (exe, prof, port))
     return {"ok": True, "name": name, "url": url or HOME_URL, "exe": exe,
-            "message": "Chromium اختصاصی باز شد — اگر لازم است در همان پنجره لاگین کنید"}
+            "profile": str(prof),
+            "message": "پروفایل «%s» ساخته شد و دیوار روی همان پروفایل باز است. در همان پنجره لاگین کنید، بعد ذخیره پروفایل." % name}
 
 
 def _cookies_from_cdp(profile: Path, proc: Optional[subprocess.Popen]) -> List[Dict[str, Any]]:
@@ -368,8 +493,10 @@ def harvest_to_session(accounts_dir: str, name: str,
 def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
     """بعد از لاگین کاربر: کوکی همان پنجرهٔ باز را می‌خواند و می‌بندد."""
     name = safe_name(name)
-    used_live = is_open(name)
-    _clog("save", "start name=%s window_open=%s" % (name, used_live))
+    prof = chromium_dir(accounts_dir, name)
+    used_live = is_open(name) or _cdp_alive(prof)
+    _clog("save", "start name=%s window_open=%s profile=%s" % (
+        name, used_live, prof))
     if not used_live:
         rec = save_meta(accounts_dir, name, {
             "profile_ready": False,
@@ -381,6 +508,15 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
                 "stage": "window",
                 "message": "پنجره Chromium این اکانت باز نیست. اول «باز کردن دیوار» را بزنید، لاگین کنید، بعد ذخیره."}
     cookies = _cookies_from_live(name)
+    if not cookies:
+        try:
+            with _LOCK:
+                live = _LIVE.get(name) or {}
+                proc = live.get("proc")
+            cookies = _cookies_from_cdp(prof, proc)
+        except Exception as e:
+            _clog("save", "cdp retry: %s" % e, "warning")
+            cookies = []
     ok = cookies_look_logged_in(cookies)
     harvest_to_session(accounts_dir, name, cookies)
     rec = save_meta(accounts_dir, name, {
@@ -435,7 +571,17 @@ def delete_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
     import shutil
     name = safe_name(name)
     close_live(name)
+    launch = chromium_dir(accounts_dir, name)
     d = account_dir(accounts_dir, name)
+    if launch.exists():
+        inside = False
+        try:
+            launch.resolve().relative_to(d.resolve())
+            inside = True
+        except Exception:
+            inside = False
+        if not inside:
+            shutil.rmtree(launch, ignore_errors=True)
     if d.exists():
         shutil.rmtree(d, ignore_errors=True)
     return {"ok": True, "message": f"پروفایل «{name}» حذف شد"}
@@ -444,12 +590,19 @@ def delete_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
 def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
     rec = load_meta(accounts_dir, name)
     ready = bool(rec.get("profile_ready"))
+    opened = is_open(name) if rec else False
+    if not opened:
+        try:
+            opened = _cdp_alive(chromium_dir(accounts_dir, name))
+        except Exception:
+            opened = False
     return {
         "profile_ready": ready,
         "profile_status": rec.get("status") or ("ready" if ready else "none"),
         "profile_saved_at": rec.get("saved_at") or "",
-        "profile_open": is_open(name) if rec else False,
+        "profile_open": opened,
         "phone": rec.get("phone") or "",
         "home_url": HOME_URL,
         "last_error": rec.get("last_error") or "",
+        "chromium_dir": str(chromium_dir(accounts_dir, name)),
     }

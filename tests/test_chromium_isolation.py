@@ -94,6 +94,8 @@ class TestProfileIsolation(unittest.TestCase):
         self.assertIn("subprocess.Popen", src)
         self.assertIn("user-data-dir", src)
         self.assertIn("executable_path", src)
+        self.assertIn("--profile-directory=Default", src)
+        self.assertNotIn("--new-window", src)
         self.assertIn(HOME_URL, src)
         self.assertEqual(chromium_dir(self.acc, "keep"), d)
         self.assertTrue(profile_ready(self.acc, "keep"))
