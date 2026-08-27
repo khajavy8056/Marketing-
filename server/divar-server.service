@@ -1,0 +1,22 @@
+# سرویس systemd نسخهٔ سرور لینوکس
+# مسیر نصب پیش‌فرض: /opt/divar-server
+[Unit]
+Description=Divar Marketing — Linux Server
+After=network.target
+
+[Service]
+Type=simple
+User=divar
+Group=divar
+WorkingDirectory=/opt/divar-server
+Environment=PATH=/opt/divar-server/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=DIVAR_SERVER_PORT=8642
+Environment=DIVAR_SERVER_PW_PATH=__AUTO__
+ExecStart=/opt/divar-server/venv/bin/python -m divar_server
+Restart=always
+RestartSec=5
+# منابع محافظه‌کارانه
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,480 @@
+# -*- coding: utf-8 -*-
+"""ذخیره و تزریق کامل سشن دیوار (نه فقط یک کوکی).
+
+دیوار دو لایه احراز دارد:
+  ۱) API شماره‌گیری: JWT در Authorization (Basic/Bearer) — همان token فایل سشن
+  ۲) سایت divar.ir: SuperTokens — کوکی/هدر
+     sAccessToken, sRefreshToken, sFrontToken, st-last-access-token-update
+     + هدرهای st-access-token / front-token / st-refresh-token
+
+اگر فقط token را به کوکی .divar.ir بچسبانیم، صفحهٔ وب مهمان می‌ماند.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+ST_HEADER_TO_COOKIE = {
+    "st-access-token": "sAccessToken",
+    "st-refresh-token": "sRefreshToken",
+    "front-token": "sFrontToken",
+    "anti-csrf": "sAntiCsrf",
+    "id-refresh-token": "sIdRefreshToken",
+}
+
+# کوکی‌هایی که سایت دیوار برای «لاگین‌شده» می‌خواند
+SITE_COOKIE_NAMES = (
+    "sAccessToken", "sRefreshToken", "sFrontToken", "sAntiCsrf",
+    "sIdRefreshToken", "st-last-access-token-update", "token", "did",
+)
+
+COOKIE_URLS = (
+    "https://divar.ir/",
+    "https://www.divar.ir/",
+    "https://api.divar.ir/",
+)
+
+COOKIE_DOMAINS = (".divar.ir", "divar.ir", ".api.divar.ir", "api.divar.ir")
+
+
+def _http_only(name: str) -> bool:
+    return name not in (
+        "sFrontToken", "token", "st-last-access-token-update", "did",
+        "front-token", "st-access-token", "st-refresh-token",
+    )
+
+
+def _decode_cookie_val(val: str) -> str:
+    """SuperTokens اغلب JWT را در Set-Cookie درصد-کد می‌کند."""
+    from urllib.parse import unquote
+    v = str(val or "").strip()
+    if not v or "%" not in v:
+        return v
+    try:
+        return unquote(v)
+    except Exception:
+        return v
+
+
+def _rec(name: str, value: str, domain: str = ".divar.ir",
+         path: str = "/", http_only: Optional[bool] = None) -> Dict[str, Any]:
+    return {
+        "name": str(name),
+        "value": str(value),
+        "domain": domain or ".divar.ir",
+        "path": path or "/",
+        "secure": True,
+        "httpOnly": _http_only(name) if http_only is None else bool(http_only),
+        "sameSite": "Lax",
+    }
+
+
+def absorb_response(r: Any) -> Dict[str, Any]:
+    """از پاسخ HTTP لاگین، کوکی + هدر SuperTokens را برمی‌دارد."""
+    cookies: List[Dict[str, Any]] = []
+    headers_auth: Dict[str, str] = {}
+    jar = getattr(r, "cookies", None)
+    try:
+        items = list(jar) if jar is not None else []
+    except Exception:
+        items = []
+    try:
+        if items and all(hasattr(c, "name") for c in items):
+            for c in items:
+                cookies.append(_rec(
+                    c.name, _decode_cookie_val(getattr(c, "value", "")),
+                    getattr(c, "domain", None) or ".divar.ir",
+                    getattr(c, "path", None) or "/"))
+        elif jar is not None and hasattr(jar, "items"):
+            for k, v in jar.items():
+                cookies.append(_rec(str(k), _decode_cookie_val(str(v))))
+        elif items and all(isinstance(c, str) for c in items) and hasattr(jar, "__getitem__"):
+            for name in items:
+                cookies.append(_rec(str(name), _decode_cookie_val(str(jar[name]))))
+    except Exception:
+        pass
+    raw_headers = getattr(r, "headers", None)
+    items: List[tuple] = []
+    try:
+        if raw_headers is None:
+            items = []
+        elif hasattr(raw_headers, "items"):
+            items = list(raw_headers.items())
+        else:
+            items = list(raw_headers)
+    except Exception:
+        items = []
+    set_cookies: List[str] = []
+    try:
+        if raw_headers is not None and hasattr(raw_headers, "get_all"):
+            set_cookies = list(raw_headers.get_all("Set-Cookie") or [])
+            set_cookies += list(raw_headers.get_all("set-cookie") or [])
+        elif raw_headers is not None and hasattr(raw_headers, "getlist"):
+            set_cookies = list(raw_headers.getlist("Set-Cookie") or [])
+    except Exception:
+        set_cookies = []
+    for k, v in items:
+        lk = str(k).lower()
+        if lk in ST_HEADER_TO_COOKIE and v:
+            headers_auth[lk] = str(v)
+            cookies.append(_rec(ST_HEADER_TO_COOKIE[lk], str(v)))
+        if lk == "set-cookie" and v and str(v) not in set_cookies:
+            set_cookies.append(str(v))
+        if lk == "st-last-access-token-update" and v:
+            cookies.append(_rec("st-last-access-token-update", str(v),
+                                http_only=False))
+    for raw in set_cookies:
+        parsed = _parse_one_set_cookie(raw)
+        if parsed:
+            cookies.append(parsed)
+    # یکتا بر اساس name+domain
+    seen = set()
+    uniq: List[Dict[str, Any]] = []
+    for c in cookies:
+        if not c.get("name") or c.get("value") is None:
+            continue
+        key = (c["name"], c.get("domain") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(c)
+    return {"cookies_full": uniq, "auth_headers": headers_auth}
+
+
+def _parse_one_set_cookie(raw: str) -> Optional[Dict[str, Any]]:
+    if not raw or "=" not in raw:
+        return None
+    first, *rest = raw.split(";")
+    name, _, val = first.partition("=")
+    name, val = name.strip(), _decode_cookie_val(val.strip())
+    if not name:
+        return None
+    domain, path, http_only = ".divar.ir", "/", None
+    for part in rest:
+        p = part.strip()
+        low = p.lower()
+        if low.startswith("domain="):
+            domain = p.split("=", 1)[1].strip() or domain
+        elif low.startswith("path="):
+            path = p.split("=", 1)[1].strip() or path
+        elif low == "httponly":
+            http_only = True
+    return _rec(name, val, domain, path, http_only)
+
+
+def merge_into_session_file(session_path: str, phone: str, token: str,
+                            absorbed: Optional[Dict[str, Any]] = None) -> None:
+    p = Path(session_path)
+    data: Dict[str, Any] = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    jar = dict(data.get("cookies") or {})
+    full = list(data.get("cookies_full") or [])
+    headers = dict(data.get("auth_headers") or {})
+    absorbed = absorbed or {}
+    for c in absorbed.get("cookies_full") or []:
+        if c.get("name") and c.get("value") is not None:
+            jar[str(c["name"])] = str(c["value"])
+            full.append(c)
+    headers.update(absorbed.get("auth_headers") or {})
+    if token:
+        jar.setdefault("token", token)
+        jar.setdefault("sAccessToken", token)
+        if not any(c.get("name") == "sAccessToken" for c in full):
+            full.append(_rec("sAccessToken", token))
+        if not any(c.get("name") == "token" for c in full):
+            full.append(_rec("token", token, http_only=False))
+    seen_full = {}
+    for c in full:
+        if not isinstance(c, dict) or not c.get("name"):
+            continue
+        seen_full[(c["name"], c.get("domain") or "")] = c
+    full = list(seen_full.values())
+    data.update({
+        "phone": phone or data.get("phone") or "",
+        "token": token or data.get("token") or "",
+        "cookies": jar,
+        "cookies_full": full,
+        "auth_headers": headers,
+        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        import os
+        os.chmod(p, 0o600)
+    except OSError:
+        pass
+
+
+# سشن واقعی سایت: refresh SuperTokens (از مرورگر). sFrontToken جعلی از JWT کافی نیست.
+SITE_PROOF_NAMES = ("sRefreshToken",)
+SITE_PROOF_HEADERS = ("st-refresh-token",)
+
+
+def jwt_payload(token: str) -> Dict[str, Any]:
+    import base64
+    if not token or token.count(".") < 2:
+        return {}
+    raw = token.split(".")[1]
+    pad = "=" * (-len(raw) % 4)
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(raw + pad))
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def looks_like_supertokens_jwt(token: str) -> bool:
+    p = jwt_payload(token)
+    return any(k in p for k in (
+        "sessionHandle", "parentRefreshTokenHash1", "refreshTokenHash1",
+        "antiCsrfToken"))
+
+
+def absorb_login_json(data: Any) -> Dict[str, Any]:
+    """توکن‌های SuperTokens داخل JSON پاسخ consume (حالت header/body)."""
+    cookies: List[Dict[str, Any]] = []
+    headers: Dict[str, str] = {}
+    if not isinstance(data, dict):
+        return {"cookies_full": cookies, "auth_headers": headers}
+
+    def add(name: str, value: Any, http_only: Optional[bool] = None,
+            header: str = "") -> None:
+        if not isinstance(value, str) or not value.strip():
+            return
+        cookies.append(_rec(name, value.strip(), http_only=http_only))
+        if header:
+            headers[header] = value.strip()
+
+    add("sAccessToken", data.get("sAccessToken"), header="st-access-token")
+    rt = data.get("sRefreshToken")
+    if not isinstance(rt, str):
+        rt = data.get("refreshToken") if isinstance(data.get("refreshToken"), str) else ""
+    add("sRefreshToken", rt, header="st-refresh-token")
+    add("sFrontToken", data.get("frontToken") or data.get("sFrontToken"),
+        http_only=False, header="front-token")
+    sess = data.get("session")
+    if isinstance(sess, dict):
+        at = sess.get("accessToken")
+        if isinstance(at, dict):
+            add("sAccessToken", at.get("token"), header="st-access-token")
+        else:
+            add("sAccessToken", at, header="st-access-token")
+        rtok = sess.get("refreshToken")
+        if isinstance(rtok, dict):
+            add("sRefreshToken", rtok.get("token"), header="st-refresh-token")
+        else:
+            add("sRefreshToken", rtok, header="st-refresh-token")
+    return {"cookies_full": cookies, "auth_headers": headers}
+
+
+def front_token_from_jwt(token: str) -> str:
+    """sFrontToken دیوار = base64(JSON uid/ate/up) از خود JWT."""
+    import base64
+    payload = jwt_payload(token)
+    uid = str(payload.get("sub") or payload.get("uid") or payload.get("userId")
+              or payload.get("user_id") or "divar")
+    exp = payload.get("exp")
+    try:
+        ate = int(float(exp) * 1000) if exp else int(time.time() * 1000) + 86400000 * 30
+    except (TypeError, ValueError):
+        ate = int(time.time() * 1000) + 86400000 * 30
+    blob = json.dumps({"uid": uid, "ate": ate, "up": payload}, separators=(",", ":"))
+    return base64.b64encode(blob.encode("utf-8")).decode("ascii")
+
+
+def ensure_site_cookies_from_token(session_path: str, token: str,
+                                   phone: str = "") -> None:
+    """اگر SuperTokens نیامد، از JWT معتبر همان کوکی‌های سایت را می‌سازیم."""
+    if not token:
+        return
+    data = session_data(session_path)
+    names = _cookie_names(data)
+    headers = data.get("auth_headers") or {}
+    extra_ck: List[Dict[str, Any]] = []
+    extra_hd: Dict[str, str] = {}
+    if "sAccessToken" not in names:
+        extra_ck.append(_rec("sAccessToken", token))
+    if "token" not in names:
+        extra_ck.append(_rec("token", token, http_only=False))
+    if "sFrontToken" not in names and not headers.get("front-token"):
+        ft = front_token_from_jwt(token)
+        extra_ck.append(_rec("sFrontToken", ft, http_only=False))
+        extra_hd["front-token"] = ft
+    if extra_ck or extra_hd:
+        merge_into_session_file(
+            session_path, phone or data.get("phone") or "", token,
+            {"cookies_full": extra_ck, "auth_headers": extra_hd})
+
+
+def _cookie_names(data: Dict[str, Any]) -> set:
+    names = set()
+    for k in (data.get("cookies") or {}):
+        names.add(str(k))
+    for c in data.get("cookies_full") or []:
+        if isinstance(c, dict) and c.get("name"):
+            names.add(str(c["name"]))
+    return names
+
+
+def session_data(session_path: str) -> Dict[str, Any]:
+    p = Path(session_path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def session_is_complete(session_path: str) -> bool:
+    """سشن سایت کامل است؟ JWT به‌تنهایی صفحهٔ لاگین‌شده نمی‌سازد."""
+    data = session_data(session_path)
+    names = _cookie_names(data)
+    headers = data.get("auth_headers") or {}
+    has_refresh = any(n in names for n in SITE_PROOF_NAMES) or any(
+        headers.get(h) for h in SITE_PROOF_HEADERS)
+    if not has_refresh:
+        return False
+    return bool(data.get("token") or "sAccessToken" in names)
+
+
+STORAGE_TO_COOKIE = {
+    "sFrontToken": "sFrontToken",
+    "front-token": "sFrontToken",
+    "sAccessToken": "sAccessToken",
+    "st-access-token": "sAccessToken",
+    "sRefreshToken": "sRefreshToken",
+    "st-refresh-token": "sRefreshToken",
+    "token": "token",
+}
+
+
+def merge_storage_into_session(session_path: str, storage: Any,
+                               phone: str = "") -> int:
+    """localStorage مرورگر لاگین‌شده را به session.json می‌چسباند."""
+    if not isinstance(storage, dict):
+        return 0
+    extra: List[Dict[str, Any]] = []
+    headers: Dict[str, str] = {}
+    token = ""
+    n = 0
+    for k, v in storage.items():
+        if not isinstance(v, str) or not v.strip():
+            continue
+        mapped = STORAGE_TO_COOKIE.get(str(k))
+        if mapped:
+            extra.append(_rec(mapped, v.strip(),
+                              http_only=mapped not in (
+                                  "sFrontToken", "token")))
+            n += 1
+        lk = str(k).lower()
+        if lk in ("st-access-token", "front-token", "st-refresh-token"):
+            headers[lk] = v.strip()
+        if str(k) == "token":
+            token = v.strip()
+    if not extra and not headers and not token:
+        return 0
+    data = session_data(session_path)
+    merge_into_session_file(
+        session_path, phone or str(data.get("phone") or ""),
+        token or str(data.get("token") or ""),
+        {"cookies_full": extra, "auth_headers": headers})
+    return n
+
+
+def cookies_for_browser(session_path: str) -> List[Dict[str, Any]]:
+    """لیست کوکی برای CDP — فقط اگر سشن سایت کامل باشد."""
+    if not session_is_complete(session_path):
+        return []
+    data = session_data(session_path)
+    token = str(data.get("token") or "")
+    by_name: Dict[str, str] = {}
+    for c in data.get("cookies_full") or []:
+        if isinstance(c, dict) and c.get("name") and c.get("value") is not None:
+            by_name[str(c["name"])] = str(c["value"])
+    for k, v in (data.get("cookies") or {}).items():
+        by_name.setdefault(str(k), str(v))
+    for hk, ckname in ST_HEADER_TO_COOKIE.items():
+        v = (data.get("auth_headers") or {}).get(hk)
+        if v:
+            by_name.setdefault(ckname, str(v))
+    if token:
+        by_name.setdefault("token", token)
+        by_name.setdefault("sAccessToken", token)
+    aliases = {
+        "sAccessToken": "st-access-token",
+        "sRefreshToken": "st-refresh-token",
+        "sFrontToken": "front-token",
+    }
+    for src, alias in aliases.items():
+        if src in by_name:
+            by_name.setdefault(alias, by_name[src])
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for name, value in by_name.items():
+        for domain in COOKIE_DOMAINS:
+            key = (name, domain)
+            if key in seen:
+                continue
+            seen.add(key)
+            rec = _rec(name, value, domain)
+            rec["urls"] = list(COOKIE_URLS)
+            out.append(rec)
+    return out
+
+
+def localstorage_script(session_path: str) -> str:
+    """قبل از بارگذاری دیوار در document اجرا می‌شود."""
+    p = Path(session_path)
+    token = front = sat = ""
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        ck = data.get("cookies") or {}
+        hd = data.get("auth_headers") or {}
+        token = str(data.get("token") or ck.get("sAccessToken") or "")
+        front = str(ck.get("sFrontToken") or hd.get("front-token") or "")
+        sat = str(ck.get("sAccessToken") or hd.get("st-access-token") or "")
+        srt = str(ck.get("sRefreshToken") or hd.get("st-refresh-token") or "")
+    except Exception:
+        token = front = sat = srt = ""
+    token_js, front_js, sat_js = json.dumps(token), json.dumps(front), json.dumps(sat)
+    srt_js = json.dumps(srt)
+    return (
+        "(function(){try{"
+        f"var t={token_js}, f={front_js}, a={sat_js}, r={srt_js};"
+        "if(t){localStorage.setItem('token', t); sessionStorage.setItem('token', t);}"
+        "if(f){localStorage.setItem('sFrontToken', f); localStorage.setItem('front-token', f);}"
+        "if(a){localStorage.setItem('sAccessToken', a); localStorage.setItem('st-access-token', a);}"
+        "if(r){localStorage.setItem('sRefreshToken', r); localStorage.setItem('st-refresh-token', r);}"
+        "localStorage.setItem('st-last-access-token-update', String(Date.now()));"
+        "}catch(e){}})();"
+    )
+
+
+def cdp_cookie_params(ck: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """پارامتر Network.setCookie — با url (قابل‌اعتمادتر از domain تنها)."""
+    name, value = ck.get("name"), ck.get("value")
+    if not name or value is None:
+        return []
+    http_only = bool(ck.get("httpOnly", _http_only(str(name))))
+    path = ck.get("path") or "/"
+    out = []
+    for url in ck.get("urls") or COOKIE_URLS:
+        out.append({
+            "name": str(name), "value": str(value),
+            "url": url, "path": path,
+            "secure": True, "httpOnly": http_only,
+            "sameSite": "Lax",
+        })
+    return out
