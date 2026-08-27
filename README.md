@@ -3,6 +3,33 @@
 رابط گرافیکی فارسی (وب محلی) + موتور جمع‌آوری چند‌اکانته + ضد بلاک +
 مانیتور لحظه‌ای + دیتابیس سرنخ + خروجی اکسل.
 
+## 🖥️ نسخهٔ سرور لینوکس (دایرکتوری `server/`)
+
+نسخهٔ مستقل و جدا از نسخهٔ ویندوز، مخصوص سرور لینوکس. روی هستهٔ همین پروژه
+سوار است و این‌ها را اضافه می‌کند: صفحهٔ لاگین (پیش‌فرض `admin/admin` + اجبار
+تغییر رمز)، مدیریت پروفایل‌های Chromium از راه دور (Xvfb + x11vnc + noVNC)
+برای لاگین اولیه و حل دستی کپچا، و نصب یک‌دستوری. مستندات کامل:
+[`server/README.md`](server/README.md)
+
+### 📥 نصب یک‌دستوری (از صفر تا صد)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/khajavy8056/Marketing-/main/server/install.sh \
+  | sudo bash -s -- --domain panel.example.com --email you@example.com
+```
+
+بدون دامنه (فقط IP، گواهی self-signed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/khajavy8056/Marketing-/main/server/install.sh \
+  | sudo bash -s --
+```
+
+نصب‌کننده: سرور را آپدیت/آپگرید می‌کند، پیش‌نیازها (xvfb/x11vnc/websockify/
+nginx/certbot)، پایتون و Chromium، noVNC و Nginx را نصب می‌کند، گواهی SSL
+(Let's Encrypt یا self-signed) می‌گیرد و سرویس systemd را راه می‌اندازد.
+قابل اجرای مجدد (خودترمیمی) است — برای به‌روزرسانی همان دستور را دوباره بزنید.
+
 ## 🚀 اجرا (روی سیستم داخل ایران)
 ```bash
 pip install -r requirements.txt
