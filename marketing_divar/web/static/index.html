@@ -386,6 +386,9 @@
       </div>
       <div class="hint" style="margin-top:8px">با روشن بودن این گزینه، به محض استخراج شمارهٔ آگهی منطبق
         همین قالب از خط رسمی ملی‌پیامک شما ارسال می‌شود. نیازی به ری‌استارت مانیتور نیست.</div>
+      <div class="hint" style="margin-top:6px">⚠️ اگر در تنظیمات روش ارسال را «پترن (خط خدماتی)» بگذارید،
+        متنِ واقعیِ پیامک همان متنی است که در پنل ملی‌پیامک ثبت و تأیید کرده‌اید؛
+        این قالب فقط وقتی «خط اختصاصی» فعال است استفاده می‌شود.</div>
     </div>
   </div>
 </section>
@@ -519,6 +522,13 @@
         <option value="none">غیرفعال</option>
         <option value="melipayamak">ملی‌پیامک</option>
       </select>
+      <div class="lbl">روش ارسال
+        <span class="q">؟<span class="qtip"><b>خط اختصاصی</b>: با شمارهٔ خطی که خریده‌اید متن آزاد/متغیری می‌فرستید. <b>پترن (خط خدماتی)</b>: متن از قبل در پنل ملی‌پیامک ثبت و تأیید شده و فقط متغیرها را می‌فرستید — به لیست سیاه هم می‌رسد و به شمارهٔ اختصاصی نیاز ندارد؛ ولی متن باید «خدماتی/اطلاع‌رسانی» باشد (تبلیغی رد می‌شود).</span></span>
+      </div>
+      <select id="set-sms-mode" onchange="smsModeChanged()">
+        <option value="line">خط اختصاصی</option>
+        <option value="pattern">پترن (خط خدماتی)</option>
+      </select>
       <div class="lbl">نام کاربری پنل
         <span class="q">؟<span class="qtip">همان «نام کاربری» که هنگام ورود به پنل ملی‌پیامک (وب‌سایت melipayamak.com) وارد می‌کنید — معمولاً شماره موبایل یا نام کاربری ثبت‌شده شما.</span></span>
       </div>
@@ -527,10 +537,22 @@
         <span class="q">؟<span class="qtip">رمز ورود به پنل ملی‌پیامک. اگر در پنل «کلید API» گرفته‌اید می‌توانید همان را اینجا بگذارید؛ برنامه هر دو را می‌پذیرد.</span></span>
       </div>
       <input id="set-sms-key" type="password" dir="ltr" autocomplete="off">
-      <div class="lbl">شماره خط ارسال
-        <span class="q">؟<span class="qtip">شمارهٔ «خط اختصاصی» که از ملی‌پیامک خریده‌اید (مثلاً 3000xxxx). همین شماره به‌عنوان فرستنده روی گوشی مخاطب دیده می‌شود. بدون خط اختصاصی، ارسال ممکن نیست — ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.</span></span>
+      <div id="sms-line-wrap">
+        <div class="lbl">شماره خط ارسال
+          <span class="q">؟<span class="qtip">شمارهٔ «خط اختصاصی» که از ملی‌پیامک خریده‌اید (مثلاً 3000xxxx). همین شماره به‌عنوان فرستنده روی گوشی مخاطب دیده می‌شود. در حالت «پترن» به این فیلد نیازی نیست.</span></span>
+        </div>
+        <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
       </div>
-      <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
+      <div id="sms-pattern-wrap" style="display:none">
+        <div class="lbl">کد پترن (bodyId)
+          <span class="q">؟<span class="qtip">عددی که بعد از «ساخت و تأیید پترن» در پنل ملی‌پیامک به شما داده می‌شود (شناسهٔ الگوی متن). متن الگو را باید اول در پنل ثبت کنید و تأیید بگیرید.</span></span>
+        </div>
+        <input id="set-sms-bodyid" dir="ltr" placeholder="کد پترن تأییدشده">
+        <div class="lbl">ترتیب متغیرهای پترن
+          <span class="q">؟<span class="qtip">فهرست فیلدهای سرنخ با کاما، به همان ترتیبی که متغیرها در متن پترن تعریف کرده‌اید. فیلدهای مجاز: <code dir="ltr">title</code> عنوان، <code dir="ltr">city</code> شهر، <code dir="ltr">price</code> قیمت، <code dir="ltr">subtitle</code> توضیح، <code dir="ltr">keyword</code> کلمه، <code dir="ltr">url</code> لینک، <code dir="ltr">published_at</code> زمان. مثال: <code dir="ltr">title,city,price</code></span></span>
+        </div>
+        <input id="set-sms-args" dir="ltr" placeholder="مثلاً title,city,price">
+      </div>
       <div class="lbl">سقف پیامک روزانه
         <span class="q">؟<span class="qtip">حداکثر تعداد پیامک خودکار در هر روز. برای کنترل هزینه و جلوگیری از ارسال بیش از حد بگذارید. وقتی به سقف برسید، آن روز پیامک خودکار ارسال نمی‌شود.</span></span>
       </div>
@@ -539,8 +561,8 @@
         <input type="checkbox" id="set-sms-auto" onchange="smsAutoToggle(this.checked)">
         <label for="set-sms-auto">ارسال خودکار به محض پیدا شدن شماره — با همین قالب و همین اکانت ملی‌پیامک</label>
       </div>
-      <div class="hint">ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.
-        اگر خط اختصاصی از ملی‌پیامک بخرید، همان شماره را در «خط ارسال» بگذارید.</div>
+      <div class="hint">در حالت «پترن» متن واقعی پیامک همان متنی است که در پنل ملی‌پیامک ثبت و تأیید کرده‌اید؛
+        اینجا فقط متغیرها (عنوان، شهر، قیمت و…) جای‌گذاری می‌شوند و به شمارهٔ خط اختصاصی نیازی نیست.</div>
       <div class="row" style="margin-top:10px">
         <button class="btn sm gray" type="button" onclick="smsTest('')">بررسی موجودی</button>
         <input id="set-sms-testto" dir="ltr" placeholder="09xxxxxxxxx آزمایش" style="max-width:180px">
@@ -1282,6 +1304,10 @@ async function settingsLoad(){
     $('set-sms-line').value=s.sms_line_number||'';
     $('set-sms-limit').value=s.sms_daily_limit||40;
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
+    if($('set-sms-mode')) $('set-sms-mode').value = s.sms_use_pattern ? 'pattern' : 'line';
+    if($('set-sms-bodyid')) $('set-sms-bodyid').value = s.sms_pattern_bodyid||'';
+    if($('set-sms-args')) $('set-sms-args').value = s.sms_pattern_args||'title,city';
+    smsModeChanged();
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
     if($('set-tg-on')) $('set-tg-on').checked = s.telegram_enabled!==false;
@@ -1313,6 +1339,9 @@ async function settingsSave(){
     sms_line_number:$('set-sms-line').value.trim(),
     sms_daily_limit:parseInt($('set-sms-limit').value)||40,
     sms_auto_on_new:!!$('set-sms-auto').checked,
+    sms_use_pattern:!!$('set-sms-mode') && $('set-sms-mode').value==='pattern',
+    sms_pattern_bodyid:$('set-sms-bodyid')?$('set-sms-bodyid').value.trim():'',
+    sms_pattern_args:$('set-sms-args')?$('set-sms-args').value.trim()||'title,city':'title,city',
     vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
     telegram_enabled:!$('set-tg-on') || !!$('set-tg-on').checked,
     bale_bot_token:$('set-bale-token')?$('set-bale-token').value.trim():'',
@@ -1343,6 +1372,12 @@ async function smsTest(to){
     const r = await api('/api/sms/test',{method:'POST',body:JSON.stringify({to: to||''})});
     toast((r.ok?'✓ ':'❌ ')+(r.message||JSON.stringify(r)), !!r.ok);
   }catch(e){ toast('❌ '+e.message,false); }
+}
+function smsModeChanged(){
+  const mode = ($('set-sms-mode')||{}).value || 'line';
+  const lineWrap = $('sms-line-wrap'), patWrap = $('sms-pattern-wrap');
+  if (lineWrap) lineWrap.style.display = (mode==='pattern') ? 'none' : 'block';
+  if (patWrap) patWrap.style.display = (mode==='pattern') ? 'block' : 'none';
 }
 async function smsDeliveryCheck(){
   try{

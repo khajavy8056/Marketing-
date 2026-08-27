@@ -83,9 +83,9 @@ data/, logs/             دادهٔ موقت کنار سورس (به گیت نم
 2. بعد `ساخت-نصب-استاندارد.bat` را دابل‌کلیک کنید
 3. خروجی: `dist\\DivarLead.exe` و کپی روی دسکتاپ
 
-## 📥 دانلود و اجرای سریع روی ویندوز (نسخه ۲.۲.۲)
-1. از [Releases v2.2.2](https://github.com/khajavy8056/Marketing-/releases/tag/v2.2.2) فایل **Source code (zip)** را دانلود کنید
-   یا مستقیم: https://github.com/khajavy8056/Marketing-/archive/refs/tags/v2.2.2.zip
+## 📥 دانلود و اجرای سریع روی ویندوز (نسخه ۲.۳.۰)
+1. از [Releases v2.3.0](https://github.com/khajavy8056/Marketing-/releases/tag/v2.3.0) فایل **Source code (zip)** را دانلود کنید
+   یا مستقیم: https://github.com/khajavy8056/Marketing-/archive/refs/tags/v2.3.0.zip
 2. روی زیپ **راست‌کلیک → Extract All** (از داخل پنجرهٔ زیپ اجرا نکنید)
 3. داخل پوشهٔ استخراج‌شده روی **`Install-and-Run.bat`** دابل‌کلیک کنید
 4. اگر پایتون نصب نباشد نصب‌کننده خودش Python 3.11 را دانلود و نصب می‌کند

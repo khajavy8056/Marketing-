@@ -62,6 +62,9 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "sms_line_number": "",
     "sms_auto_on_new": False,        # پیش‌فرض خاموش
     "sms_daily_limit": 40,
+    "sms_use_pattern": False,        # ارسال از پترن (خط خدماتی) به‌جای خط اختصاصی
+    "sms_pattern_bodyid": "",        # کد پترن تأییدشده در پنل ملی‌پیامک
+    "sms_pattern_args": "title,city",  # ترتیب متغیرهای پترن (فیلدهای سرنخ با کاما)
     "chat_auto_on_new": False,       # ارسال خودکار چت دیوار — پیش‌فرض خاموش (پرریسک)
     "chat_auto_daily_limit": 20,     # سقف روزانه چت خودکار
     "chat_auto_delay_sec": 60,       # تأخیر بین هر ارسال خودکار چت
@@ -325,6 +328,7 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
                      "rubika_enabled": s.get("rubika_enabled", True)}
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "adaptive_until_captcha"):
         cfg[k] = s[k]

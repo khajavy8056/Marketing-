@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.2.2")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.3.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -597,6 +597,7 @@ def _apply_sms_to_monitor() -> None:
     s = store.settings_all(DB_PATH)
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "per_account_daily_limit", "adaptive_until_captcha",
               "ip_daily_limit", "phone_delay_sec"):
@@ -1134,8 +1135,9 @@ def start_background() -> None:
 
 @app.post("/api/sms/test")
 def sms_test(req: SmsTest):
-    """آزمایش موجودی یا ارسال یک پیامک از مسیر رسمی ملی‌پیامک."""
-    from ..sms import credit_melipayamak, send_melipayamak
+    """آزمایش موجودی یا ارسال یک پیامک (خط اختصاصی یا پترن) از ملی‌پیامک."""
+    from ..sms import (build_pattern_args, credit_melipayamak,
+                       send_melipayamak, send_melipayamak_pattern)
     s = store.settings_all(DB_PATH)
     user = s.get("sms_username") or ""
     pwd = s.get("sms_password") or s.get("sms_api_key") or ""
@@ -1144,10 +1146,21 @@ def sms_test(req: SmsTest):
     if not user or not pwd:
         raise HTTPException(400, "نام کاربری و رمز ملی‌پیامک را ذخیره کنید")
     if req.to.strip():
-        line = s.get("sms_line_number") or ""
-        if not line:
-            raise HTTPException(400, "شماره خط ارسال را وارد کنید")
-        r = send_melipayamak(user, pwd, req.to.strip(), line, f"test {APP_NAME_EN}")
+        if s.get("sms_use_pattern"):
+            body_id = (s.get("sms_pattern_bodyid") or "").strip()
+            if not body_id:
+                raise HTTPException(400, "کد پترن (bodyId) را وارد کنید")
+            sample = {"title": "تست آگهی", "subtitle": "تست", "city": "تهران",
+                      "keyword": "تست", "price": 0, "published_at": "",
+                      "url": ""}
+            r = send_melipayamak_pattern(
+                user, pwd, req.to.strip(), body_id,
+                build_pattern_args(s, sample))
+        else:
+            line = s.get("sms_line_number") or ""
+            if not line:
+                raise HTTPException(400, "شماره خط ارسال را وارد کنید")
+            r = send_melipayamak(user, pwd, req.to.strip(), line, f"test {APP_NAME_EN}")
     else:
         r = credit_melipayamak(user, pwd)
     log("info" if r.get("ok") else "error",

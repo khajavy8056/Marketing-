@@ -11,8 +11,10 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from marketing_divar.sms import (  # noqa: E402
-    delivery_melipayamak, interpret_delivery, interpret_meli,
-    maybe_send_for_lead, normalize_ir_phone, send_for_lead, send_melipayamak)
+    build_pattern_args, delivery_melipayamak, interpret_delivery,
+    interpret_meli, interpret_pattern_result, maybe_send_for_lead,
+    normalize_ir_phone, send_for_lead, send_melipayamak,
+    send_melipayamak_pattern, sms_ready)
 from marketing_divar.telegram_bot import (  # noqa: E402
     found_alert_text, handle_command, handle_update)
 from marketing_divar.notifier import (  # noqa: E402
@@ -124,6 +126,67 @@ class TestMeliPayamak(unittest.TestCase):
         self.assertEqual(r["status"], "delivered")
         self.assertIn("GetDeliveries2", seen["url"])
         self.assertEqual(seen["data"]["recId"], "9000000005")
+
+
+class TestPattern(unittest.TestCase):
+    def test_pattern_send_uses_base_service_number(self):
+        seen = {}
+
+        def poster(url, data, timeout=20):
+            seen["url"] = url
+            seen["data"] = data
+            return FakeResp({"Value": "9000000100"})
+
+        r = send_melipayamak_pattern("u", "p", "09120000000", "12345",
+                                     ["ویلا", "تهران"], http_post=poster)
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["recid"], "9000000100")
+        self.assertIn("BaseServiceNumber", seen["url"])
+        self.assertEqual(seen["data"]["bodyId"], "12345")
+        self.assertEqual(seen["data"]["text"], "ویلا;تهران")
+        self.assertNotIn("from", seen["data"])  # بدون خط اختصاصی
+
+    def test_pattern_error_codes(self):
+        ok, msg = interpret_pattern_result({"Value": "-5"})
+        self.assertFalse(ok)
+        self.assertIn("bodyId", msg)
+        ok2, msg2 = interpret_pattern_result({"Value": "0"})
+        self.assertFalse(ok2)
+        self.assertIn("نام کاربری", msg2)
+
+    def test_build_pattern_args(self):
+        cfg = {"sms_pattern_args": "title,city,price"}
+        lead = {"title": "ویلا شمال", "city": "نوشهر", "price": 50000000}
+        args = build_pattern_args(cfg, lead)
+        self.assertEqual(args, ["ویلا شمال", "نوشهر", "50 میلیون"])
+
+    def test_sms_ready_pattern_needs_bodyid_not_line(self):
+        base = {"sms_provider": "melipayamak", "sms_username": "u",
+                "sms_password": "p", "sms_use_pattern": True,
+                "sms_pattern_bodyid": "12345"}
+        ok, why = sms_ready(base)
+        self.assertTrue(ok, why)
+        # بدون bodyId آماده نیست
+        ok2, _ = sms_ready({**base, "sms_pattern_bodyid": ""})
+        self.assertFalse(ok2)
+
+    def test_send_for_lead_pattern_mode(self):
+        seen = {}
+
+        def poster(url, data, timeout=20):
+            seen["url"] = url
+            seen["data"] = data
+            return FakeResp({"Value": "9000000200"})
+
+        r = send_for_lead({
+            "sms_provider": "melipayamak", "sms_username": "u",
+            "sms_password": "p", "sms_use_pattern": True,
+            "sms_pattern_bodyid": "77", "sms_pattern_args": "title,city",
+        }, {"phone": "09121112233", "title": "ویلا", "city": "نوشهر"},
+            "سلام {title}", http_post=poster)
+        self.assertTrue(r["ok"])
+        self.assertIn("BaseServiceNumber", seen["url"])
+        self.assertEqual(seen["data"]["text"], "ویلا;نوشهر")
 
 
 class TestTelegramCommands(unittest.TestCase):
