@@ -71,6 +71,11 @@
   .checkline{display:flex; gap:8px; align-items:flex-start; font-size:13.5px; margin:8px 0}
   .checkline input{width:auto; margin-top:3px}
   .hint{font-size:12px; color:var(--mut); line-height:1.9}
+  .codebox{background:#eef2f8; border:1px solid var(--line); border-radius:8px;
+           padding:9px 11px; font-family:ui-monospace,Consolas,monospace; direction:ltr;
+           text-align:left; white-space:pre-wrap; word-break:break-word; font-size:12.5px;
+           margin-top:8px; color:var(--txt); line-height:1.8}
+  html[data-theme="dark"] .codebox{background:#121920}
   /* راهنمای «؟» (تولتیپ) روی فیلدها */
   .q{position:relative; display:inline-flex; width:16px; height:16px; border-radius:50%;
      background:var(--mut); color:#fff; font-size:11px; align-items:center;
@@ -387,8 +392,9 @@
       <div class="hint" style="margin-top:8px">با روشن بودن این گزینه، به محض استخراج شمارهٔ آگهی منطبق
         همین قالب از خط رسمی ملی‌پیامک شما ارسال می‌شود. نیازی به ری‌استارت مانیتور نیست.</div>
       <div class="hint" style="margin-top:6px">⚠️ اگر در تنظیمات روش ارسال را «پترن (خط خدماتی)» بگذارید،
-        متنِ واقعیِ پیامک همان متنی است که در پنل ملی‌پیامک ثبت و تأیید کرده‌اید؛
-        این قالب فقط وقتی «خط اختصاصی» فعال است استفاده می‌شود.</div>
+        متنِ واقعیِ پیامک همان متنی است که در بخش «متن پترن» تنظیمات می‌نویسید و
+        (با دکمهٔ کپی) در پنل ملی‌پیامک ثبت و تأیید می‌کنید؛ این قالب فقط وقتی
+        «خط اختصاصی» فعال است استفاده می‌شود.</div>
     </div>
   </div>
 </section>
@@ -545,11 +551,22 @@
       </div>
       <div id="sms-pattern-wrap" style="display:none">
         <div class="lbl">کد پترن (bodyId)
-          <span class="q">؟<span class="qtip">عددی که بعد از «ساخت و تأیید پترن» در پنل ملی‌پیامک به شما داده می‌شود (شناسهٔ الگوی متن). متن الگو را باید اول در پنل ثبت کنید و تأیید بگیرید.</span></span>
+          <span class="q">؟<span class="qtip">عددی که بعد از «ساخت و تأیید پترن» در پنل ملی‌پیامک به شما داده می‌شود (شناسهٔ الگوی متن). متن الگو را اول با کادر «متن پترن» بسازید، کپی کنید، در پنل ثبت و تأیید بگیرید.</span></span>
         </div>
         <input id="set-sms-bodyid" dir="ltr" placeholder="کد پترن تأییدشده">
-        <div class="lbl">ترتیب متغیرهای پترن
-          <span class="q">؟<span class="qtip">فهرست فیلدهای سرنخ با کاما، به همان ترتیبی که متغیرها در متن پترن تعریف کرده‌اید. فیلدهای مجاز: <code dir="ltr">title</code> عنوان، <code dir="ltr">city</code> شهر، <code dir="ltr">price</code> قیمت، <code dir="ltr">subtitle</code> توضیح، <code dir="ltr">keyword</code> کلمه، <code dir="ltr">url</code> لینک، <code dir="ltr">published_at</code> زمان. مثال: <code dir="ltr">title,city,price</code></span></span>
+        <div class="lbl">متن پترن (همین‌جا بنویسید — بعد کپی کنید و در پنل ملی‌پیامک ثبت کنید)
+          <span class="q">؟<span class="qtip">متن الگو را با متغیرهای <code dir="ltr">{title}</code>، <code dir="ltr">{city}</code>، <code dir="ltr">{price}</code> و… بنویسید. دکمهٔ «کپی متن پترن» آن را به فرمت پنل ملی‌پیامک یعنی <code dir="ltr">{0}</code>، <code dir="ltr">{1}</code>، <code dir="ltr">{2}</code> تبدیل و کپی می‌کند. سپس همان را در بخش «پیامک پترن» پنل ثبت کنید و بعد از تأیید، کد bodyId را در فیلد بالا بگذارید. قوانین تأیید (متغیر اجباری، بدون لینک، غیرتبلیغی) به‌صورت خودکار زیر همین کادر بررسی می‌شود.</span></span>
+        </div>
+        <textarea id="set-sms-pattern-text" oninput="patternPreview()"
+          placeholder="کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است."></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" type="button" onclick="copyPattern()">📋 کپی متن پترن (فرمت پنل)</button>
+          <button class="btn sm gray" type="button" onclick="fillPatternSample()">نمونهٔ آماده</button>
+        </div>
+        <div class="codebox" id="pattern-preview"></div>
+        <div class="hint" id="pattern-rules" style="margin-top:6px"></div>
+        <div class="lbl">ترتیب متغیرهای پترن (خودکار از متن بالا)
+          <span class="q">؟<span class="qtip">فهرست فیلدهای سرنخ با کاما، به همان ترتیبی که متغیرها در متن پترن آمده‌اند. این فیلد خودکار از متن پر می‌شود؛ فقط اگر خواستید ترتیب را دستی عوض کنید ویرایشش کنید. فیلدهای مجاز: <code dir="ltr">title</code> عنوان، <code dir="ltr">city</code> شهر، <code dir="ltr">price</code> قیمت، <code dir="ltr">subtitle</code> توضیح، <code dir="ltr">keyword</code> کلمه، <code dir="ltr">url</code> لینک، <code dir="ltr">published_at</code> زمان.</span></span>
         </div>
         <input id="set-sms-args" dir="ltr" placeholder="مثلاً title,city,price">
       </div>
@@ -1307,6 +1324,7 @@ async function settingsLoad(){
     if($('set-sms-mode')) $('set-sms-mode').value = s.sms_use_pattern ? 'pattern' : 'line';
     if($('set-sms-bodyid')) $('set-sms-bodyid').value = s.sms_pattern_bodyid||'';
     if($('set-sms-args')) $('set-sms-args').value = s.sms_pattern_args||'title,city';
+    if($('set-sms-pattern-text')) $('set-sms-pattern-text').value = s.sms_pattern_text||'';
     smsModeChanged();
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
@@ -1342,6 +1360,7 @@ async function settingsSave(){
     sms_use_pattern:!!$('set-sms-mode') && $('set-sms-mode').value==='pattern',
     sms_pattern_bodyid:$('set-sms-bodyid')?$('set-sms-bodyid').value.trim():'',
     sms_pattern_args:$('set-sms-args')?$('set-sms-args').value.trim()||'title,city':'title,city',
+    sms_pattern_text:$('set-sms-pattern-text')?$('set-sms-pattern-text').value:'',
     vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
     telegram_enabled:!$('set-tg-on') || !!$('set-tg-on').checked,
     bale_bot_token:$('set-bale-token')?$('set-bale-token').value.trim():'',
@@ -1378,6 +1397,56 @@ function smsModeChanged(){
   const lineWrap = $('sms-line-wrap'), patWrap = $('sms-pattern-wrap');
   if (lineWrap) lineWrap.style.display = (mode==='pattern') ? 'none' : 'block';
   if (patWrap) patWrap.style.display = (mode==='pattern') ? 'block' : 'none';
+  patternPreview();
+}
+function patternVars(text){
+  const seen=[], re=/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g; let m;
+  while((m=re.exec(text||''))){ if(!seen.includes(m[1])) seen.push(m[1]); }
+  return seen;
+}
+function toMelipayamakText(text){
+  const vars=patternVars(text); let out=text||'';
+  vars.forEach((v,i)=>{ out=out.split('{'+v+'}').join('{'+i+'}'); });
+  return out;
+}
+function patternPreview(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  const txt=ta.value||''; const vars=patternVars(txt);
+  if($('set-sms-args')) $('set-sms-args').value=vars.join(',');
+  if($('pattern-preview')) $('pattern-preview').textContent = toMelipayamakText(txt);
+  const rules=$('pattern-rules'); if(!rules) return;
+  let w='', color='var(--mut)';
+  if(!txt.trim()) w='متن پترن خالی است — بنویسید.';
+  else if(vars.length===0) w='⚠️ پترن باید حداقل یک متغیر داشته باشد (مثلاً {title}).';
+  else if(!txt.replace(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g,'').replace(/\s+/g,'').length)
+    w='⚠️ پترن نباید فقط متغیر باشد؛ متن ثابت هم لازم است.';
+  else if(/https?:\/\/|www\.|\.ir\b|\.com\b|\.net\b|\.org\b/.test(txt))
+    w='⚠️ لینک در پترن رد می‌شود؛ آدرس سایت نگذارید.';
+  else { w='✓ متن قابل ثبت است — «کپی متن پترن» را بزنید و در پنل ملی‌پیامک ثبت کنید.'; color='var(--ok)'; }
+  rules.textContent=w; rules.style.color=color;
+}
+function copyTextFallback(text){
+  const t=document.createElement('textarea'); t.value=text;
+  t.style.position='fixed'; t.style.opacity='0';
+  document.body.appendChild(t); t.select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(t); return ok;
+}
+async function copyPattern(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  const out=toMelipayamakText(ta.value||'');
+  if(!out.trim()){ toast('اول متن پترن را بنویسید', false); return; }
+  let done=false;
+  try{ await navigator.clipboard.writeText(out); done=true; }
+  catch(e){ done=copyTextFallback(out); }
+  toast(done ? 'متن پترن (فرمت پنل) کپی شد ✓ — در پنل ملی‌پیامک ثبت کنید'
+             : 'کپی خودکار نشد — متنِ کادر خاکستری بالا را دستی کپی کنید', done);
+}
+function fillPatternSample(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  ta.value='کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است. در صورت تمایل پاسخگو باشید.';
+  patternPreview();
+  toast('نمونهٔ آماده گذاشته شد — متغیرها: {title} و {city}');
 }
 async function smsDeliveryCheck(){
   try{

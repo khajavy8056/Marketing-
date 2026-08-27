@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.3.0")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.3.1")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -598,6 +598,7 @@ def _apply_sms_to_monitor() -> None:
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
+              "sms_pattern_text",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "per_account_daily_limit", "adaptive_until_captcha",
               "ip_daily_limit", "phone_delay_sec"):
