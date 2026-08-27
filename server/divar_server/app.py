@@ -34,6 +34,11 @@ class ChangePwReq(BaseModel):
     new: str = ""
 
 
+class ProfileReq(BaseModel):
+    name: str
+    phone: str = ""
+
+
 def _auth_checker():
     from .auth import auth
     return auth
@@ -128,7 +133,80 @@ def build_app(core_app: Optional[FastAPI] = None) -> FastAPI:
     # ---------------------------------------------------- نشست ریموت ----
     core_app.include_router(remote_router.router)
 
+    # ----------------------------- جایگزینی endpoint های پروفایل ویندوز ---
+    # در سرور، «پروفایل» همان نشست ریموت است (نه پنجرهٔ بومی Chromium ویندوز).
+    _override_profile_endpoints(core_app)
+
     return core_app
+
+
+def _override_profile_endpoints(core_app: FastAPI) -> None:
+    from fastapi import HTTPException
+    from . import remote_session
+
+    def _name(raw: str) -> str:
+        from marketing_divar.chromium_profile import safe_name
+        try:
+            return safe_name(raw)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    acc_dir = os.environ.get("DIVAR_ACCOUNTS_DIR", "data/accounts")
+
+    # حذف مسیرهای قدیمی (ویندوزی)
+    drop = {
+        "/api/accounts/profile/create", "/api/accounts/profile/save",
+        "/api/accounts/profile/open", "/api/accounts/profile/update",
+        "/api/accounts/profile/delete",
+    }
+    core_app.routes[:] = [r for r in core_app.routes
+                          if getattr(r, "path", "") not in drop]
+
+    @core_app.post("/api/accounts/profile/create")
+    def _create(req: ProfileReq):
+        name = _name(req.name)
+        phone = (req.phone or "").strip()
+        if phone and not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
+            raise HTTPException(400, "شماره باید ۱۱ رقم و با ۰۹ شروع شود (یا خالی بماند)")
+        try:
+            return remote_session.create_profile(acc_dir, name, phone)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @core_app.post("/api/accounts/profile/open")
+    def _open(req: ProfileReq):
+        name = _name(req.name)
+        try:
+            return remote_session.open_remote(acc_dir, name)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @core_app.post("/api/accounts/profile/save")
+    def _save(req: ProfileReq):
+        name = _name(req.name)
+        try:
+            return remote_session.save_profile(acc_dir, name)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @core_app.post("/api/accounts/profile/update")
+    def _update(req: ProfileReq):
+        name = _name(req.name)
+        try:
+            return remote_session.open_remote(acc_dir, name)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @core_app.post("/api/accounts/profile/delete")
+    def _delete(req: ProfileReq):
+        name = _name(req.name)
+        try:
+            remote_session.close_remote(name)
+        except Exception:
+            pass
+        from marketing_divar.chromium_profile import delete_profile
+        delete_profile(acc_dir, name)
+        return {"ok": True, "message": f"پروفایل «{name}» حذف شد"}
 
 
 def _mount_novnc(app: FastAPI) -> None:

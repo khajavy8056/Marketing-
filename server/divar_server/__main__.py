@@ -14,6 +14,16 @@ import uvicorn
 from marketing_divar.paths import apply_runtime_paths
 apply_runtime_paths()
 
+# ─── فیکس مسیر مرورگر ─────────────────────────────────────────────────────
+# apply_runtime_paths برای ویندوز PLAYWRIGHT_BROWSERS_PATH را به پوشهٔ
+# ungoogled-chromium می‌برد؛ روی سرور از Chromium رسمی Playwright استفاده
+# می‌کنیم. نصب‌کننده آن را در DIVAR_SERVER_PW_PATH نصب می‌کند (یا پیش‌فرض).
+_pw = os.environ.get("DIVAR_SERVER_PW_PATH", "")
+if _pw:
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = _pw
+else:
+    os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)  # پیش‌فرض Playwright
+
 from .app import build_app          # noqa: E402
 from . import __version__           # noqa: E402
 

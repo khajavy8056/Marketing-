@@ -11,6 +11,7 @@ Group=divar
 WorkingDirectory=/opt/divar-server
 Environment=PATH=/opt/divar-server/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=DIVAR_SERVER_PORT=8642
+Environment=DIVAR_SERVER_PW_PATH=__AUTO__
 ExecStart=/opt/divar-server/venv/bin/python -m divar_server
 Restart=always
 RestartSec=5

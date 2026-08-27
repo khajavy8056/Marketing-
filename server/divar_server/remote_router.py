@@ -85,12 +85,20 @@ async def ws_relay(ws: WebSocket, name: str):
     if not _is_authenticated(ws):
         await ws.close(code=1008, reason="احراز هویت لازم است")
         return
-    await ws.accept()
-    s = remote_session.status(name).get("session") or {}
+    st = remote_session.status(name)
+    s = st.get("session") or {}
     ws_port = s.get("ws_port")
-    if not ws_port or not s.get("open"):
+    if not st.get("open") or not ws_port:
         await ws.close(code=1011, reason="نشست ریموت باز نیست")
         return
+    # مذاکرهٔ subprotocol (noVNC معمولاً «binary» می‌خواهد)
+    req_proto = (ws.headers.get("sec-websocket-protocol") or "").lower()
+    chosen = None
+    for p in ("binary", "base64"):
+        if p in req_proto:
+            chosen = p
+            break
+    await ws.accept(subprotocol=chosen)
     target = f"ws://127.0.0.1:{ws_port}/websockify"
     try:
         import websockets
@@ -99,16 +107,24 @@ async def ws_relay(ws: WebSocket, name: str):
         return
     remote_session.touch(name)
     try:
-        async with websockets.connect(target, max_size=64 * 1024 * 1024) as upstream:
+        kw = {"max_size": 64 * 1024 * 1024}
+        if chosen:
+            kw["subprotocols"] = [chosen]
+        async with websockets.connect(target, **kw) as upstream:
             async def to_upstream():
                 while True:
                     try:
-                        data = await ws.receive_text()
+                        msg = await ws.receive()
                     except WebSocketDisconnect:
                         return
                     except Exception:
                         return
-                    await upstream.send(data)
+                    if msg.get("type") == "websocket.disconnect":
+                        return
+                    if msg.get("text") is not None:
+                        await upstream.send(msg["text"])
+                    elif msg.get("bytes") is not None:
+                        await upstream.send(msg["bytes"])
                     remote_session.touch(name)
 
             async def to_browser():

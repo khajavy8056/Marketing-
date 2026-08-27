@@ -204,12 +204,19 @@ def open_remote(accounts_dir: str, name: str) -> Dict[str, Any]:
 
 
 def _display_ready(display: int) -> bool:
-    try:
-        s = socket.create_connection(("127.0.0.1", VNC_PORT_BASE + (display - DISPLAY_MIN)), 0.3)
-        s.close()
+    # سوکت X که Xvfb موقع آماده‌شدن نمایش می‌سازد (بدون وابستگی به x11vnc/پورت)
+    sock = Path(f"/tmp/.X11-unix/X{display}")
+    if sock.exists():
         return True
-    except OSError:
-        return False
+    if _which("xdpyinfo"):
+        try:
+            subprocess.run(["xdpyinfo", "-display", f":{display}"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=1)
+            return True
+        except Exception:
+            return False
+    return False
 
 
 def _novnc_web_dir() -> str:
@@ -284,6 +291,65 @@ def reap_idle() -> int:
         except Exception:
             pass
     return len(stale)
+
+
+def create_profile(accounts_dir: str, name: str, phone: str = "") -> Dict[str, Any]:
+    """ساخت پروفایل + باز کردن نشست ریموت روی divar.ir/user (لاگین اولیه)."""
+    from marketing_divar.chromium_profile import save_meta
+    save_meta(accounts_dir, name, {
+        "profile_ready": False,
+        "status": "created",
+        "phone": phone or "",
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "last_error": "",
+    })
+    r = open_remote(accounts_dir, name)
+    r["message"] = (
+        "پروفایل ساخته شد و مرورگر ریموت روی دیوار باز است. "
+        "در تب مشاهده لاگین کنید، بعد «ذخیره پروفایل» را بزنید."
+    )
+    return r
+
+
+def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
+    """برداشت کوکی از نشست زنده (یا دیسک)، تأیید لاگین، بستن نشست.
+
+    پوشهٔ پروفایل روی دیسک می‌ماند — کوکی/لاگین حفظ می‌شود.
+    """
+    from marketing_divar.chromium_profile import (
+        harvest_to_session, cookies_look_logged_in, save_meta, _cookies_from_sqlite)
+    name = (name or "").strip()
+    with _LOCK:
+        ctx = (_LIVE.get(name) or {}).get("context")
+    cookies: List[Dict[str, Any]] = []
+    if ctx is not None:
+        try:
+            cookies = list(ctx.cookies())
+        except Exception:
+            cookies = []
+    if not cookies:
+        try:
+            cookies = _cookies_from_sqlite(_chromium_dir(accounts_dir, name))
+        except Exception:
+            cookies = []
+    ok = bool(cookies_look_logged_in(cookies))
+    if cookies:
+        try:
+            harvest_to_session(accounts_dir, name, cookies)
+        except Exception:
+            pass
+    rec = save_meta(accounts_dir, name, {
+        "profile_ready": ok,
+        "status": "ready" if ok else "login_required",
+        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S") if ok else "",
+        "cookie_count": len(cookies),
+        "last_error": "" if ok else "login_not_detected",
+    })
+    close_remote(name)
+    return {"ok": True, "ready": ok, "cookie_count": len(cookies), **rec,
+            "stage": "saved" if ok else "login",
+            "message": ("پروفایل ذخیره شد و نشست بسته شد (کوکی/لاگین روی دیسک ماند)"
+                        if ok else "لاگین دیوار در این پروفایل دیده نشد — دوباره تلاش کنید")}
 
 
 def verify_login(accounts_dir: str, name: str) -> Dict[str, Any]:

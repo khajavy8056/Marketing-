@@ -119,8 +119,10 @@ python3 -m venv "$INSTALL_DIR/venv" || die "ساخت venv ناموفق بود"
 ok "وابستگی‌های پایتون نصب شد"
 
 step "نصب مرورگر Chromium برای Playwright (headful + headless)"
-"$INSTALL_DIR/venv/bin/playwright" install --with-deps chromium >/dev/null 2>&1 \
-  || "$INSTALL_DIR/venv/bin/playwright" install chromium >/dev/null 2>&1 \
+"$INSTALL_DIR/venv/bin/playwright" install --with-deps \
+  --path "$INSTALL_DIR/ms-playwright" chromium >/dev/null 2>&1 \
+  || "$INSTALL_DIR/venv/bin/playwright" install \
+       --path "$INSTALL_DIR/ms-playwright" chromium >/dev/null 2>&1 \
   || die "نصب Chromium ناموفق بود"
 ok "Chromium نصب شد"
 
@@ -138,6 +140,7 @@ fi
 chown -R divar:divar "$INSTALL_DIR"
 mkdir -p /var/www/certbot
 sed -e "s|DIVAR_SERVER_PORT=8642|DIVAR_SERVER_PORT=$PORT|" \
+    -e "s|DIVAR_SERVER_PW_PATH=__AUTO__|DIVAR_SERVER_PW_PATH=$INSTALL_DIR/ms-playwright|" \
     "$INSTALL_DIR/server/divar-server.service" > /etc/systemd/system/divar-server.service
 systemctl daemon-reload
 systemctl enable divar-server >/dev/null 2>&1 || true

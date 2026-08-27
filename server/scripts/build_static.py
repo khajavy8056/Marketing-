@@ -45,6 +45,40 @@ INJECT = r"""
     list.closest('.card').insertAdjacentElement('beforebegin', card);
   }
 
+  /* باز کردن تب noVNC برای نشست ریموت */
+  window.remoteOpenTab = function(name){
+    window.open('/novnc/vnc.html?path=/api/remote/' + encodeURIComponent(name) + '/ws&autoconnect=1', '_blank');
+  };
+
+  /* روی سرور، پروفایل = نشست ریموت (نه پنجرهٔ بومی ویندوز) */
+  window.createProfile = function(){
+    var name = document.getElementById('acc-name') ? document.getElementById('acc-name').value.trim() : '';
+    var phone = document.getElementById('acc-phone') ? document.getElementById('acc-phone').value.trim() : '';
+    if(!name){ toast('نام اکانت را وارد کنید', false); return; }
+    fetch('/api/accounts/profile/create', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name, phone:phone})})
+      .then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});})
+      .then(function(x){
+        if(x.s===200 && x.d.ok){ toast(x.d.message||'نشست ریموت باز شد'); remoteOpenTab(name); accRefresh(); remoteRefresh(); }
+        else toast('❌ ' + (x.d.message||'خطا'), false);
+      }).catch(function(e){ toast('❌ ' + e.message, false); });
+  };
+
+  window.openDivar = function(name){
+    fetch('/api/accounts/profile/open', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name})})
+      .then(function(r){return r.json();})
+      .then(function(d){ if(d.ok){ remoteOpenTab(name); accRefresh(); remoteRefresh(); } else toast('❌ ' + (d.message||'خطا'), false); })
+      .catch(function(e){ toast('❌ ' + e.message, false); });
+  };
+
+  window.updateProfile = window.openDivar;
+  window.openPuzzle = function(name){ window.openDivar(name || ''); };
+
+  /* Chromium اختصاصی ویندوز در سرور معنا ندارد */
+  window.refreshChromium = function(){ return Promise.resolve({installed:true}); };
+  window.installChromium = function(){ toast('روی سرور نیازی به دانلود Chromium نیست'); };
+
   window.remoteRefresh = function(){
     remoteCard();
     var box = document.getElementById('remote-list');
