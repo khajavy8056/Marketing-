@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS quota (
     day TEXT PRIMARY KEY,
     phones INTEGER DEFAULT 0,
     searches INTEGER DEFAULT 0,
-    sms INTEGER DEFAULT 0
+    sms INTEGER DEFAULT 0,
+    chats INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS quota_accounts (
     day TEXT,
@@ -109,19 +110,29 @@ def _ensure_quota_sms(con: sqlite3.Connection) -> None:
         con.commit()
 
 
+def _ensure_quota_chats(con: sqlite3.Connection) -> None:
+    cols = {r[1] for r in con.execute("PRAGMA table_info(quota)")}
+    if "chats" not in cols:
+        con.execute("ALTER TABLE quota ADD COLUMN chats INTEGER DEFAULT 0")
+        con.commit()
+
+
 def quota_today(con: sqlite3.Connection) -> Dict[str, int]:
     _ensure_quota_sms(con)
-    row = con.execute("SELECT phones, searches, sms FROM quota WHERE day=?",
+    _ensure_quota_chats(con)
+    row = con.execute("SELECT phones, searches, sms, chats FROM quota WHERE day=?",
                       (time.strftime("%Y-%m-%d"),)).fetchone()
     return {"phones": row["phones"] if row else 0,
             "searches": row["searches"] if row else 0,
-            "sms": (row["sms"] if row and "sms" in row.keys() else 0)}
+            "sms": (row["sms"] if row and "sms" in row.keys() else 0),
+            "chats": (row["chats"] if row and "chats" in row.keys() else 0)}
 
 
 def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
     """افزایش شمارنده روزانه؛ مقدار جدید را برمی‌گرداند."""
-    assert field in ("phones", "searches", "sms")
+    assert field in ("phones", "searches", "sms", "chats")
     _ensure_quota_sms(con)
+    _ensure_quota_chats(con)
     day = time.strftime("%Y-%m-%d")
     con.execute("INSERT INTO quota (day) VALUES (?) "
                 "ON CONFLICT(day) DO NOTHING", (day,))

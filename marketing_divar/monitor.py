@@ -300,6 +300,64 @@ class Monitor:
         except Exception as e:
             self._ev("warning", f"پیامک: {e}")
 
+    # --------------------------------------------------------- چت خودکار 💬 --
+    def _maybe_chat(self, con, row, account_name: str) -> None:
+        """اگر «ارسال خودکار چت» روشن باشد، به سرنخ فقط‌چت همان لحظه پیام می‌زند.
+
+        هر شکستی به‌صورت chat_status='requires_operator' ثبت می‌شود تا اپراتورِ
+        نیمه‌خودکار ادامه دهد — هرگز «ارسال موفق» جعلی ثبت نمی‌شود.
+        """
+        try:
+            from . import store
+            from .chat import compose_chat, send_divar_chat
+            s = store.settings_all(self.db_path)
+            if not s.get("chat_auto_on_new"):
+                return
+            lim = int(s.get("chat_auto_daily_limit") or 20)
+            if quota_today(con).get("chats", 0) >= lim:
+                self._ev("warning", f"سقف چت خودکار امروز ({lim}) پر شد — ارسال نشد")
+                return
+            token = row["token"] if "token" in row.keys() else ""
+            if not token:
+                return
+            prev = con.execute("SELECT chat_status FROM leads WHERE token=?",
+                               (token,)).fetchone()
+            if prev and (prev["chat_status"] or "") == "sent":
+                return
+            delay = float(s.get("chat_auto_delay_sec") or 60)
+            if delay > 0:
+                time.sleep(delay)
+            cl = self.client_for(account_name)
+            tpl = (store.template_get(self.db_path, "chat") or {}).get("text") or ""
+            text = compose_chat(tpl, {
+                "title": row["title"] if "title" in row.keys() else "",
+                "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
+                "url": row["url"] if "url" in row.keys() else "",
+            })
+            r = send_divar_chat(cl, token, text)
+            if not r:
+                return
+            st = "sent" if r.get("ok") else "requires_operator"
+            try:
+                con.execute(
+                    "UPDATE leads SET chat_status=?, lead_status=? WHERE token=?",
+                    (st, "contacted" if r.get("ok") else "new", token))
+                con.commit()
+            except Exception:
+                pass
+            if r.get("ok"):
+                bump_quota(con, "chats")
+                self._ev("success", f"💬 پیام چت خودکار ارسال شد → {token[:16]}")
+                print(f"  💬 چت خودکار: {token[:16]}")
+                self._tg("پیام چت خودکار ارسال شد\n"
+                         f"آگهی: {(row['title'] or '')[:60]}\n"
+                         f"زمان: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                self._ev("warning",
+                         f"چت خودکار ناموفق — به اپراتور سپرده شد: {r.get('message')}")
+        except Exception as e:
+            self._ev("warning", f"چت خودکار: {e}")
+
     def _global_quota_left(self, con) -> int:
         return self.cfg.get("ip_daily_limit", 240) - quota_today(con)["phones"]
 
@@ -453,6 +511,7 @@ class Monitor:
                 self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")
+                self._maybe_chat(con, row, name)
             elif st == "removed":
                 print(f"  × {row['title'][:32]} حذف شده")
             return "done"

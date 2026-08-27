@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.25")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.2.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -597,6 +597,7 @@ def _apply_sms_to_monitor() -> None:
     s = store.settings_all(DB_PATH)
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "per_account_daily_limit", "adaptive_until_captcha",
               "ip_daily_limit", "phone_delay_sec"):
         mon.cfg[k] = s[k]
@@ -632,6 +633,67 @@ def sms_auto_toggle(req: SmsAuto):
     return {"ok": True, "on": bool(req.on), "ready": ready,
             "message": "ارسال خودکار روشن است — به محض پیدا شدن شماره پیامک می‌رود"
             if req.on else "ارسال خودکار خاموش شد"}
+
+
+class ChatAuto(BaseModel):
+    on: bool = True
+
+
+@app.post("/api/chat/auto")
+def chat_auto_toggle(req: ChatAuto):
+    """روشن/خاموش کردن ارسال خودکار چت دیوار — همان لحظه روی مانیتور اعمال می‌شود."""
+    store.settings_set(DB_PATH, "chat_auto_on_new", bool(req.on))
+    _apply_sms_to_monitor()
+    if req.on:
+        log("warning", "ارسال خودکار چت روشن شد — پرریسک؛ سقف/تأخیر را رعایت کنید")
+        return {"ok": True, "on": True, "ready": True,
+                "message": "ارسال خودکار چت روشن شد — به محض «فقط چت»، پیام چت می‌رود"}
+    log("info", "ارسال خودکار چت خاموش شد")
+    return {"ok": True, "on": False, "ready": False,
+            "message": "ارسال خودکار چت خاموش شد — فقط نیمه‌خودکار"}
+
+
+class ChatSend(BaseModel):
+    token: str
+
+
+@app.post("/api/leads/{token}/chat")
+def lead_send_chat(token: str):
+    """ارسال دستی/آزمایشی همان قالب چت به سرنخ فقط‌چت با اکانت لاگین‌شده."""
+    from ..chat import compose_chat, send_divar_chat
+    from ..db import bump_quota, now as _now
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "سرنخ پیدا نشد")
+        if row["phone_status"] != "hidden":
+            raise HTTPException(400, "این سرنخ فقط‌چت نیست (شماره دارد)")
+        m = mgr()
+        name = m.pick(DB_PATH)
+        if not name:
+            raise HTTPException(400, "اکانت آمادهٔ لاگین‌شده نیست — اول اکانت اضافه کنید")
+        cl = DivarClient(session_path=str(m.session_path(name)), base_url=_base_url())
+        tpl = (store.template_get(DB_PATH, "chat") or {}).get("text") or ""
+        text = compose_chat(tpl, dict(row))
+        r = send_divar_chat(cl, token, text)
+        st = "sent" if r.get("ok") else "requires_operator"
+        try:
+            con.execute(
+                "UPDATE leads SET chat_status=?, lead_status=? WHERE token=?",
+                (st, "contacted" if r.get("ok") else "new", token))
+            if r.get("ok"):
+                bump_quota(con, "chats")
+                con.execute("UPDATE leads SET lead_status='contacted' WHERE token=?",
+                            (token,))
+            con.commit()
+        except Exception:
+            pass
+        log("success" if r.get("ok") else "warning",
+            f"چت {token[:16]}: {r.get('message')}")
+        return r
+    finally:
+        con.close()
 
 
 # ------------------------------------------------------------ API مانیتور --
@@ -766,9 +828,12 @@ def status():
         "phones_found": found, "phones_today": q["phones"],
         "searches_today": q["searches"],
         "sms_today": q.get("sms", 0),
+        "chat_today": q.get("chats", 0),
         "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
         "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
         "sms_ready": sms_ready(store.settings_all(DB_PATH))[0],
+        "chat_auto_on_new": bool(store.settings_all(DB_PATH).get("chat_auto_on_new")),
+        "chat_auto_daily_limit": store.settings_all(DB_PATH).get("chat_auto_daily_limit", 20),
         "data_dir": os.environ.get("DIVAR_DATA_DIR") or str(Path(DB_PATH).resolve().parent),
         "listen": listen_urls(APP_PORT),
         "app_name": APP_NAME_FA,
@@ -1031,6 +1096,46 @@ def sms_test(req: SmsTest):
     log("info" if r.get("ok") else "error",
         f"ملی‌پیامک: {r.get('message')}")
     return r
+
+
+class ChatTest(BaseModel):
+    token: str = ""
+
+
+@app.post("/api/chat/test")
+def chat_test(req: ChatTest):
+    """آزمایش ارسال چت: توکن بدهید یا اولین سرنخ فقط‌چت را خودش پیدا می‌کند."""
+    from ..chat import compose_chat, send_divar_chat
+    token = (req.token or "").strip()
+    con = connect(DB_PATH)
+    try:
+        if not token:
+            row = con.execute(
+                "SELECT token FROM leads WHERE phone_status='hidden' AND "
+                "lead_status='new' ORDER BY id DESC LIMIT 1").fetchone()
+            if not row:
+                return {"ok": False, "status": "none",
+                        "message": "سرنخ فقط‌چت‌ی برای آزمایش نیست — اول مانیتور را اجرا کنید"}
+            token = row["token"]
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "سرنخ پیدا نشد")
+        m = mgr()
+        name = m.pick(DB_PATH)
+        if not name:
+            raise HTTPException(400, "اکانت آمادهٔ لاگین‌شده نیست")
+        cl = DivarClient(session_path=str(m.session_path(name)), base_url=_base_url())
+        tpl = (store.template_get(DB_PATH, "chat") or {}).get("text") or ""
+        text = compose_chat(tpl, dict(row))
+        r = send_divar_chat(cl, token, text)
+        r["preview"] = text
+        r["token"] = token
+        r["account"] = name
+        log("success" if r.get("ok") else "warning",
+            f"تست چت {token[:16]}: {r.get('message')}")
+        return r
+    finally:
+        con.close()
 
 
 class ChannelTest(BaseModel):

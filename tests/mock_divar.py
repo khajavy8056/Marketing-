@@ -27,6 +27,7 @@ class MockDivar:
     released = set()      # اکانت‌هایی که اپراتور آزاد کرده
     counters = {}         # account -> تعداد درخواست موفق
     contact_calls = []    # [(token, account)]
+    chat_sends = []       # [(token, account, text)] — پیام چت ارسال‌شده
     min_interval = 0.0    # برای تست 429 (اختیاری)
 
     @classmethod
@@ -42,6 +43,7 @@ class MockDivar:
             cls.released = set()
             cls.counters = {}
             cls.contact_calls = []
+            cls.chat_sends = []
 
     @classmethod
     def account_of(cls, auth_header: str, cookies: str = "") -> str:
@@ -124,6 +126,18 @@ class Handler(BaseHTTPRequestHandler):
             post_list = [{"data": {"token": p["token"], "title": p["title"],
                                    "has_chat": p["has_chat"]}} for p in items]
             self._json(200, {"web_widgets": {"post_list": post_list}})
+        elif u.path.startswith("/v8/chat/conversations/") and u.path.endswith("/messages"):
+            # ارسال پیام چت (خودکار/دستی) — شبیه‌سازی مسیر best-effort
+            token = u.path.split("/")[4]
+            acct = MockDivar.account_of(
+                self.headers.get("Authorization", ""),
+                self.headers.get("Cookie", ""))
+            if not acct:
+                return self._json(401, {"error": "unauthorized"})
+            text = str(body.get("message") or body.get("text") or "")
+            with MockDivar.lock:
+                MockDivar.chat_sends.append((token, acct, text))
+            self._json(200, {"ok": True, "status": "sent"})
         elif u.path == "/v8/authenticate/signinup/code/consume":
             code = str(body.get("userInputCode") or body.get("code") or "")
             if code.strip() == "000000":

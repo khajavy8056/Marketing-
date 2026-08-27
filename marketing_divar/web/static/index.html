@@ -71,6 +71,18 @@
   .checkline{display:flex; gap:8px; align-items:flex-start; font-size:13.5px; margin:8px 0}
   .checkline input{width:auto; margin-top:3px}
   .hint{font-size:12px; color:var(--mut); line-height:1.9}
+  /* راهنمای «؟» (تولتیپ) روی فیلدها */
+  .q{position:relative; display:inline-flex; width:16px; height:16px; border-radius:50%;
+     background:var(--mut); color:#fff; font-size:11px; align-items:center;
+     justify-content:center; cursor:help; margin-inline-start:6px; flex:none;
+     vertical-align:middle; line-height:1; user-select:none}
+  .q .qtip{position:absolute; display:none; width:280px; background:#1e2a3a; color:#fff;
+     padding:10px 12px; border-radius:9px; font-size:11.5px; line-height:1.9;
+     z-index:80; inset-inline-start:24px; top:50%; transform:translateY(-50%);
+     box-shadow:0 8px 24px rgba(0,0,0,.28); font-weight:400; white-space:normal;
+     text-align:right}
+  .q:hover .qtip,.q:focus-visible .qtip{display:block}
+  html[data-theme="dark"] .q .qtip{background:#0b1520; box-shadow:0 8px 24px rgba(0,0,0,.6)}
   .warn-box{background:#fff8ea; border:1px solid #f2dfb6; color:#7a5a12;
             padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.9; margin:10px 0}
   .empty{color:var(--mut); font-size:13px; text-align:center; padding:26px}
@@ -329,19 +341,39 @@
 <section id="tab-messages" class="tab">
   <div class="grid g2">
     <div class="card">
-      <h3>قالب پیام چت (نیمه‌خودکار)</h3>
+      <h3>قالب پیام چت دیوار
+        <span class="q">؟<span class="qtip">این متن به سرنخ‌های «فقط چت» (آگهی‌هایی که صاحب‌شان شماره نگذاشته و فقط چت فعال است) فرستاده می‌شود. متغیرها: <code dir="ltr">{title}</code> عنوان آگهی، <code dir="ltr">{subtitle}</code> توضیح میانی، <code dir="ltr">{url}</code> لینک آگهی. هر پیام با اطلاعات همان آگهی شخصی‌سازی می‌شود تا اسپم نشود.</span></span>
+      </h3>
       <div class="lbl">متغیرها: <code dir="ltr">{title}</code> عنوان آگهی،
         <code dir="ltr">{subtitle}</code> توضیح میانی</div>
       <textarea id="tpl-chat"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('chat')">💾 ذخیره قالب چت</button>
       </div>
-      <div class="hint" style="margin-top:8px">ارسال چت از طریق فرمان
-        <code dir="ltr">python -m marketing_divar draft --chat-only</code>
-        انجام می‌شود؛ متن آماده + باز شدن چت + ارسال با یک کلیک توسط شما (ضد بن).</div>
+      <div class="checkline">
+        <input type="checkbox" id="msg-chat-auto" onchange="chatAutoToggle(this.checked)">
+        <label for="msg-chat-auto"><b>وقتی آگهی فقط‌چت ثبت شد، همین متن را خودکار در چت دیوار بفرست</b></label>
+      </div>
+      <div class="grid g2" style="margin-top:6px">
+        <div><div class="lbl">سقف چت خودکار در روز</div>
+          <input id="msg-chat-limit" type="number" dir="ltr" min="1" onchange="chatSettingsSave()"></div>
+        <div><div class="lbl">تأخیر بین هر ارسال (ثانیه)</div>
+          <input id="msg-chat-delay" type="number" dir="ltr" min="0" onchange="chatSettingsSave()"></div>
+      </div>
+      <div class="warn-box" style="margin-top:10px">⚠️ ارسال خودکار چت دیوار از مسیر غیررسمی <b>پرریسک</b> است و
+        الگوی «متن یکسان × تعداد زیاد» ساده‌ترین سیگنال اسپم است؛ ممکن است اکانت/شماره بسوزد.
+        پیش‌فرض خاموش است؛ سقف و تأخیر را پایین/بالا نگه دارید. اگر ارسال خودکار جواب نداد،
+        همان سرنخ خودکار به لیست «نیمه‌خودکار» (اپراتور) برمی‌گردد.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm gray" type="button" onclick="chatTest('')">🧪 تست ارسال چت (اولین سرنخ فقط‌چت)</button>
+      </div>
+      <div class="hint" style="margin-top:8px">مسیر نیمه‌خودکار امن (ضد بن): در تب «سرنخ‌ها» دکمهٔ «چت» را بزنید —
+        متن کپی می‌شود، آگهی در دیوار باز می‌شود و شما با یک کلیک ارسال می‌کنید.</div>
     </div>
     <div class="card">
-      <h3>قالب پیامک ملی‌پیامک</h3>
+      <h3>قالب پیامک ملی‌پیامک
+        <span class="q">؟<span class="qtip">این متن برای شماره‌های <b>استخراج‌شده</b> (آگهی‌هایی که شماره‌شان پیدا شد) ارسال می‌شود. متغیرهای <code dir="ltr">{title}</code> و <code dir="ltr">{subtitle}</code> و <code dir="ltr">{url}</code> قابل استفاده‌اند. برای ارسال واقعی باید در تب «تنظیمات» نام کاربری، رمز و خط ملی‌پیامک را وارد کنید.</span></span>
+      </h3>
       <textarea id="tpl-sms" placeholder="متن پیامک برای شماره‌های استخراج‌شده…"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('sms')">💾 ذخیره قالب پیامک</button>
@@ -475,19 +507,31 @@
       <div class="hint">⚠️ مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.</div>
     </div>
     <div class="card">
-      <h3>📱 ملی‌پیامک (رسمی)</h3>
-      <div class="lbl">سرویس‌دهنده</div>
+      <h3>📱 ملی‌پیامک (رسمی)
+        <span class="q">؟<span class="qtip">برای ارسال خودکار/دستی پیامک به شماره‌های استخراج‌شده، این بخش را کامل کنید. همهٔ مقادیر از پنل <b>ملی‌پیامک</b> (melipayamak.com) می‌آید — مسیر رسمی REST: <code dir="ltr">rest.payamak-panel.com</code>. بعد از ذخیره، «بررسی موجودی» و «ارسال آزمایشی» را بزنید تا مطمئن شوید کار می‌کند.</span></span>
+      </h3>
+      <div class="lbl">سرویس‌دهنده
+        <span class="q">؟<span class="qtip">فعلاً فقط «ملی‌پیامک» پشتیبانی می‌شود. روی «ملی‌پیامک» بگذارید تا فیلدهای بعدی فعال شوند.</span></span>
+      </div>
       <select id="set-sms-provider">
         <option value="none">غیرفعال</option>
         <option value="melipayamak">ملی‌پیامک</option>
       </select>
-      <div class="lbl">نام کاربری پنل</div>
+      <div class="lbl">نام کاربری پنل
+        <span class="q">؟<span class="qtip">همان «نام کاربری» که هنگام ورود به پنل ملی‌پیامک (وب‌سایت melipayamak.com) وارد می‌کنید — معمولاً شماره موبایل یا نام کاربری ثبت‌شده شما.</span></span>
+      </div>
       <input id="set-sms-user" dir="ltr" autocomplete="off">
-      <div class="lbl">رمز عبور پنل (یا کلید API)</div>
+      <div class="lbl">رمز عبور پنل (یا کلید API)
+        <span class="q">؟<span class="qtip">رمز ورود به پنل ملی‌پیامک. اگر در پنل «کلید API» گرفته‌اید می‌توانید همان را اینجا بگذارید؛ برنامه هر دو را می‌پذیرد.</span></span>
+      </div>
       <input id="set-sms-key" type="password" dir="ltr" autocomplete="off">
-      <div class="lbl">شماره خط ارسال</div>
+      <div class="lbl">شماره خط ارسال
+        <span class="q">؟<span class="qtip">شمارهٔ «خط اختصاصی» که از ملی‌پیامک خریده‌اید (مثلاً 3000xxxx). همین شماره به‌عنوان فرستنده روی گوشی مخاطب دیده می‌شود. بدون خط اختصاصی، ارسال ممکن نیست — ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.</span></span>
+      </div>
       <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
-      <div class="lbl">سقف پیامک روزانه</div>
+      <div class="lbl">سقف پیامک روزانه
+        <span class="q">؟<span class="qtip">حداکثر تعداد پیامک خودکار در هر روز. برای کنترل هزینه و جلوگیری از ارسال بیش از حد بگذارید. وقتی به سقف برسید، آن روز پیامک خودکار ارسال نمی‌شود.</span></span>
+      </div>
       <input id="set-sms-limit" type="number" dir="ltr">
       <div class="checkline">
         <input type="checkbox" id="set-sms-auto" onchange="smsAutoToggle(this.checked)">
@@ -680,11 +724,15 @@ async function refreshStatus(){
     $('k-chat').textContent = s.chat_queue;
     const ipLim = s.ip_daily_limit || 240;
     $('k-today').innerHTML = s.phones_today + `<small>${tt('از سقف IP','of IP quota')} ${ipLim}` +
-      (s.sms_today ? ` · ${tt('پیامک','SMS')} ${s.sms_today}` : '') + `</small>`;
+      (s.sms_today ? ` · ${tt('پیامک','SMS')} ${s.sms_today}` : '') +
+      (s.chat_today ? ` · ${tt('چت','Chat')} ${s.chat_today}` : '') + `</small>`;
     const autoOn = !!s.sms_auto_on_new;
     ['dash-sms-auto','msg-sms-auto','set-sms-auto'].forEach(id=>{
       if ($(id) && document.activeElement !== $(id)) $(id).checked = autoOn;
     });
+    const chatAutoOn = !!s.chat_auto_on_new;
+    if ($('msg-chat-auto') && document.activeElement !== $('msg-chat-auto'))
+      $('msg-chat-auto').checked = chatAutoOn;
     if ($('dash-sms-hint')) {
       $('dash-sms-hint').textContent = autoOn
         ? (s.sms_ready ? tt('ارسال خودکار روشن است — به محض شماره، پیامک می‌رود','Auto SMS is ON')
@@ -1097,9 +1145,37 @@ async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwL
 
 /* ───────────────────────── پیام‌ها ───────────────────────── */
 async function tplLoad(){ try{ const s=await api('/api/templates');
-  $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms; }catch(e){} }
+  $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms; }catch(e){}
+  try{ const st=await api('/api/settings');
+    if($('msg-chat-auto')) $('msg-chat-auto').checked=!!st.chat_auto_on_new;
+    if($('msg-chat-limit')) $('msg-chat-limit').value=st.chat_auto_daily_limit||20;
+    if($('msg-chat-delay')) $('msg-chat-delay').value=st.chat_auto_delay_sec||60;
+  }catch(e){} }
 async function tplSave(ch){ const text = ch==='chat'?$('tpl-chat').value:$('tpl-sms').value;
   await act('/api/templates',{channel:ch, text}); }
+async function chatAutoToggle(on){
+  try{
+    const r = await api('/api/chat/auto',{method:'POST',body:JSON.stringify({on:!!on})});
+    if($('msg-chat-auto')) $('msg-chat-auto').checked=!!on;
+    toast(r.message||'ثبت شد', !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function chatSettingsSave(){
+  try{
+    await api('/api/settings',{method:'POST',body:JSON.stringify({values:{
+      chat_auto_daily_limit:parseInt($('msg-chat-limit').value)||20,
+      chat_auto_delay_sec:parseInt($('msg-chat-delay').value)||60,
+    }})});
+    toast('سقف و تأخیر چت ذخیره شد ✓');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function chatTest(token){
+  try{
+    const r = await api('/api/chat/test',{method:'POST',body:JSON.stringify({token: token||''})});
+    toast((r.ok?'✓ ':'❌ ')+(r.message||JSON.stringify(r)), !!r.ok);
+    if (r.preview) toast('متن آزمایشی: '+r.preview.slice(0,90)+'…');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 
 /* ───────────────────────── سرنخ‌ها ───────────────────────── */
 let leadsFilter='all';
