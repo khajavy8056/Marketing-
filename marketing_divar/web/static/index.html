@@ -342,10 +342,12 @@
   <div class="grid g2">
     <div class="card">
       <h3>قالب پیام چت دیوار
-        <span class="q">؟<span class="qtip">این متن به سرنخ‌های «فقط چت» (آگهی‌هایی که صاحب‌شان شماره نگذاشته و فقط چت فعال است) فرستاده می‌شود. متغیرها: <code dir="ltr">{title}</code> عنوان آگهی، <code dir="ltr">{subtitle}</code> توضیح میانی، <code dir="ltr">{url}</code> لینک آگهی. هر پیام با اطلاعات همان آگهی شخصی‌سازی می‌شود تا اسپم نشود.</span></span>
+        <span class="q">؟<span class="qtip">این متن به سرنخ‌های «فقط چت» (آگهی‌هایی که صاحب‌شان شماره نگذاشته و فقط چت فعال است) فرستاده می‌شود. با متغیرها هر پیام متفاوت می‌شود (ضد اسپم): <code dir="ltr">{title}</code> عنوان آگهی، <code dir="ltr">{subtitle}</code> توضیح، <code dir="ltr">{city}</code> شهر، <code dir="ltr">{price}</code> قیمت، <code dir="ltr">{greeting}</code> سلام تصادفی، <code dir="ltr">{closing}</code> خداحافظی تصادفی، <code dir="ltr">{url}</code> لینک. هر ارسال یک سلام/خداحافظی متفاوت می‌گیرد تا متن‌ها یکسان نباشند.</span></span>
       </h3>
       <div class="lbl">متغیرها: <code dir="ltr">{title}</code> عنوان آگهی،
-        <code dir="ltr">{subtitle}</code> توضیح میانی</div>
+        <code dir="ltr">{subtitle}</code> توضیح میانی، <code dir="ltr">{city}</code> شهر،
+        <code dir="ltr">{price}</code> قیمت، <code dir="ltr">{greeting}</code> سلام تصادفی،
+        <code dir="ltr">{closing}</code> خداحافظی تصادفی</div>
       <textarea id="tpl-chat"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('chat')">💾 ذخیره قالب چت</button>
@@ -372,7 +374,7 @@
     </div>
     <div class="card">
       <h3>قالب پیامک ملی‌پیامک
-        <span class="q">؟<span class="qtip">این متن برای شماره‌های <b>استخراج‌شده</b> (آگهی‌هایی که شماره‌شان پیدا شد) ارسال می‌شود. متغیرهای <code dir="ltr">{title}</code> و <code dir="ltr">{subtitle}</code> و <code dir="ltr">{url}</code> قابل استفاده‌اند. برای ارسال واقعی باید در تب «تنظیمات» نام کاربری، رمز و خط ملی‌پیامک را وارد کنید.</span></span>
+        <span class="q">؟<span class="qtip">این متن برای شماره‌های <b>استخراج‌شده</b> (آگهی‌هایی که شماره‌شان پیدا شد) ارسال می‌شود. همان متغیرها کار می‌کنند: <code dir="ltr">{title}</code>، <code dir="ltr">{subtitle}</code>، <code dir="ltr">{city}</code>، <code dir="ltr">{price}</code>، <code dir="ltr">{greeting}</code>، <code dir="ltr">{closing}</code>، <code dir="ltr">{url}</code>. برای ارسال واقعی باید در تب «تنظیمات» نام کاربری، رمز و خط ملی‌پیامک را وارد کنید.</span></span>
       </h3>
       <textarea id="tpl-sms" placeholder="متن پیامک برای شماره‌های استخراج‌شده…"></textarea>
       <div class="row" style="margin-top:10px">

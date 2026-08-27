@@ -39,6 +39,25 @@ class TestChatAuto(unittest.TestCase):
         text = compose_chat("سلام {title}", {"title": "ویلا", "url": "u"})
         self.assertIn("ویلا", text)
 
+    def test_variables_and_variation(self):
+        """متغیرها پر می‌شوند و سلام/خداحافظی بین ارسال‌ها تغییر می‌کند (ضد اسپم)."""
+        lead = {"title": "ویلا شمال", "city": "نوشهر", "keyword": "ویلا",
+                "price": 2500000000, "subtitle": "دو خوابه", "url": "u"}
+        texts = set()
+        for _ in range(40):
+            texts.add(compose_chat("{greeting}\n{title} در {city} — {price}\n{closing}", lead))
+        # بیش از یک ترکیب باید تولید شود (گردونهٔ سلام/خداحافظی)
+        self.assertGreater(len(texts), 1)
+        for t in texts:
+            self.assertIn("ویلا شمال", t)
+            self.assertIn("نوشهر", t)
+            self.assertIn("میلیون", t)  # قیمت خوانا
+
+    def test_unknown_variable_no_crash(self):
+        # متغیر ناشناخته نباید کرش کند؛ متن خام برمی‌گردد
+        out = compose_chat("سلام {unknown_var}", {"title": "x"})
+        self.assertIn("{unknown_var}", out)
+
     def test_send_success(self):
         seen = {}
 

@@ -265,6 +265,10 @@ class Monitor:
                 "title": row["title"] if "title" in row.keys() else "",
                 "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
                 "url": row["url"] if "url" in row.keys() else "",
+                "city": row["city"] if "city" in row.keys() else "",
+                "keyword": row["keyword"] if "keyword" in row.keys() else "",
+                "price": row["price"] if "price" in row.keys() else 0,
+                "published_at": row["published_at"] if "published_at" in row.keys() else "",
                 "phone": phone,
             }, tpl)
             if not r:
@@ -333,6 +337,10 @@ class Monitor:
                 "title": row["title"] if "title" in row.keys() else "",
                 "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
                 "url": row["url"] if "url" in row.keys() else "",
+                "city": row["city"] if "city" in row.keys() else "",
+                "keyword": row["keyword"] if "keyword" in row.keys() else "",
+                "price": row["price"] if "price" in row.keys() else 0,
+                "published_at": row["published_at"] if "published_at" in row.keys() else "",
             })
             r = send_divar_chat(cl, token, text)
             if not r:

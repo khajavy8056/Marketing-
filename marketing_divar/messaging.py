@@ -8,19 +8,82 @@
 
 from __future__ import annotations
 
+import random
 import sqlite3
 import time
 import webbrowser
 from typing import Any, Dict, Optional
 
+# گردونهٔ سلام/خداحافظی — هر ارسال یک مورد تصادفی می‌گیرد تا متن‌ها یکسان نباشند
+_GREETINGS = (
+    "سلام، وقت بخیر 🌹",
+    "سلام و درود 🙏",
+    "درود، روز بخیر ☀️",
+    "سلام، وقتتون بخیر 😊",
+    "سلام، امیدوارم حالتون خوب باشه 🌷",
+)
+_CLOSINGS = (
+    "ممنون از وقتی که می‌گذارید 🙏",
+    "سپاس از توجه شما 🌹",
+    "با تشکر، منتظر پاسخ شما هستم 😊",
+    "ممنونم و موفق باشید 🙏",
+    "پیشاپیش از پاسخ شما سپاسگزارم 🌷",
+)
+
+
+def _field(lead: Any, key: str, default: str = "") -> str:
+    """مقدار فیلد را از dict یا sqlite3.Row امن می‌خواند."""
+    try:
+        v = lead[key]
+    except (KeyError, IndexError, TypeError):
+        v = None
+    if v is None:
+        return default
+    return str(v).strip()
+
+
+def _format_price(value: Any) -> str:
+    try:
+        n = int(value or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0:
+        return ""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:g} میلیون تومان"
+    return f"{n:,} تومان"
+
 
 def build_message(template: str, lead: sqlite3.Row | Dict[str, Any]) -> str:
-    """قالب را با اطلاعات همان آگهی پر می‌کند (شخصی‌سازی = ضد اسپم)."""
-    return template.format(
-        title=(lead["title"] or "").strip() or "آگهی شما",
-        subtitle=lead["subtitle"] or "",
-        url=lead["url"] or "",
-    )
+    """قالب را با اطلاعات همان آگهی پر می‌کند (شخصی‌سازی = ضد اسپم).
+
+    متغیرهای در دسترس:
+      {title}        عنوان آگهی
+      {subtitle}     توضیح میانی
+      {url}          لینک آگهی
+      {city}         شهر
+      {keyword}      کلمهٔ کلیدی/دسته
+      {price}        قیمت (خوانا: «X میلیون تومان»)
+      {published_at} زمان انتشار آگهی
+      {greeting}     سلام تصادفی از گردونه (هر بار متفاوت)
+      {closing}      خداحافظی تصادفی از گردونه (هر بار متفاوت)
+    """
+    data = {
+        "title": _field(lead, "title", "آگهی شما"),
+        "subtitle": _field(lead, "subtitle"),
+        "url": _field(lead, "url"),
+        "city": _field(lead, "city"),
+        "keyword": _field(lead, "keyword"),
+        "price": _format_price(_field(lead, "price")),
+        "published_at": _field(lead, "published_at"),
+        "greeting": random.choice(_GREETINGS),
+        "closing": random.choice(_CLOSINGS),
+    }
+    try:
+        return template.format(**data)
+    except (KeyError, IndexError, ValueError):
+        # قالب متغیر ناشناخته/غیرمجاز دارد — بدون کرش، خام برمی‌گردد
+        return template
 
 
 def copy_to_clipboard(text: str) -> bool:

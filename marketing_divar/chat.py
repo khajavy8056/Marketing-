@@ -36,7 +36,11 @@ def compose_chat(template: str, lead: Dict[str, Any]) -> str:
     """متن شخصی‌سازی‌شدهٔ چت را با اطلاعات همان آگهی می‌سازد (ضد اسپم)."""
     safe = {"title": lead.get("title") or "آگهی شما",
             "subtitle": lead.get("subtitle") or "",
-            "url": lead.get("url") or ""}
+            "url": lead.get("url") or "",
+            "city": lead.get("city") or "",
+            "keyword": lead.get("keyword") or "",
+            "price": lead.get("price") or 0,
+            "published_at": lead.get("published_at") or ""}
     return build_message(template or "سلام، آگهی «{title}» را دیدم.", safe)
 
 
