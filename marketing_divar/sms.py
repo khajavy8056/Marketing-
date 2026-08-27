@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover
 
 MELI_SEND = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
 MELI_CREDIT = "https://rest.payamak-panel.com/api/SendSMS/GetCredit"
+MELI_DELIVERY = "https://rest.payamak-panel.com/api/SendSMS/GetDeliveries2"
 
 
 def interpret_meli(resp: Any) -> Tuple[bool, str]:
@@ -34,6 +35,22 @@ def interpret_meli(resp: Any) -> Tuple[bool, str]:
         return True, f"recid={n}"
     msg = resp.get("StrRetStatus") or resp.get("RetStatus") or val
     return False, str(msg)[:160]
+
+
+def _recid_of(result: Dict[str, Any]) -> str:
+    """RecId عددی را از خروجی ارسال استخراج می‌کند (برای گزارش تحویل)."""
+    if not isinstance(result, dict):
+        return ""
+    msg = str(result.get("message") or "")
+    if msg.startswith("recid="):
+        return msg[len("recid="):].strip()
+    raw = result.get("raw") or {}
+    val = raw.get("Value") if isinstance(raw, dict) else None
+    try:
+        n = int(float(str(val)))
+    except (TypeError, ValueError):
+        return ""
+    return str(n) if n > 2000 else ""
 
 
 def send_melipayamak(username: str, password: str, to: str, line: str,
@@ -55,7 +72,68 @@ def send_melipayamak(username: str, password: str, to: str, line: str,
     except Exception as e:
         return {"ok": False, "message": f"{type(e).__name__}: {e}"}
     ok, detail = interpret_meli(body if isinstance(body, dict) else {})
-    return {"ok": ok, "message": detail, "raw": body if isinstance(body, dict) else {}}
+    result = {"ok": ok, "message": detail,
+              "raw": body if isinstance(body, dict) else {}}
+    if ok:
+        result["recid"] = _recid_of(result)
+    return result
+
+
+def delivery_melipayamak(username: str, password: str, recid: str,
+                         http_post=None) -> Dict[str, Any]:
+    """وضعیت تحویل یک پیامک با RecId (مستند رسمی GetDeliveries2).
+
+    خروجی status یکی از: delivered | pending | failed | unknown
+    """
+    if not (username and password and recid):
+        return {"ok": False, "status": "unknown",
+                "message": "نام کاربری، رمز و RecId لازم است"}
+    poster = http_post
+    if poster is None:
+        if requests is None:
+            return {"ok": False, "status": "unknown",
+                    "message": "کتابخانه requests نصب نیست"}
+        poster = lambda url, data, timeout=20: requests.post(url, data=data, timeout=timeout)
+    try:
+        r = poster(MELI_DELIVERY, {
+            "username": username, "password": password, "recId": recid,
+        }, timeout=20)
+        body = r.json() if hasattr(r, "json") else r
+    except Exception as e:
+        return {"ok": False, "status": "unknown",
+                "message": f"{type(e).__name__}: {e}"}
+    return interpret_delivery(body if isinstance(body, dict) else {}, recid)
+
+
+def interpret_delivery(body: Any, recid: str = "") -> Dict[str, Any]:
+    """پاسخ GetDeliveries2 را به وضعیت خوانا تبدیل می‌کند.
+
+    کدهای متعارف ملی‌پیامک برای وضعیت تحویل (DeliveryStatus):
+      1, 4 → delivered   |   2, 8 → failed
+      0, 3, 5, 6 → pending (هنوز در صف/اپراتور)
+    """
+    val = None
+    if isinstance(body, dict):
+        val = body.get("Value", body.get("value"))
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            # GetDeliveries2 گاهی لیست [{recId, status}] برمی‌گرداند
+            st = val[0].get("status") or val[0].get("Status")
+            val = st
+    try:
+        code = int(float(str(val)))
+    except (TypeError, ValueError):
+        code = -1
+    if code in (1, 4):
+        return {"ok": True, "status": "delivered",
+                "message": "تحویل داده شد", "raw": body}
+    if code in (2, 8):
+        return {"ok": False, "status": "failed",
+                "message": "تحویل نشد (عدم دریافت توسط مخاطب)", "raw": body}
+    if code in (0, 3, 5, 6):
+        return {"ok": True, "status": "pending",
+                "message": "در صف ارسال/در انتظار تحویل", "raw": body}
+    return {"ok": True, "status": "unknown",
+            "message": f"وضعیت ناشناخته ({body})", "raw": body}
 
 
 def credit_melipayamak(username: str, password: str, http_post=None) -> Dict[str, Any]:

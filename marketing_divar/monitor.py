@@ -287,8 +287,9 @@ class Monitor:
                     try:
                         from .db import now as _now
                         con.execute(
-                            "UPDATE leads SET sms_status='sent', sms_sent_at=? WHERE token=?",
-                            (_now(), token))
+                            "UPDATE leads SET sms_status='sent', sms_sent_at=?, "
+                            "sms_recid=?, sms_delivery_status='pending' WHERE token=?",
+                            (_now(), str(r.get("recid") or ""), token))
                         con.commit()
                     except Exception:
                         pass
@@ -346,20 +347,30 @@ class Monitor:
             if not r:
                 return
             st = "sent" if r.get("ok") else "requires_operator"
+            now_s = time.strftime("%Y-%m-%d %H:%M:%S")
             try:
                 con.execute(
-                    "UPDATE leads SET chat_status=?, lead_status=? WHERE token=?",
-                    (st, "contacted" if r.get("ok") else "new", token))
+                    "UPDATE leads SET chat_status=?, lead_status=?, "
+                    "chat_sent_at=?, chat_account=? WHERE token=?",
+                    (st, "contacted" if r.get("ok") else "new",
+                     now_s if r.get("ok") else "", account_name, token))
+                log_operation(con, token=token, account=account_name,
+                              operation="chat",
+                              result="sent" if r.get("ok") else "requires_operator",
+                              error=r.get("message") if not r.get("ok") else "",
+                              started_at=now_s)
                 con.commit()
             except Exception:
                 pass
             if r.get("ok"):
                 bump_quota(con, "chats")
-                self._ev("success", f"💬 پیام چت خودکار ارسال شد → {token[:16]}")
-                print(f"  💬 چت خودکار: {token[:16]}")
+                self._ev("success",
+                         f"💬 پیام چت خودکار ارسال شد → {token[:16]} (اکانت {account_name})")
+                print(f"  💬 چت خودکار: {token[:16]} (اکانت {account_name})")
                 self._tg("پیام چت خودکار ارسال شد\n"
                          f"آگهی: {(row['title'] or '')[:60]}\n"
-                         f"زمان: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                         f"اکانت: {account_name}\n"
+                         f"زمان: {now_s}")
             else:
                 self._ev("warning",
                          f"چت خودکار ناموفق — به اپراتور سپرده شد: {r.get('message')}")

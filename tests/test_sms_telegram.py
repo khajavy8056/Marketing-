@@ -11,8 +11,8 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 
 from marketing_divar.sms import (  # noqa: E402
-    interpret_meli, maybe_send_for_lead, normalize_ir_phone,
-    send_for_lead, send_melipayamak)
+    delivery_melipayamak, interpret_delivery, interpret_meli,
+    maybe_send_for_lead, normalize_ir_phone, send_for_lead, send_melipayamak)
 from marketing_divar.telegram_bot import (  # noqa: E402
     found_alert_text, handle_command, handle_update)
 from marketing_divar.notifier import (  # noqa: E402
@@ -94,6 +94,36 @@ class TestMeliPayamak(unittest.TestCase):
         }, {"phone": "09121112233", "title": "ویلا"}, "سلام {title}",
             http_post=poster)
         self.assertTrue(r and r["ok"])
+
+    def test_send_returns_recid(self):
+        def poster(url, data, timeout=20):
+            return FakeResp({"Value": "9000000005"})
+
+        r = send_melipayamak("u", "p", "09120000000", "3000", "سلام",
+                             http_post=poster)
+        self.assertTrue(r["ok"])
+        self.assertEqual(r.get("recid"), "9000000005")
+
+    def test_delivery_interpret(self):
+        self.assertEqual(interpret_delivery({"Value": "1"})["status"], "delivered")
+        self.assertEqual(interpret_delivery({"Value": "4"})["status"], "delivered")
+        self.assertEqual(interpret_delivery({"Value": "2"})["status"], "failed")
+        self.assertEqual(interpret_delivery({"Value": "8"})["status"], "failed")
+        self.assertEqual(interpret_delivery({"Value": "0"})["status"], "pending")
+        self.assertEqual(interpret_delivery({"Value": "x"})["status"], "unknown")
+
+    def test_delivery_calls_official_url(self):
+        seen = {}
+
+        def poster(url, data, timeout=20):
+            seen["url"] = url
+            seen["data"] = data
+            return FakeResp({"Value": "1"})
+
+        r = delivery_melipayamak("u", "p", "9000000005", http_post=poster)
+        self.assertEqual(r["status"], "delivered")
+        self.assertIn("GetDeliveries2", seen["url"])
+        self.assertEqual(seen["data"]["recId"], "9000000005")
 
 
 class TestTelegramCommands(unittest.TestCase):

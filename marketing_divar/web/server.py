@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.2.1")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.2.2")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -678,19 +678,29 @@ def lead_send_chat(token: str):
         text = compose_chat(tpl, dict(row))
         r = send_divar_chat(cl, token, text)
         st = "sent" if r.get("ok") else "requires_operator"
+        now_s = time.strftime("%Y-%m-%d %H:%M:%S")
         try:
             con.execute(
-                "UPDATE leads SET chat_status=?, lead_status=? WHERE token=?",
-                (st, "contacted" if r.get("ok") else "new", token))
+                "UPDATE leads SET chat_status=?, lead_status=?, "
+                "chat_sent_at=?, chat_account=? WHERE token=?",
+                (st, "contacted" if r.get("ok") else "new",
+                 now_s if r.get("ok") else "", name, token))
+            from ..db import log_operation
+            log_operation(con, token=token, account=name, operation="chat",
+                          result="sent" if r.get("ok") else "requires_operator",
+                          error=r.get("message") if not r.get("ok") else "",
+                          started_at=now_s)
             if r.get("ok"):
                 bump_quota(con, "chats")
                 con.execute("UPDATE leads SET lead_status='contacted' WHERE token=?",
                             (token,))
             con.commit()
+            m.record_use(DB_PATH, name)  # مصرف اکانت را بالا ببر تا چرخش ادامه یابد
         except Exception:
             pass
+        r["account"] = name
         log("success" if r.get("ok") else "warning",
-            f"چت {token[:16]}: {r.get('message')}")
+            f"چت {token[:16]} (اکانت {name}): {r.get('message')}")
         return r
     finally:
         con.close()
@@ -916,7 +926,8 @@ def leads(filter: str = "all", limit: int = 100):
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
             f"matched_keywords,city,lead_status,chat_status,sms_status,url,first_seen_at,"
-            f"phone_checked_at,last_error FROM leads WHERE {where} "
+            f"phone_checked_at,last_error,sms_delivery_status,sms_sent_at,"
+            f"chat_sent_at,chat_account FROM leads WHERE {where} "
             f"ORDER BY id DESC LIMIT ?", (*args, min(limit, 500))).fetchall()
         return {"leads": [dict(r) for r in rows]}
     finally:
@@ -1014,13 +1025,14 @@ def lead_send_sms(token: str):
         if r.get("ok"):
             try:
                 con.execute(
-                    "UPDATE leads SET sms_status='sent', sms_sent_at=? WHERE token=?",
-                    (_now(), token))
+                    "UPDATE leads SET sms_status='sent', sms_sent_at=?, "
+                    "sms_recid=?, sms_delivery_status='pending' WHERE token=?",
+                    (_now(), str(r.get("recid") or ""), token))
                 bump_quota(con, "sms")
                 con.commit()
             except Exception:
                 pass
-            log("success", f"پیامک دستی ارسال شد → {row['phone']}")
+            log("success", f"پیامک دستی ارسال شد → {row['phone']} (recid={r.get('recid')})")
         else:
             try:
                 con.execute("UPDATE leads SET sms_status='failed' WHERE token=?", (token,))
@@ -1033,7 +1045,52 @@ def lead_send_sms(token: str):
         con.close()
 
 
-# ------------------------------------------------------------ صفحه اصلی --
+@app.post("/api/sms/delivery-check")
+def sms_delivery_check():
+    """وضعیت تحویل پیامک‌های «در انتظار» را از ملی‌پیامک (GetDeliveries2) می‌پرسد.
+
+    همهٔ سرنخ‌هایی که sms_status='sent' و delivery='pending' و recid دارند
+    چک می‌شوند؛ نتیجه به‌صورت delivered / failed ذخیره می‌شود.
+    """
+    from ..sms import delivery_melipayamak
+    s = store.settings_all(DB_PATH)
+    if (s.get("sms_provider") or "none") != "melipayamak":
+        raise HTTPException(400, "سرویس‌دهنده را ملی‌پیامک کنید")
+    user = s.get("sms_username") or ""
+    pwd = s.get("sms_password") or s.get("sms_api_key") or ""
+    if not user or not pwd:
+        raise HTTPException(400, "نام کاربری و رمز ملی‌پیامک را ذخیره کنید")
+    con = connect(DB_PATH)
+    updated = {"delivered": 0, "failed": 0, "pending": 0, "checked": 0}
+    try:
+        rows = con.execute(
+            "SELECT token, phone, sms_recid FROM leads WHERE sms_status='sent' "
+            "AND sms_delivery_status IN ('pending','') AND sms_recid IS NOT NULL "
+            "AND sms_recid != ''").fetchall()
+        for r in rows:
+            recid = str(r["sms_recid"])
+            d = delivery_melipayamak(user, pwd, recid)
+            st = d.get("status") or "unknown"
+            if st == "delivered":
+                con.execute(
+                    "UPDATE leads SET sms_delivery_status='delivered', "
+                    "sms_delivered_at=? WHERE token=?",
+                    (time.strftime("%Y-%m-%d %H:%M:%S"), r["token"]))
+                updated["delivered"] += 1
+            elif st == "failed":
+                con.execute(
+                    "UPDATE leads SET sms_delivery_status='failed' WHERE token=?",
+                    (r["token"],))
+                updated["failed"] += 1
+            else:
+                updated["pending"] += 1
+            updated["checked"] += 1
+        con.commit()
+    finally:
+        con.close()
+    log("success", f"بررسی تحویل پیامک: {updated['checked']} چک، "
+                   f"{updated['delivered']} تحویل، {updated['failed']} ناموفق")
+    return {"ok": True, **updated}
 def _static_dir() -> Path:
     if getattr(sys, "frozen", False):
         root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))

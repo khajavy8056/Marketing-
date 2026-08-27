@@ -545,7 +545,9 @@
         <button class="btn sm gray" type="button" onclick="smsTest('')">بررسی موجودی</button>
         <input id="set-sms-testto" dir="ltr" placeholder="09xxxxxxxxx آزمایش" style="max-width:180px">
         <button class="btn sm" type="button" onclick="smsTest($('set-sms-testto').value)">ارسال آزمایشی</button>
+        <button class="btn sm warn" type="button" onclick="smsDeliveryCheck()">📊 بررسی وضعیت تحویل پیامک‌ها</button>
       </div>
+      <div class="hint" id="sms-delivery-hint" style="margin-top:6px"></div>
     </div>
     <div class="card" style="display:flex; align-items:flex-end">
       <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
@@ -1219,11 +1221,15 @@ async function leadsLoad(filter){
                   legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
                   removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
+      const dTag = {delivered:`<span class="tag ok">تحویل ✓</span>`,
+                    failed:`<span class="tag err">تحویل نشد ✗</span>`,
+                    pending:`<span class="tag warn">در انتظار تحویل</span>`}[l.sms_delivery_status]||'';
       const chatBtn = l.phone_status==='hidden'
         ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>
-           <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
+           <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>
+           ${l.chat_status==='sent'?`<span class="tag ok">چت ارسال شد${l.chat_account?' · '+esc(l.chat_account):''}</span>`:''}`
         : (l.phone_status==='found'
-          ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?tt('ارسال شد','Sent'):tt('پیامک','SMS')}</button>`
+          ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?tt('ارسال شد','Sent'):tt('پیامک','SMS')}</button> ${dTag}`
           : (l.phone_status==='error'
             ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
             : (l.chat_status||'—')));
@@ -1336,6 +1342,15 @@ async function smsTest(to){
   try{
     const r = await api('/api/sms/test',{method:'POST',body:JSON.stringify({to: to||''})});
     toast((r.ok?'✓ ':'❌ ')+(r.message||JSON.stringify(r)), !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function smsDeliveryCheck(){
+  try{
+    const r = await api('/api/sms/delivery-check',{method:'POST',body:'{}'});
+    const m = `${r.checked||0} پیامک چک شد — ${r.delivered||0} تحویل ✓، ${r.failed||0} ناموفق ✗، ${r.pending||0} در انتظار`;
+    toast(m, true);
+    if($('sms-delivery-hint')) $('sms-delivery-hint').textContent = m;
+    leadsLoad();
   }catch(e){ toast('❌ '+e.message,false); }
 }
 function showTgStatus(tg){

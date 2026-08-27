@@ -151,6 +151,11 @@ _LEAD_MIGRATIONS = (
     ("last_error", "TEXT"),
     ("sms_status", "TEXT DEFAULT ''"),
     ("sms_sent_at", "TEXT"),
+    ("sms_recid", "TEXT DEFAULT ''"),
+    ("sms_delivery_status", "TEXT DEFAULT ''"),
+    ("sms_delivered_at", "TEXT"),
+    ("chat_sent_at", "TEXT"),
+    ("chat_account", "TEXT DEFAULT ''"),
     ("vip", "INTEGER DEFAULT 0"),
     ("price", "INTEGER DEFAULT 0"),
 )
