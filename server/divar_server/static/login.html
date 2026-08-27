@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ورود — مارکتینگ دیوار (سرور)</title>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<style>
+  :root{--bg:#0f1420; --card:#1a2230; --line:#2a3544; --txt:#e8eef5;
+        --mut:#8b9bb0; --pri:#4ea3f0; --err:#f0a0a0; --ok:#6fd99a}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Vazirmatn,Tahoma,sans-serif}
+  body{background:radial-gradient(1100px 650px at 70% -10%,#1b4f8a 0%,#0b1a30 48%,#071018 100%);
+       min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--txt);padding:20px}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:16px;
+       padding:34px 30px;width:min(400px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .logo{width:56px;height:56px;border-radius:14px;background:#fff;object-fit:cover;margin:0 auto 14px;display:block}
+  h1{font-size:20px;font-weight:800;text-align:center}
+  .sub{color:var(--mut);font-size:13px;text-align:center;margin:6px 0 22px}
+  .lbl{font-size:12.5px;color:var(--mut);margin:12px 0 4px}
+  input{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;
+        font-size:14px;background:#121920;color:var(--txt);font-family:inherit}
+  input:focus{outline:none;border-color:var(--pri)}
+  button{width:100%;border:none;cursor:pointer;background:var(--pri);color:#fff;
+         padding:12px;border-radius:10px;font-size:14.5px;font-family:inherit;margin-top:18px;transition:.15s}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .err{color:var(--err);font-size:12.5px;margin-top:12px;min-height:1.4em;text-align:center}
+  .ok{color:var(--ok);font-size:12.5px;margin-top:12px;min-height:1.4em;text-align:center}
+  .hint{color:var(--mut);font-size:11.5px;line-height:1.9;margin-top:16px;text-align:center}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+  <img class="logo" src="/logo.png" alt="">
+  <h1>مارکتینگ دیوار</h1>
+  <div class="sub">نسخهٔ سرور لینوکس — ورود امن</div>
+
+  <!-- فرم ورود -->
+  <div id="login-form">
+    <div class="lbl">نام کاربری</div>
+    <input id="username" dir="ltr" autocomplete="username" placeholder="admin">
+    <div class="lbl">رمز عبور</div>
+    <input id="password" type="password" dir="ltr" autocomplete="current-password">
+    <button id="login-btn" onclick="doLogin()">ورود</button>
+    <div class="err" id="login-err"></div>
+  </div>
+
+  <!-- فرم تغییر رمز (اولین ورود) -->
+  <div id="change-form" class="hidden">
+    <div class="sub" style="margin-bottom:4px">برای امنیت، ابتدا رمز عبور پیش‌فرض را تغییر دهید.</div>
+    <div class="lbl">رمز عبور فعلی</div>
+    <input id="current" type="password" dir="ltr" autocomplete="current-password">
+    <div class="lbl">رمز عبور جدید (حداقل ۶ کاراکتر)</div>
+    <input id="newpw" type="password" dir="ltr" autocomplete="new-password">
+    <div class="lbl">تکرار رمز عبور جدید</div>
+    <input id="newpw2" type="password" dir="ltr" autocomplete="new-password">
+    <button id="change-btn" onclick="doChange()">ذخیره و ادامه</button>
+    <div class="err" id="change-err"></div>
+  </div>
+
+  <div class="hint">ورود پیش‌فرض: <b dir="ltr">admin / admin</b><br>
+    بعد از اولین ورود، تغییر رمز الزامی است.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function post(path, body){
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+                               body: JSON.stringify(body||{})});
+  const d = await r.json().catch(()=>({}));
+  return {status:r.status, data:d};
+}
+async function doLogin(){
+  const btn=$('login-btn'), err=$('login-err'); btn.disabled=true; err.textContent='';
+  const r = await post('/api/auth/login', {username:$('username').value.trim(), password:$('password').value});
+  btn.disabled=false;
+  if(r.status===200 && r.data.ok){
+    if(r.data.must_change_password){
+      $('login-form').classList.add('hidden');
+      $('change-form').classList.remove('hidden');
+      $('current').value = $('password').value;
+    } else {
+      location.href='/';
+    }
+  } else {
+    err.textContent = (r.data && r.data.message) || 'ورود ناموفق';
+  }
+}
+async function doChange(){
+  const btn=$('change-btn'), err=$('change-err'); btn.disabled=true; err.textContent='';
+  const a=$('newpw').value, b=$('newpw2').value;
+  if(a.length < 6){ err.textContent='رمز جدید باید حداقل ۶ کاراکتر باشد'; btn.disabled=false; return; }
+  if(a !== b){ err.textContent='تکرار رمز با رمز جدید یکی نیست'; btn.disabled=false; return; }
+  const r = await post('/api/auth/change-password', {current:$('current').value, new:a});
+  btn.disabled=false;
+  if(r.status===200 && r.data.ok){ location.href='/'; }
+  else { err.textContent = (r.data && r.data.message) || 'تغییر رمز ناموفق'; }
+}
+$('password').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+$('newpw2').addEventListener('keydown', e=>{ if(e.key==='Enter') doChange(); });
+</script>
+</body>
+</html>
