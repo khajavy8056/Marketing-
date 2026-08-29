@@ -712,8 +712,8 @@ class DivarClient:
 
         دسته همان اسلاگ عمومی /s/{شهر}/{دسته} است (موبایل، خودرو، …).
         """
-        from .categories import normalize_slug
-        cat = normalize_slug(category)
+        from .categories import search_slug
+        cat = search_slug(category, "divar")
         self.limiter.wait("search")
         params: Dict[str, Any] = {}
         if query:

@@ -331,7 +331,11 @@
     </div>
     <div class="checkline">
       <input type="checkbox" id="kw-hunter">
-      <label for="kw-hunter"><b>شکارچی قیمت</b> — قیمت نقدی خیلی پایین نسبت به میانهٔ بازار (معیوب و توافقی جدا می‌مانند)</label>
+      <label for="kw-hunter"><b>شکارچی قیمت</b> — قیمت نقدی خیلی پایین نسبت به ارزش تعدیل‌شدهٔ همان دسته (معیوب و توافقی جدا می‌مانند). املاک شکار نمی‌شود.</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn gray" type="button" id="kw-hunter-adv-btn" onclick="hunterAdvOpen()">تنظیمات پیشرفته شکارچی</button>
+      <span class="hint" id="kw-hunter-adv-hint">پیش‌فرض نرم است تا دمو چند شکار پیدا کند. اگر کاسب حرفه‌ای هستید درصد افت را سفت کنید.</span>
     </div>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="kwAdd()">➕ افزودن</button>
@@ -397,6 +401,7 @@
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
         <button class="btn sm gray" onclick="leadsLoad('hunter')">شکارچی</button>
+        <button class="btn sm gray" onclick="leadsLoad('hunter_pending')">در انتظار شکارچی</button>
         <button class="btn sm gray" onclick="leadsLoad('defect')">معیوب</button>
         <button class="btn sm gray" onclick="leadsLoad('replied')">پاسخ‌ها</button>
         <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
@@ -668,6 +673,40 @@
     <button class="btn ok" type="button" onclick="chatOpenAd()">باز کردن آگهی</button>
     <button class="btn gray" type="button" onclick="chatMarkSent()">✓ ارسال کردم</button>
     <button class="btn gray" type="button" onclick="document.getElementById('chat-dlg').close()">بستن</button>
+  </div>
+</dialog>
+
+
+<dialog id="hunter-adv-warn" style="width:min(480px,92vw)">
+  <h3>تنظیمات تخصصی شکارچی</h3>
+  <p class="hint" style="margin:10px 0 14px;line-height:1.9">این فیلدها را یک کاسب حرفه‌ای برای هر دسته پر کرده (خودرو، موبایل، لپ‌تاپ، لوازم…).
+    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.
+    اگر بلد نیستید دست نزنید. اگر کاسبید، درصد افت را کمی سفت‌تر کنید.</p>
+  <div class="row">
+    <button class="btn ok" type="button" onclick="hunterAdvShow()">متوجه شدم — ادامه</button>
+    <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-warn').close()">انصراف</button>
+  </div>
+</dialog>
+<dialog id="hunter-adv-dlg" style="width:min(560px,94vw)">
+  <h3>تنظیمات پیشرفته شکارچی</h3>
+  <p class="hint" id="hunter-adv-family" style="margin:8px 0 10px"></p>
+  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود.</div>
+  <div class="grid g2">
+    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده)</div>
+      <input id="hadv-good" type="number" min="1" max="40" dir="ltr"></div>
+    <div><div class="lbl">آستانه خیلی مناسب (٪)</div>
+      <input id="hadv-great" type="number" min="2" max="50" dir="ltr"></div>
+    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪)</div>
+      <input id="hadv-sus" type="number" min="20" max="90" dir="ltr"></div>
+  </div>
+  <div class="checkline">
+    <input type="checkbox" id="hadv-dealer">
+    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ را حتماً بپرس بعد تصمیم بگیر</label>
+  </div>
+  <div id="hunter-adv-fields"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره درصدها</button>
+    <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-dlg').close()">بستن</button>
   </div>
 </dialog>
 
@@ -1181,6 +1220,7 @@ async function kwLoad(){
         <span class="hint">${esc(k.city_title|| (k.cities?k.cities.join('،'):tt('همه کشور','All country')))}</span>
         ${_priceHint(k)?`<span class="hint">${esc(_priceHint(k))}</span>`:''}
       </div><div class="row">
+        ${k.hunter?`<button class="btn sm" type="button" onclick="hunterAdvOpen(${k.id},'${esc(k.keyword)}','${esc(k.category||'')}')">تنظیمات پیشرفته</button>`:''}
         <button class="btn sm gray" onclick="kwToggle(${k.id},${!k.active})">${k.active?'غیرفعال‌کردن':'فعال‌کردن'}</button>
         <button class="btn sm err" onclick="kwDel(${k.id})">حذف</button>
       </div></div>`).join('') : '<div class="empty">کلمه یا دسته‌ای اضافه نشده</div>';
@@ -1200,13 +1240,77 @@ async function kwAdd(){
   const price_max=parseFloat(($('kw-price-max')||{}).value)||0;
   const vip=!!($('kw-vip')&&$('kw-vip').checked);
   const hunter=!!($('kw-hunter')&&$('kw-hunter').checked);
-  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip, hunter})) {
+  const hunter_adv = window._hunterAdv || null;
+  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip, hunter, hunter_adv})) {
     $('kw-input').value=''; if($('kw-price-min'))$('kw-price-min').value='';
     if($('kw-price-max'))$('kw-price-max').value=''; if($('kw-vip'))$('kw-vip').checked=false;
     if($('kw-hunter'))$('kw-hunter').checked=false;
+    window._hunterAdv = null;
+    if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent='پیش‌فرض نرم است تا دمو چند شکار پیدا کند.';
     kwLoad();
   }
 }
+
+let _hunterAdvKwId = 0;
+async function hunterAdvOpen(kwId, keyword, category){
+  _hunterAdvKwId = kwId || 0;
+  window._hunterAdvKw = keyword || ($('kw-input')&&$('kw-input').value) || '';
+  window._hunterAdvCat = category || ($('kw-category')&&$('kw-category').value) || '';
+  const w = $('hunter-adv-warn');
+  if (w && !w.open) w.showModal();
+}
+async function hunterAdvShow(){
+  const w = $('hunter-adv-warn'); if (w && w.open) w.close();
+  const kw = window._hunterAdvKw || '';
+  const cat = window._hunterAdvCat || '';
+  try{
+    const r = await api('/api/hunter-profile?keyword='+encodeURIComponent(kw)+'&category='+encodeURIComponent(cat));
+    const p = r.profile || {};
+    if($('hunter-adv-family')) $('hunter-adv-family').textContent =
+      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.hint||'')));
+    if($('hunter-adv-estate')) $('hunter-adv-estate').style.display = p.hunter===false ? 'block':'none';
+    if($('hadv-good')) $('hadv-good').value = p.good_pct||8;
+    if($('hadv-great')) $('hadv-great').value = p.great_pct||15;
+    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||55;
+    if($('hadv-dealer')) $('hadv-dealer').checked = !!p.dealer_mode;
+    const box = $('hunter-adv-fields');
+    if(box){
+      box.innerHTML = (p.adjustments||[]).map(a=>`
+        <div class="lbl">${esc(a.label)} (٪ افت، منفی یعنی ارزان‌تر حساب شود)</div>
+        <input data-hadv-key="${esc(a.key)}" type="number" step="0.5" dir="ltr" value="${a.pct}">
+      `).join('') || '<div class="hint">درصدی برای این دسته نیست</div>';
+    }
+    const dlg = $('hunter-adv-dlg');
+    if (dlg && !dlg.open) dlg.showModal();
+  }catch(e){ toast('❌ '+e.message, false); }
+}
+async function hunterAdvSave(){
+  const adjustments = {};
+  document.querySelectorAll('[data-hadv-key]').forEach(el=>{
+    const n = parseFloat(el.value);
+    if(!isNaN(n)) adjustments[el.getAttribute('data-hadv-key')] = n;
+  });
+  const values = {
+    good_pct: parseFloat(($('hadv-good')||{}).value)||8,
+    great_pct: parseFloat(($('hadv-great')||{}).value)||15,
+    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||55,
+    dealer_mode: !!($('hadv-dealer')&&$('hadv-dealer').checked),
+    adjustments,
+  };
+  window._hunterAdv = values;
+  if (_hunterAdvKwId){
+    try{
+      const r = await api('/api/keywords/'+_hunterAdvKwId+'/hunter-adv',
+        {method:'POST', body: JSON.stringify({values})});
+      toast(r.message||'ذخیره شد');
+    }catch(e){ toast('❌ '+e.message, false); return; }
+  } else {
+    toast('درصدها برای پایش بعدی ذخیره شد — افزودن را بزنید');
+  }
+  if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی آمادهٔ افزودن است';
+  const dlg = $('hunter-adv-dlg'); if (dlg && dlg.open) dlg.close();
+}
+
 async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
 async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwLoad(); }
 

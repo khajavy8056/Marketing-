@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.1.0")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.2.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -97,6 +97,7 @@ class KeywordAdd(BaseModel):
     price_max: float = 0
     vip: bool = False
     hunter: bool = False
+    hunter_adv: Optional[Dict[str, Any]] = None
 
 
 class SettingsUpdate(BaseModel):
@@ -552,7 +553,8 @@ def keywords_add(req: KeywordAdd):
         DB_PATH, req.keyword, parse_city_ids(req.cities), req.category,
         price_min=million_to_toman(req.price_min),
         price_max=million_to_toman(req.price_max),
-        vip=bool(req.vip), hunter=bool(req.hunter))
+        vip=bool(req.vip), hunter=bool(req.hunter),
+        hunter_adv=req.hunter_adv)
     log("info", f"پایش اضافه شد: {req.keyword or req.category}")
     return {"ok": added, "message": "اضافه شد" if added else "از قبل موجود بود"}
 
@@ -567,6 +569,30 @@ def keywords_delete(kw_id: int):
 def keywords_toggle(kw_id: int, active: bool = True):
     store.keywords_toggle(DB_PATH, kw_id, active)
     return {"ok": True}
+
+
+@app.get("/api/hunter-profile")
+def hunter_profile_get(keyword: str = "", category: str = ""):
+    from ..categories import hunter_allowed, is_real_estate
+    from ..hunter_profile import default_profile, merge_overrides, public_for_ui
+    if is_real_estate(category):
+        return {"ok": False, "hunter": False,
+                "reason": "املاک در شکارچی پشتیبانی نمی‌شود",
+                "profile": public_for_ui(default_profile(category, keyword))}
+    prof = store.hunter_profile_for(DB_PATH, keyword, category)
+    return {"ok": True, "hunter": hunter_allowed(category), "profile": prof}
+
+
+class HunterAdvUpdate(BaseModel):
+    values: Dict[str, Any] = {}
+
+
+@app.post("/api/keywords/{kw_id}/hunter-adv")
+def keywords_hunter_adv(kw_id: int, req: HunterAdvUpdate):
+    ok = store.keywords_set_hunter_adv(DB_PATH, kw_id, req.values or {})
+    if not ok:
+        raise HTTPException(404, "این پایش پیدا نشد")
+    return {"ok": True, "message": "تنظیمات پیشرفته شکارچی ذخیره شد"}
 
 
 # ------------------------------------------------------------- API پیام‌ها --
@@ -700,6 +726,7 @@ def robot_status():
             "replies": replies_n,
             "unread_replies": unread,
             "hunter_great": _c("hunter_level='great'"),
+            "hunter_pending": _c("hunter_level='pending'"),
             "defect": _c("is_defect=1"),
             "inquiry": _c("inquiry_status IN ('pending','sent')"),
         }
@@ -948,7 +975,9 @@ def leads(filter: str = "all", limit: int = 100):
         elif filter == "replied":
             where, args = "lead_status='replied'", ()
         elif filter == "hunter":
-            where, args = "hunter_level IN ('good','great')", ()
+            where, args = "hunter_level IN ('good','great','pending')", ()
+        elif filter == "hunter_pending":
+            where, args = "hunter_level='pending'", ()
         elif filter == "defect":
             where, args = "is_defect=1", ()
         else:

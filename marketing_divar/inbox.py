@@ -137,7 +137,13 @@ def _context(lead) -> str:
         st = lead["inquiry_status"] if "inquiry_status" in lead.keys() else ""
     except Exception:
         st = ""
-    return "inquire" if st in ("sent", "pending") else "marketing"
+    try:
+        hl = lead["hunter_level"] if "hunter_level" in lead.keys() else ""
+    except Exception:
+        hl = ""
+    if st in ("sent", "pending") or hl == "pending":
+        return "inquire"
+    return "marketing"
 
 
 def list_replies(con, token: str = "", limit: int = 80) -> List[Dict[str, Any]]:

@@ -72,6 +72,7 @@ def build_message(template: str, lead: sqlite3.Row | Dict[str, Any]) -> str:
         "platform": _field(lead, "platform", "divar"),
         "greeting": random.choice(_GREETINGS),
         "closing": random.choice(_CLOSINGS),
+        "questions": _field(lead, "questions") or _field(lead, "hunter_questions"),
     }
     class _Safe(dict):
         def __missing__(self, key):

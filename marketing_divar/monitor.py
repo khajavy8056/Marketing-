@@ -295,6 +295,188 @@ class Monitor:
             con.close()
 
     # ------------------------------------------------------- شماره‌گیری 📞 --
+    def _score_hunter(self, con, post: Dict[str, Any], spec: Dict[str, Any],
+                      kw: str, city: str) -> None:
+        from .categories import hunter_allowed
+        from .hunter import collect_samples, evaluate
+        from .hunter_profile import default_profile, merge_overrides
+        from . import store as _st2
+        cat = spec.get("category") or post.get("category") or ""
+        if not hunter_allowed(cat) and cat:
+            return
+        prof = merge_overrides(default_profile(str(cat), kw),
+                               spec.get("hunter_adv") or {})
+        if not prof.get("hunter"):
+            return
+        extra = dict(post)
+        extra["keyword"] = kw
+        extra["category"] = cat
+        blob = " ".join(str(post.get(k) or "") for k in
+                        ("title", "subtitle", "description", "inspect_summary"))
+        plat = str(post.get("platform") or "divar")
+        samples = collect_samples(con, kw, city, plat)
+        sc = evaluate(int(post.get("price") or 0), samples,
+                      _st2.settings_all(self.db_path), extra=extra,
+                      profile=prof, text=blob)
+        token = post.get("token")
+        if not token or sc.get("blocked"):
+            return
+        level = sc.get("level") or ""
+        if sc.get("pending"):
+            level = "pending"
+        elif not sc.get("warm") or level in ("none", "suspicious", "market"):
+            if not sc.get("pending"):
+                if level == "market":
+                    level = ""
+        try:
+            con.execute(
+                "UPDATE leads SET hunter_level=?, hunter_adj_pct=?, hunter_questions=? "
+                "WHERE token=?",
+                (level, float(sc.get("adj_pct") or 0),
+                 str(sc.get("questions") or "")[:400], token))
+        except Exception:
+            con.execute("UPDATE leads SET hunter_level=? WHERE token=?",
+                        (level, token))
+        if sc.get("pending") or level == "pending":
+            try:
+                con.execute(
+                    "UPDATE leads SET inquiry_status='pending' WHERE token=? "
+                    "AND COALESCE(inquiry_status,'')=''",
+                    (token,))
+            except Exception:
+                pass
+        post["hunter_level"] = level
+        post["hunter_questions"] = sc.get("questions") or ""
+
+    def _row_get(self, row, key, default=""):
+        try:
+            if hasattr(row, "keys") and key in row.keys():
+                v = row[key]
+                return default if v is None else v
+        except Exception:
+            pass
+        if isinstance(row, dict):
+            return row.get(key, default)
+        return default
+
+    def _maybe_hunter_inquire(self, con, row, phone: str = "",
+                              account_name: str = "") -> None:
+        """جای‌خالی شکارچی: اگر شماره هست پیامک، وگرنه چت. وضعیت: در انتظار تصمیم."""
+        token = self._row_get(row, "token")
+        if not token:
+            return
+        hl = str(self._row_get(row, "hunter_level") or "")
+        inq = str(self._row_get(row, "inquiry_status") or "")
+        if hl != "pending" and inq not in ("pending",):
+            return
+        if inq == "sent":
+            return
+        from . import store
+        from .db import now as _now
+        questions = str(self._row_get(row, "hunter_questions") or "")
+        tpl = (store.template_get(self.db_path, "inquire") or {}).get("text") or ""
+        lead = {
+            "title": self._row_get(row, "title"),
+            "subtitle": self._row_get(row, "subtitle"),
+            "url": self._row_get(row, "url"),
+            "city": self._row_get(row, "city"),
+            "keyword": self._row_get(row, "keyword"),
+            "price": self._row_get(row, "price", 0),
+            "published_at": self._row_get(row, "published_at"),
+            "platform": self._row_get(row, "platform") or "divar",
+            "token": token,
+            "questions": questions,
+            "hunter_questions": questions,
+            "phone": phone or self._row_get(row, "phone"),
+        }
+        if lead["phone"]:
+            try:
+                from .sms import live_sms_cfg, send_for_lead, sms_ready
+                cfg = live_sms_cfg(self.db_path, self.cfg)
+                ready, _why = sms_ready(cfg)
+                if ready:
+                    lim = int(cfg.get("sms_daily_limit") or 40)
+                    if quota_today(con).get("sms", 0) < lim:
+                        r = send_for_lead(cfg, lead, tpl)
+                        if r and r.get("ok"):
+                            con.execute(
+                                "UPDATE leads SET inquiry_status='sent', sms_status='sent', "
+                                "sms_sent_at=? WHERE token=?",
+                                (_now(), token))
+                            bump_quota(con, "sms")
+                            con.commit()
+                            self._ev("success", "استعلام شکارچی پیامک شد")
+                            return
+            except Exception as e:
+                self._ev("warning", f"استعلام پیامک: {e}")
+        # چت
+        try:
+            from .chat import compose_chat, send_divar_chat
+            lim = 40
+            try:
+                lim = int(store.settings_all(self.db_path).get("chat_auto_daily_limit") or 40)
+            except Exception:
+                pass
+            if quota_today(con).get("chats", 0) >= lim:
+                return
+            name = account_name or self.mgr.pick(self.db_path)
+            if not name:
+                return
+            text = compose_chat(tpl, lead)
+            cl = self.client_for(name)
+
+            def _send(_c, tok, msg):
+                from .chat_browser import send_for_token
+                return send_for_token(
+                    tok, msg, client=_c,
+                    accounts_dir=str(self.mgr.dir), account=name,
+                    url=lead.get("url") or "")
+
+            r = send_divar_chat(cl, token, text, send_fn=_send)
+            if r.get("ok"):
+                con.execute(
+                    "UPDATE leads SET inquiry_status='sent', chat_status='sent', "
+                    "chat_sent_at=?, chat_account=? WHERE token=?",
+                    (_now(), name, token))
+                bump_quota(con, "chats")
+                con.commit()
+                self._ev("success", "استعلام شکارچی در چت ارسال شد")
+            elif r.get("status") == "removed":
+                con.execute(
+                    "UPDATE leads SET phone_status='removed', inquiry_status='gone' "
+                    "WHERE token=?", (token,))
+                con.commit()
+        except Exception as e:
+            self._ev("warning", f"استعلام چت: {e}")
+
+    def drain_hunter_inquire(self, max_items: int = 6) -> None:
+        con = connect(self.db_path)
+        try:
+            try:
+                rows = con.execute(
+                    "SELECT * FROM leads WHERE hunter_level='pending' "
+                    "AND COALESCE(inquiry_status,'') IN ('','pending') "
+                    "AND COALESCE(phone_status,'') != 'removed' "
+                    "ORDER BY id DESC LIMIT ?", (max_items,)).fetchall()
+            except Exception:
+                rows = []
+        finally:
+            con.close()
+        for row in rows:
+            if self.stop_event.is_set():
+                return
+            con = connect(self.db_path)
+            try:
+                phone = ""
+                try:
+                    if "phone_status" in row.keys() and row["phone_status"] == "found":
+                        phone = row["phone"] or ""
+                except Exception:
+                    pass
+                self._maybe_hunter_inquire(con, row, phone=phone)
+            finally:
+                con.close()
+
     def _maybe_sms(self, con, row, phone: str) -> None:
         """اگر گزینهٔ خودکار روشن باشد، همان لحظه از ملی‌پیامک پیامک می‌زند."""
         if not phone:
@@ -485,7 +667,8 @@ class Monitor:
                 from .chat_browser import read_thread
                 from .inbox import ingest_chat
                 rows = con.execute(
-                    "SELECT * FROM leads WHERE chat_status='sent' "
+                    "SELECT * FROM leads WHERE (chat_status='sent' "
+                    "OR inquiry_status='sent') "
                     "AND COALESCE(phone_status,'') != 'removed' "
                     "ORDER BY id DESC LIMIT 6").fetchall()
                 acc = self.mgr.pick(self.db_path)
@@ -657,7 +840,14 @@ class Monitor:
                                     {"cities": None, "category": ""},
                                     row["city"] if "city" in row.keys() else "",
                                     phone=res.get("phone") or "")
-                self._maybe_sms(con, row, res.get("phone") or "")
+                try:
+                    if (row["hunter_level"] if "hunter_level" in row.keys() else "") == "pending":
+                        self._maybe_hunter_inquire(con, row, phone=res.get("phone") or "",
+                                                   account_name=name)
+                    else:
+                        self._maybe_sms(con, row, res.get("phone") or "")
+                except Exception:
+                    self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")
                 try:

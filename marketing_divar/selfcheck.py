@@ -104,6 +104,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("platform enable switches missing from panel")
     if "kw-price-min" not in html or "kw-vip" not in html:
         raise FileNotFoundError("price range / VIP missing from panel")
+    if "hunter-adv-dlg" not in html or "hunterAdvOpen" not in html:
+        raise FileNotFoundError("hunter advanced settings popup missing from panel")
+    if "/api/hunter-profile" not in html:
+        raise FileNotFoundError("hunter-profile API not wired in panel")
     if "cap-dlg" not in html or "cap-answer" not in html:
         raise FileNotFoundError("in-panel captcha popup missing")
     if 'id="cap-frame"' in html or 'src="https://divar.ir"' in html:

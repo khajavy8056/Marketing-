@@ -118,6 +118,10 @@ def _con(db_path: str) -> sqlite3.Connection:
     if "hunter" not in cols:
         con.execute("ALTER TABLE keywords ADD COLUMN hunter INTEGER DEFAULT 0")
         con.commit()
+        cols.add("hunter")
+    if "hunter_adv" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN hunter_adv TEXT DEFAULT ''")
+        con.commit()
     _apply_factory_defaults_2123(con)
     return con
 
@@ -157,16 +161,23 @@ def _apply_factory_defaults_2123(con: sqlite3.Connection) -> None:
 def keywords_list(db_path: str) -> List[Dict[str, Any]]:
     from .categories import title_of
     with _con(db_path) as con:
-        rows = con.execute(
-            "SELECT id, keyword, cities, active, created_at, category, browse, "
-            "price_min, price_max, vip, hunter FROM keywords "
-            "ORDER BY id DESC").fetchall()
+        try:
+            rows = con.execute(
+                "SELECT id, keyword, cities, active, created_at, category, browse, "
+                "price_min, price_max, vip, hunter, hunter_adv FROM keywords "
+                "ORDER BY id DESC").fetchall()
+        except Exception:
+            rows = con.execute(
+                "SELECT id, keyword, cities, active, created_at, category, browse, "
+                "price_min, price_max, vip, hunter FROM keywords "
+                "ORDER BY id DESC").fetchall()
     from .cities import title_of_city
     out = []
     for r in rows:
         cat = ""
         browse = 0
         pmin = pmax = vip = hunter = 0
+        adv: Any = {}
         try:
             if "category" in r.keys():
                 cat = r["category"] or ""
@@ -180,6 +191,13 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
                 vip = int(r["vip"] or 0)
             if "hunter" in r.keys():
                 hunter = int(r["hunter"] or 0)
+            if "hunter_adv" in r.keys():
+                raw_adv = r["hunter_adv"] or ""
+                if raw_adv:
+                    try:
+                        adv = json.loads(raw_adv)
+                    except Exception:
+                        adv = {}
         except Exception:
             cat, browse = cat, 0
         cities = json.loads(r["cities"]) if r["cities"] else None
@@ -193,7 +211,8 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
                     "category": cat, "category_title": title_of(cat),
                     "browse": bool(browse),
                     "price_min": pmin, "price_max": pmax, "vip": bool(vip),
-                    "hunter": bool(hunter)})
+                    "hunter": bool(hunter),
+                    "hunter_adv": adv if isinstance(adv, dict) else {}})
     return out
 
 
@@ -201,13 +220,15 @@ def keywords_add(db_path: str, keyword: str,
                  cities: Optional[List[int]] = None,
                  category: str = "",
                  price_min: int = 0, price_max: int = 0,
-                 vip: bool = False, hunter: bool = False) -> bool:
+                 vip: bool = False, hunter: bool = False,
+                 hunter_adv: Optional[Dict[str, Any]] = None) -> bool:
     """افزودن کلمه و/یا دستهٔ دیوار.
 
     بدون کلمه + دسته = مرور کل دسته (عنوان آگهی مهم نیست).
     کلمه + دسته = جستجو داخل همان دسته سپس تطبیق عبارت.
     """
-    from .categories import normalize_slug, title_of
+    from .categories import (PHONE_BRANDS, LAPTOP_BRANDS, hunter_allowed,
+                             normalize_slug, title_of)
     from .cities import parse_city_ids
     cities = parse_city_ids(cities)
     cat = normalize_slug(category)
@@ -217,27 +238,33 @@ def keywords_add(db_path: str, keyword: str,
         if not cat:
             return False
         parts = [title_of(cat)]
-        browse = 1
+        # برند: عبارت جستجو = نام برند؛ دستهٔ والد در search_slug
+        browse = 0 if cat in PHONE_BRANDS or cat in LAPTOP_BRANDS else 1
     added = False
     pmin = int(price_min or 0)
     pmax = int(price_max or 0)
     vip_i = int(bool(vip))
-    hun_i = int(bool(hunter))
+    hun_i = int(bool(hunter) and hunter_allowed(cat))
+    adv_s = ""
+    if hunter_adv and isinstance(hunter_adv, dict):
+        adv_s = json.dumps(hunter_adv, ensure_ascii=False)
     with _con(db_path) as con:
         for label in parts:
             cur = con.execute(
                 "INSERT OR IGNORE INTO keywords "
-                "(keyword, cities, created_at, category, browse, price_min, price_max, vip, hunter) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(keyword, cities, created_at, category, browse, price_min, price_max, "
+                "vip, hunter, hunter_adv) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (label, json.dumps(cities) if cities else None,
-                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse, pmin, pmax, vip_i, hun_i))
+                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse, pmin, pmax,
+                 vip_i, hun_i, adv_s))
             added = added or cur.rowcount > 0
             if cur.rowcount == 0:
                 con.execute(
                     "UPDATE keywords SET category=?, browse=?, cities=?, "
-                    "price_min=?, price_max=?, vip=?, hunter=? WHERE keyword=?",
+                    "price_min=?, price_max=?, vip=?, hunter=?, hunter_adv=? WHERE keyword=?",
                     (cat, browse, json.dumps(cities) if cities else None,
-                     pmin, pmax, vip_i, hun_i, label))
+                     pmin, pmax, vip_i, hun_i, adv_s, label))
                 added = True
     return added
 
@@ -252,6 +279,29 @@ def keywords_toggle(db_path: str, kw_id: int, active: bool) -> None:
         con.execute("UPDATE keywords SET active=? WHERE id=?", (int(active), kw_id))
 
 
+def keywords_set_hunter_adv(db_path: str, kw_id: int,
+                            adv: Optional[Dict[str, Any]]) -> bool:
+    raw = json.dumps(adv or {}, ensure_ascii=False)
+    with _con(db_path) as con:
+        cur = con.execute("UPDATE keywords SET hunter_adv=? WHERE id=?", (raw, kw_id))
+        return cur.rowcount > 0
+
+
+def hunter_profile_for(db_path: str, keyword: str = "",
+                       category: str = "",
+                       overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    from .hunter_profile import default_profile, merge_overrides, public_for_ui
+    adv = overrides
+    if adv is None and (keyword or category):
+        for k in keywords_list(db_path):
+            if keyword and k.get("keyword") == keyword:
+                adv = k.get("hunter_adv") or {}
+                category = category or (k.get("category") or "")
+                break
+    prof = merge_overrides(default_profile(category, keyword), adv)
+    return public_for_ui(prof)
+
+
 def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
     """تبدیل کلمات فعال به ساختار ورودی مانیتور."""
     from .categories import title_of
@@ -260,18 +310,20 @@ def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
         if not k["active"]:
             continue
         cat = k.get("category") or ""
-        from .categories import CATEGORIES
+        from .categories import CATEGORIES, LAPTOP_BRANDS, PHONE_BRANDS
         titles = {c["title"] for c in CATEGORIES}
         titles.add("موبایل و تبلت")
+        brand = cat in PHONE_BRANDS or cat in LAPTOP_BRANDS
         match_all = bool(k.get("browse")) or (
-            bool(cat) and (not k["keyword"] or k["keyword"] in titles
-                           or k["keyword"] == title_of(cat)))
+            bool(cat) and not brand and (not k["keyword"] or k["keyword"] in titles
+                                         or k["keyword"] == title_of(cat)))
         specs.append({"keyword": k["keyword"], "cities": k["cities"], "pages": 1,
                       "category": cat, "match_all": match_all,
                       "price_min": int(k.get("price_min") or 0),
                       "price_max": int(k.get("price_max") or 0),
                       "vip": bool(k.get("vip")),
-                      "hunter": bool(k.get("hunter"))})
+                      "hunter": bool(k.get("hunter")),
+                      "hunter_adv": k.get("hunter_adv") or {}})
     return specs
 
 

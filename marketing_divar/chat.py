@@ -31,6 +31,7 @@ def compose_chat(template: str, lead: Dict[str, Any]) -> str:
         "price": lead.get("price") or 0,
         "published_at": lead.get("published_at") or "",
         "platform": lead.get("platform") or "divar",
+        "questions": lead.get("questions") or lead.get("hunter_questions") or "",
     }
     text = build_message(template or "{greeting}\nآگهی «{title}» را دیدم.\n{closing}", safe)
     if not (lead.get("title") or "").strip():

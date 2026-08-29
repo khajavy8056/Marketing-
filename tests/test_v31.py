@@ -102,7 +102,7 @@ class TestVehicleHunter(unittest.TestCase):
         hit = inspect_vehicle("پراید مدل ۱۳۹۰ شاسی ضربه خورده دور رنگ کارکرد 200000 کیلومتر")
         self.assertEqual(hit["chassis"], "hit")
         self.assertEqual(hit["paint"], "repainted")
-        self.assertTrue(hit["hunter_block"])
+        self.assertFalse(hit["hunter_block"])
         self.assertEqual(hit["year"], 1390)
         self.assertEqual(hit["mileage_km"], 200000)
         ok = inspect_vehicle("پژو ۲۰۶ شاسی سالم بی رنگ مدل ۱۳۹۸")
@@ -112,7 +112,8 @@ class TestVehicleHunter(unittest.TestCase):
         post = {"title": "سمند تصادفی شاسی رنگ", "price": 80_000_000,
                 "category": "light", "platform": "sheypoor"}
         ins = inspect_listing(post, use_llm=False)
-        self.assertTrue(ins["hunter_block"])
+        self.assertFalse(ins["hunter_block"])
+        self.assertTrue(ins.get("is_defect"))
         self.assertEqual(ins["platform"], "sheypoor")
 
     def test_images_counted_without_vision(self):

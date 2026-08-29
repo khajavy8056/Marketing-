@@ -37,7 +37,9 @@ DEFAULTS: Dict[str, Any] = {
     ),
     "inquire_template": (
         "{greeting}\n"
-        "برای آگهی «{title}» قیمت نقدی نهایی چقدر است؟ کالا سالمه؟\n"
+        "برای آگهی «{title}»:\n"
+        "{questions}\n"
+        "قیمت نقدی نهایی چقدر است؟\n"
         "{closing}"
     ),
     # --- سایر ---

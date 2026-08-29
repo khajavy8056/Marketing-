@@ -38,10 +38,32 @@ CATEGORIES: List[Dict[str, str]] = [
     {"slug": "electronic-devices", "group": "کالای دیجیتال", "title": "کالای دیجیتال (همه)", "parent": ""},
     {"slug": "mobile-tablet", "group": "کالای دیجیتال", "title": "موبایل و تبلت (همه)", "parent": "electronic-devices"},
     {"slug": "mobile-phones", "group": "کالای دیجیتال", "title": "موبایل", "parent": "mobile-tablet"},
+    {"slug": "apple", "group": "کالای دیجیتال", "title": "آیفون / اپل", "parent": "mobile-phones"},
+    {"slug": "samsung", "group": "کالای دیجیتال", "title": "سامسونگ", "parent": "mobile-phones"},
+    {"slug": "xiaomi", "group": "کالای دیجیتال", "title": "شیائومی", "parent": "mobile-phones"},
+    {"slug": "huawei", "group": "کالای دیجیتال", "title": "هواوی", "parent": "mobile-phones"},
+    {"slug": "nokia", "group": "کالای دیجیتال", "title": "نوکیا", "parent": "mobile-phones"},
+    {"slug": "honor", "group": "کالای دیجیتال", "title": "آنر", "parent": "mobile-phones"},
+    {"slug": "motorola", "group": "کالای دیجیتال", "title": "موتورولا", "parent": "mobile-phones"},
+    {"slug": "google-pixel", "group": "کالای دیجیتال", "title": "گوگل پیکسل", "parent": "mobile-phones"},
+    {"slug": "oneplus", "group": "کالای دیجیتال", "title": "وان‌پلاس", "parent": "mobile-phones"},
+    {"slug": "nothing", "group": "کالای دیجیتال", "title": "ناتینگ", "parent": "mobile-phones"},
+    {"slug": "sony", "group": "کالای دیجیتال", "title": "سونی موبایل", "parent": "mobile-phones"},
+    {"slug": "lg", "group": "کالای دیجیتال", "title": "ال‌جی", "parent": "mobile-phones"},
+    {"slug": "oppo", "group": "کالای دیجیتال", "title": "اوپو", "parent": "mobile-phones"},
+    {"slug": "vivo", "group": "کالای دیجیتال", "title": "ویوو", "parent": "mobile-phones"},
+    {"slug": "realme", "group": "کالای دیجیتال", "title": "ریلمی", "parent": "mobile-phones"},
     {"slug": "tablet", "group": "کالای دیجیتال", "title": "تبلت", "parent": "mobile-tablet"},
     {"slug": "mobile-tablet-accessories", "group": "کالای دیجیتال", "title": "لوازم جانبی موبایل", "parent": "mobile-tablet"},
     {"slug": "computers", "group": "کالای دیجیتال", "title": "رایانه", "parent": "electronic-devices"},
     {"slug": "laptops", "group": "کالای دیجیتال", "title": "لپ‌تاپ", "parent": "computers"},
+    {"slug": "macbook", "group": "کالای دیجیتال", "title": "مک‌بوک", "parent": "laptops"},
+    {"slug": "asus-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ ایسوس", "parent": "laptops"},
+    {"slug": "lenovo-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ لنوو", "parent": "laptops"},
+    {"slug": "hp-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ اچ‌پی", "parent": "laptops"},
+    {"slug": "dell-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ دل", "parent": "laptops"},
+    {"slug": "acer-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ ایسر", "parent": "laptops"},
+    {"slug": "msi-laptop", "group": "کالای دیجیتال", "title": "لپ‌تاپ ام‌اس‌آی", "parent": "laptops"},
     {"slug": "desktop-computers", "group": "کالای دیجیتال", "title": "رایانه رومیزی", "parent": "computers"},
     {"slug": "computer-and-laptop-accessories", "group": "کالای دیجیتال", "title": "لوازم جانبی رایانه", "parent": "computers"},
     {"slug": "game-consoles-and-video-games", "group": "کالای دیجیتال", "title": "کنسول و بازی", "parent": "electronic-devices"},
@@ -251,3 +273,49 @@ def is_vehicle(slug: Optional[str]) -> bool:
         return True
     rec = _BY_SLUG.get(s) or {}
     return rec.get("group") == "وسایل نقلیه" or rec.get("parent") == "vehicles"
+
+
+PHONE_BRANDS = frozenset({
+    "apple", "samsung", "xiaomi", "huawei", "nokia", "honor", "motorola",
+    "google-pixel", "oneplus", "nothing", "sony", "lg", "oppo", "vivo", "realme",
+})
+LAPTOP_BRANDS = frozenset({
+    "macbook", "asus-laptop", "lenovo-laptop", "hp-laptop", "dell-laptop",
+    "acer-laptop", "msi-laptop",
+})
+
+
+def is_real_estate(slug: Optional[str]) -> bool:
+    s = normalize_slug(slug)
+    if not s:
+        return False
+    rec = _BY_SLUG.get(s) or {}
+    return rec.get("group") == "املاک" or rec.get("parent") == "real-estate" or s == "real-estate"
+
+
+def hunter_allowed(slug: Optional[str]) -> bool:
+    """املاک شکار نمی‌شود؛ بقیه دسته‌ها مجازند."""
+    return not is_real_estate(slug)
+
+
+def search_slug(canonical: Optional[str], platform: str = "divar") -> str:
+    """اسلاگ جستجو: برند موبایل/لپ‌تاپ روی دستهٔ والد می‌رود."""
+    s = normalize_slug(canonical)
+    if not s:
+        return ""
+    if s in PHONE_BRANDS:
+        s = "mobile-phones"
+    elif s in LAPTOP_BRANDS:
+        s = "laptops"
+    return platform_slug(s, platform)
+
+
+def implied_query(keyword: str = "", category: str = "") -> str:
+    """اگر فقط برند انتخاب شده، عنوان برند همان عبارت جستجو است."""
+    kw = (keyword or "").strip()
+    if kw:
+        return kw
+    s = normalize_slug(category)
+    if s in PHONE_BRANDS or s in LAPTOP_BRANDS:
+        return title_of(s)
+    return ""

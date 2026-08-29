@@ -83,7 +83,8 @@ def inspect_vehicle(text: str) -> Dict[str, Any]:
         paint = "repainted"
     accident = _has(n, _ACCIDENT)
     mechanical = _has(n, _MECH)
-    hunter_block = chassis == "hit" or paint == "repainted" or accident
+    # رنگ/شاسی شکار را نمی‌کشند — افت قیمت در پروفایل شکارچی اعمال می‌شود
+    hunter_block = False
     is_defect = chassis == "hit" or accident or mechanical
     year = extract_year(text)
     km = extract_mileage(text)

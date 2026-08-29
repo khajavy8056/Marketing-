@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""شکارچی قیمت نسبت به میانهٔ همان پایش (نه فقط فیلتر بودجه)."""
+"""شکارچی قیمت نسبت به میانهٔ همان پایش، با افت پروفایل دسته."""
 
 from __future__ import annotations
 
 import statistics
 from typing import Any, Dict, List, Optional, Sequence
+
+from .hunter_profile import (
+    adjustment_pct, build_questions, default_profile, extract_flags,
+    missing_ask_slots,
+)
 
 
 def median_of(prices: Sequence[int]) -> Optional[float]:
@@ -15,8 +20,8 @@ def median_of(prices: Sequence[int]) -> Optional[float]:
 
 
 def deal_level(price: int, median: Optional[float],
-               good_pct: float = 10.0, great_pct: float = 22.0,
-               suspicious_pct: float = 45.0) -> str:
+               good_pct: float = 8.0, great_pct: float = 15.0,
+               suspicious_pct: float = 55.0) -> str:
     """بازار / مناسب / خیلی_مناسب / مشکوک."""
     if not median or median <= 0 or not price or price <= 0:
         return "none"
@@ -30,34 +35,97 @@ def deal_level(price: int, median: Optional[float],
     return "market"
 
 
-def score_lead(price: int, samples: Sequence[int],
-               cfg: Optional[Dict[str, Any]] = None,
-               extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _merge_flags(text: str, profile: Dict[str, Any],
+                 extra: Dict[str, Any]) -> Dict[str, bool]:
+    flags = dict(extra.get("hunter_flags") or extract_flags(text, profile))
+    if extra.get("chassis") == "hit":
+        flags["chassis_hit"] = True
+    if extra.get("paint") == "repainted":
+        if not flags.get("paint_full") and not flags.get("paint_panel"):
+            flags["paint_multi"] = True
+    if extra.get("accident"):
+        flags["accident"] = True
+    if extra.get("mechanical"):
+        flags["mechanical"] = True
+    return flags
+
+
+def evaluate(price: int, samples: Sequence[int],
+             cfg: Optional[Dict[str, Any]] = None,
+             extra: Optional[Dict[str, Any]] = None,
+             profile: Optional[Dict[str, Any]] = None,
+             text: str = "") -> Dict[str, Any]:
+    """میانه → ارزش تعدیل‌شده → سطح شکار. جای‌خالی → pending."""
     cfg = cfg or {}
     extra = extra or {}
-    if extra.get("hunter_block") or extra.get("chassis") == "hit" \
-            or extra.get("paint") == "repainted":
-        return {
-            "median": 0, "sample_count": len([p for p in samples if p]),
-            "warm": False, "level": "none", "discount_pct": None,
-            "blocked": True,
-        }
+    blocked = {
+        "median": 0, "fair": 0, "sample_count": len([p for p in samples if p]),
+        "warm": False, "level": "none", "raw_level": "none",
+        "discount_pct": None, "adj_pct": 0.0, "blocked": True,
+        "pending": False, "questions": "", "missing": [], "flags": {},
+    }
+    if extra.get("hunter_block") or extra.get("is_placeholder") or extra.get("is_buyer"):
+        return blocked
+    if profile is None:
+        profile = default_profile(str(extra.get("category") or ""),
+                                  str(extra.get("keyword") or ""))
+    if not profile.get("hunter", True):
+        blocked["reason"] = profile.get("reason") or "این دسته شکار نمی‌شود"
+        return blocked
+    flags = _merge_flags(text, profile, extra)
+    adj = adjustment_pct(flags, profile)
     med = median_of(samples)
-    level = deal_level(
-        price, med,
-        good_pct=float(cfg.get("hunter_good_pct") or 10),
-        great_pct=float(cfg.get("hunter_great_pct") or 22),
-        suspicious_pct=float(cfg.get("hunter_suspicious_pct") or 45),
-    )
+    fair = (med * (1.0 + adj / 100.0)) if med else None
+    good = float(profile.get("good_pct") or cfg.get("hunter_good_pct") or 8)
+    great = float(profile.get("great_pct") or cfg.get("hunter_great_pct") or 15)
+    sus = float(profile.get("suspicious_pct") or cfg.get("hunter_suspicious_pct") or 55)
+    raw = deal_level(int(price or 0), fair, good, great, sus)
     pct = None
-    if med and med > 0 and price:
-        pct = round((med - price) / med * 100.0, 1)
+    if fair and fair > 0 and price:
+        pct = round((fair - price) / fair * 100.0, 1)
+    missing = missing_ask_slots(text, profile, extra)
+    pending = bool(extra.get("needs_inquiry"))
+    if profile.get("dealer_mode") and missing:
+        pending = True
+    questions = ""
+    if pending or (profile.get("dealer_mode") and missing):
+        questions = build_questions(profile, missing, str(extra.get("title") or ""))
+    level = "pending" if pending else raw
     return {
         "median": int(med) if med else 0,
+        "fair": int(fair) if fair else 0,
         "sample_count": len([p for p in samples if p]),
         "warm": med is not None,
         "level": level,
+        "raw_level": raw,
         "discount_pct": pct,
+        "adj_pct": round(adj, 1),
+        "blocked": False,
+        "pending": pending,
+        "questions": questions,
+        "missing": missing,
+        "flags": flags,
+    }
+
+
+def score_lead(price: int, samples: Sequence[int],
+               cfg: Optional[Dict[str, Any]] = None,
+               extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    extra = extra or {}
+    text = " ".join(str(extra.get(k) or "") for k in
+                    ("title", "subtitle", "description", "inspect_summary"))
+    sc = evaluate(price, samples, cfg=cfg, extra=extra, text=text)
+    return {
+        "median": sc.get("median") or 0,
+        "sample_count": sc.get("sample_count") or 0,
+        "warm": bool(sc.get("warm")),
+        "level": sc.get("level") or "none",
+        "discount_pct": sc.get("discount_pct"),
+        "blocked": bool(sc.get("blocked")),
+        "fair": sc.get("fair") or 0,
+        "adj_pct": sc.get("adj_pct") or 0,
+        "pending": bool(sc.get("pending")),
+        "questions": sc.get("questions") or "",
     }
 
 

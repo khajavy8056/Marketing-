@@ -193,6 +193,8 @@ _LEAD_MIGRATIONS = (
     ("car_year", "INTEGER DEFAULT 0"),
     ("mileage_km", "INTEGER DEFAULT 0"),
     ("image_count", "INTEGER DEFAULT 0"),
+    ("hunter_adj_pct", "REAL DEFAULT 0"),
+    ("hunter_questions", "TEXT DEFAULT ''"),
 )
 
 

@@ -234,9 +234,79 @@ def apply_to_lead(con, token: str, result: Dict[str, Any],
                 "UPDATE leads SET price=?, price_kind='cash', inquiry_status='answered' "
                 "WHERE token=?", (price, token))
             acted = "price"
+        if context == "inquire" or intent in ("price_quote", "available_yes", "defect_admit"):
+            _apply_hunter_reply(con, token, result)
         con.commit()
     except Exception:
         acted = "error"
     result = dict(result)
     result["acted"] = acted
     return result
+
+
+def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
+    """اسلات پروفایل از پاسخ فروشنده + امتیاز دوباره شکارچی."""
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            return
+        from .hunter import collect_samples, evaluate
+        from .hunter_profile import default_profile, fill_from_reply, merge_overrides
+        keyword = row["keyword"] if "keyword" in row.keys() else ""
+        adv: Dict[str, Any] = {}
+        cat = ""
+        try:
+            kwrow = con.execute(
+                "SELECT category, hunter_adv FROM keywords WHERE keyword=?",
+                (keyword,)).fetchone()
+            if kwrow:
+                cat = kwrow["category"] or ""
+                raw = kwrow["hunter_adv"] or ""
+                if raw:
+                    adv = json.loads(raw)
+        except Exception:
+            pass
+        prof = merge_overrides(default_profile(cat, keyword), adv)
+        text = result.get("raw") or ""
+        filled = fill_from_reply(text, prof)
+        chassis = filled.get("chassis") or (
+            row["chassis"] if "chassis" in row.keys() else "")
+        paint = filled.get("paint") or (
+            row["paint"] if "paint" in row.keys() else "")
+        year = filled.get("year") or (
+            row["car_year"] if "car_year" in row.keys() else 0)
+        km = filled.get("mileage_km") or (
+            row["mileage_km"] if "mileage_km" in row.keys() else 0)
+        price = filled.get("price_toman") or (
+            row["price"] if "price" in row.keys() else 0)
+        extra = {
+            "title": row["title"] if "title" in row.keys() else "",
+            "chassis": chassis, "paint": paint,
+            "hunter_flags": filled.get("flags") or {},
+            "category": cat, "keyword": keyword,
+            "is_defect": bool(row["is_defect"]) if "is_defect" in row.keys() else False,
+            "is_placeholder": False,
+            "is_buyer": bool(row["is_buyer"]) if "is_buyer" in row.keys() else False,
+        }
+        city = row["city"] if "city" in row.keys() else ""
+        plat = row["platform"] if "platform" in row.keys() else "divar"
+        samples = collect_samples(con, keyword, city, plat)
+        sc = evaluate(int(price or 0), samples, extra=extra, profile=prof, text=text)
+        level = sc.get("level") or ""
+        if result.get("intent") == "defect_admit":
+            level = ""
+        try:
+            con.execute(
+                "UPDATE leads SET chassis=?, paint=?, car_year=?, mileage_km=?, "
+                "hunter_level=?, hunter_adj_pct=?, hunter_questions=?, "
+                "inquiry_status=CASE WHEN inquiry_status IN ('pending','sent') "
+                "THEN 'answered' ELSE inquiry_status END WHERE token=?",
+                (str(chassis or ""), str(paint or ""), int(year or 0), int(km or 0),
+                 level, float(sc.get("adj_pct") or 0),
+                 str(sc.get("questions") or "")[:400], token))
+        except Exception:
+            con.execute(
+                "UPDATE leads SET chassis=?, paint=? WHERE token=?",
+                (str(chassis or ""), str(paint or ""), token))
+    except Exception:
+        return

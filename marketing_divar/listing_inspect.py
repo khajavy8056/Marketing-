@@ -94,19 +94,18 @@ def inspect_listing(post: Dict[str, Any], use_llm: bool = True,
     cls = classify_post(post, category=category)
     veh = inspect_vehicle(blob) if is_vehicle(category) or _looks_car(blob) else None
     images = inspect_images(extract_image_urls(post), infer_fn=vision_fn)
-    hunter_block = bool(cls.get("is_defect") or cls.get("is_placeholder")
-                        or cls.get("is_buyer"))
-    if veh and veh.get("hunter_block"):
+    # معیوب سخت / جای‌نگهدار / خریدار شکار نیستند. رنگ تصویر فقط افت قیمت است.
+    hunter_block = bool(cls.get("is_placeholder") or cls.get("is_buyer"))
+    if cls.get("is_defect") and not veh:
         hunter_block = True
-    if images.get("damage") or images.get("paint") == "repainted":
-        hunter_block = True
+    if images.get("paint") == "repainted" or images.get("damage"):
         if veh:
             veh = dict(veh)
-            veh["hunter_block"] = True
+            veh["hunter_block"] = False
             if images.get("paint") == "repainted":
                 veh["paint"] = "repainted"
-            if images.get("damage"):
-                veh["chassis"] = veh.get("chassis") if veh.get("chassis") == "hit" else "hit"
+            if images.get("damage") and veh.get("chassis") != "ok":
+                veh["chassis"] = "hit"
 
     summary = cls.get("price_kind") or ""
     if veh:

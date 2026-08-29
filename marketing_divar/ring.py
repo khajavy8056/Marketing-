@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from .categories import platform_slug
+from .categories import search_slug as platform_slug
 from .cities import slug_for_platform
 from .platforms import lead_token, listing_url
 from .pricing import parse_toman
