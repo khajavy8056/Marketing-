@@ -30,7 +30,7 @@ class TestCities(unittest.TestCase):
         self.assertEqual(slug_of(0), "iran")
         self.assertEqual(title_of_city(1), "تهران")
         self.assertEqual(city_slug([15]), "yazd")
-        self.assertEqual(city_slug([99]), "iran")
+        self.assertEqual(city_slug([999]), "iran")
 
 
 class TestCategoryTree(unittest.TestCase):

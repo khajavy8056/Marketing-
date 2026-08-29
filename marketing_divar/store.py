@@ -208,6 +208,8 @@ def keywords_add(db_path: str, keyword: str,
     کلمه + دسته = جستجو داخل همان دسته سپس تطبیق عبارت.
     """
     from .categories import normalize_slug, title_of
+    from .cities import parse_city_ids
+    cities = parse_city_ids(cities)
     cat = normalize_slug(category)
     parts = [k.strip() for k in (keyword or "").split(",") if k.strip()]
     browse = 0

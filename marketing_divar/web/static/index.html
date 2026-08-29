@@ -305,17 +305,16 @@
     <select id="kw-category">
       <option value="">همه دسته‌ها</option>
     </select>
-    <div class="hint">این همان دسته‌بندی خود دیوار است (مثلاً موبایل = /s/شهر/mobile-phones).
-      اگر <b>فقط دسته</b> را بگذارید، عنوان آگهی هیچ نقشی ندارد — هر آگهی داخل همان دسته
-      (مثل S25 اولترا) گرفته می‌شود. آگهی‌های جدید بالای لیست دیوار می‌آیند.
-      اگر «موارد فعلی هم گرفته شوند» را بزنید، چند صفحه از همان دسته برداشته می‌شود.</div>
+    <div class="hint">یک درخت دسته برای هر سه سایت. اگر اسلاگ شیپور/رینگ فرق کند
+      برنامه <b>خودکار نگاشت</b> می‌کند. اگر <b>فقط دسته</b> را بگذارید عنوان آگهی فیلتر نمی‌شود.
+      اگر «موارد فعلی هم گرفته شوند» را بزنید چند صفحه از همان دسته برداشته می‌شود.</div>
     <div class="lbl">کلمه کلیدی (اختیاری) — با کاما جدا کنید</div>
     <input id="kw-input" placeholder="مثلاً: آیفون، پراید، تدریس خصوصی — می‌تواند خالی باشد">
-    <div class="lbl">شهر دیوار</div>
-    <select id="kw-city">
+    <div class="lbl">شهرها (چندتایی — Ctrl یا Cmd را نگه دارید)</div>
+    <select id="kw-city" multiple size="8">
       <option value="0">همه ایران</option>
     </select>
-    <div class="hint">همان شهر صفحهٔ دیوار: /s/<b>tehran</b>/mobile-phones</div>
+    <div class="hint">چند شهر با هم قابل انتخاب است. اسلاگ هر سایت از روی همین فهرست نگاشت می‌شود.</div>
     <div class="grid g2" style="margin-top:8px">
       <div>
         <div class="lbl">حداقل قیمت (میلیون تومان) — اختیاری</div>
@@ -442,9 +441,10 @@
     <div class="row" style="margin-top:10px">
       <button class="btn" type="button" onclick="nluInstall()">⬇️ دانلود مدل محلی (یک‌بار، در پوشه پایدار)</button>
     </div>
-    <div class="warn-box">مدل GGUF داخل گیت نیست. اگر نباشد یک‌بار دانلود می‌شود و در پوشه دادهٔ کاربر می‌ماند.
-      پاسخ‌ها فقط برای درک نیت (قیمت / موجود / رد) تحلیل می‌شوند — معامله خودکار بسته نمی‌شود.
-      هر پاسخ چت فقط به همان آگهی وصل می‌شود.</div>
+    <div class="warn-box">مدل از اول برای همین کار ساخته شده: درک پاسخ چت/پیامک همان آگهی،
+      بررسی متن آگهی (قیمت نقد / معیوب / جای‌نگهدار)، خودرو (شاسی، دوررنگ، مدل، کارکرد)
+      و در صورت وجود موتور بینایی محلی بررسی تصویر. معامله نمی‌بندد.
+      هنگام نصب کنار فایل نصبی دانلود و <b>کنار برنامه نصب</b> می‌شود. داخل گیت نیست.</div>
   </div>
   <div class="card" style="margin-top:14px">
     <h3>آخرین پاسخ‌ها (هر کدام روی یک آگهی)</h3>
@@ -1191,8 +1191,11 @@ async function kwAdd(){
   const category=($('kw-category')&&$('kw-category').value)||'';
   if(!kw && !category){toast('کلمه یا دسته‌بندی را انتخاب کنید',false);return;}
   let cities=null;
-  const cid = $('kw-city') ? parseInt($('kw-city').value) : 0;
-  if(cid) cities=[cid];
+  const sel=$('kw-city');
+  if(sel){
+    const ids=[...sel.selectedOptions].map(o=>parseInt(o.value,10)).filter(n=>n>0);
+    if(ids.length) cities=ids;
+  }
   const price_min=parseFloat(($('kw-price-min')||{}).value)||0;
   const price_max=parseFloat(($('kw-price-max')||{}).value)||0;
   const vip=!!($('kw-vip')&&$('kw-vip').checked);
@@ -1362,6 +1365,11 @@ async function settingsSave(){
     platform_divar:!$('set-plat-divar') || !!$('set-plat-divar').checked,
     platform_sheypoor:!$('set-plat-sheypoor') || !!$('set-plat-sheypoor').checked,
     platform_ring:!$('set-plat-ring') || !!$('set-plat-ring').checked,
+    sms_use_pattern: ($('set-sms-mode')||{}).value === 'pattern',
+    sms_pattern_bodyid: $('set-sms-bodyid') ? $('set-sms-bodyid').value.trim() : '',
+    sms_pattern_args: $('set-sms-args') ? $('set-sms-args').value.trim() : '',
+    sms_pattern_text: $('set-sms-pattern-text') ? $('set-sms-pattern-text').value : '',
+    nlu_use_local: true,
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
 }

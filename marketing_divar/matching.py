@@ -146,6 +146,12 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     post["is_buyer"] = cls.get("is_buyer")
     if cls.get("needs_inquiry"):
         post["inquiry_status"] = "pending"
+    try:
+        from .listing_inspect import apply_inspect_to_post, inspect_listing
+        ins = inspect_listing(post, use_llm=False)
+        post = apply_inspect_to_post(post, ins)
+    except Exception:
+        pass
     if not in_range(price, int(price_min or 0), int(price_max or 0)):
         return False
     if cls.get("is_placeholder") and (price_min or price_max):

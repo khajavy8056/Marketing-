@@ -7,7 +7,8 @@ import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, unquote
 
-from .cities import slug_of
+from .categories import platform_slug
+from .cities import slug_for_platform
 from .platforms import lead_token, listing_url
 from .pricing import parse_toman
 
@@ -22,28 +23,7 @@ _COND = re.compile(r"وضعیت\s*کالا[:\s]*([^\n<]{2,40})")
 
 def category_slug(divar_slug: Optional[str]) -> str:
     """نگاشت درخت واحد به اسلاگ شیپور."""
-    m = {
-        "mobile-phones": "mobile-tablet",
-        "mobile-tablet": "mobile-tablet",
-        "tablet": "mobile-tablet",
-        "light": "car",
-        "vehicles": "vehicles",
-        "motorcycles": "motorcycles",
-        "real-estate": "real-estate",
-        "apartment-sell": "houses-apartments-for-sale",
-        "house-villa-sell": "villa-for-sale",
-        "apartment-rent": "house-apartment-for-rent",
-        "electronic-devices": "electronics",
-        "computers": "laptop-computer",
-        "laptops": "laptop-computer",
-        "home-kitchen": "home",
-        "furniture-wood": "furniture",
-        "jobs": "jobs",
-        "services": "services",
-        "animals": "animals-pet",
-    }
-    s = (divar_slug or "").strip()
-    return m.get(s, s)
+    return platform_slug(divar_slug, "sheypoor")
 
 
 def search_url(city_slug: str, category: str = "", query: str = "") -> str:
@@ -109,8 +89,12 @@ def search(client, query: str, cities=None, page: int = 1,
     base = str(getattr(client, "base", "") or "")
     if base and "divar.ir" not in base and "sheypoor" not in base:
         return []  # شبیه‌ساز تست
-    from .client import city_slug as divar_city
-    city = divar_city(cities)
+    city_id = None
+    if isinstance(cities, (list, tuple)) and cities:
+        city_id = cities[0]
+    elif cities not in (None, "", []):
+        city_id = cities
+    city = slug_for_platform(city_id, "sheypoor")
     cat = category_slug(category)
     url = search_url(city, cat, query or "")
     if page and page > 1:

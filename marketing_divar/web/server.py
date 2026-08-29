@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.0.0")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.1.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -546,9 +546,10 @@ def keywords_get():
 def keywords_add(req: KeywordAdd):
     if not (req.keyword or "").strip() and not (req.category or "").strip():
         raise HTTPException(400, "کلمه کلیدی یا دسته‌بندی دیوار را انتخاب کنید")
+    from ..cities import parse_city_ids
     from ..pricing import million_to_toman
     added = store.keywords_add(
-        DB_PATH, req.keyword, req.cities, req.category,
+        DB_PATH, req.keyword, parse_city_ids(req.cities), req.category,
         price_min=million_to_toman(req.price_min),
         price_max=million_to_toman(req.price_max),
         vip=bool(req.vip), hunter=bool(req.hunter))
@@ -727,7 +728,7 @@ def nlu_install():
     from ..nlu_model import start_install_async
     st = start_install_async()
     log("info", "دانلود مدل محلی درک متن شروع شد")
-    return {"ok": True, "message": "دانلود مدل محلی شروع شد — یک‌بار در پوشه پایدار می‌ماند", **st}
+    return {"ok": True, "message": "دانلود مدل محلی شروع شد — کنار برنامه نصب می‌شود", **st}
 
 
 # ------------------------------------------------------------ API مانیتور --

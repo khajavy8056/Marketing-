@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """دانلود و اجرای مدل محلی درک متن (Qwen 1.5B GGUF + llama.cpp).
 
-فایل داخل گیت نیست. یک‌بار مثل Chromium به پوشهٔ پایدار کاربر می‌رود:
-  Windows: %LOCALAPPDATA%\\DivarMarketing\\nlu-model\\
-اگر نباشد برنامه کار می‌کند؛ فقط جواب مبهم «نیاز به خواندن» می‌شود.
+فایل داخل گیت نیست. هنگام نصب کنار فایل نصبی دانلود می‌شود (nlu-download)
+و کنار برنامه نصب می‌شود (nlu-model). اگر نباشد برنامه کار می‌کند؛
+فقط جواب مبهم «نیاز به خواندن» می‌شود.
 """
 
 from __future__ import annotations
@@ -18,6 +18,26 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from .paths import user_data_dir
+
+
+def program_dir() -> Path:
+    """پوشه نصب برنامه (کنار main.py یا exe)."""
+    override = os.environ.get("DIVAR_APP_DIR")
+    if override:
+        return Path(override)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parents[1]
+
+
+def download_cache_dir() -> Path:
+    """محل موقت دانلود — کنار فایل نصبی / Setup."""
+    override = os.environ.get("DIVAR_NLU_DOWNLOAD")
+    if override:
+        return Path(override)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "nlu-download"
+    return program_dir() / "nlu-download"
 
 LogFn = Callable[[str], None]
 
@@ -48,10 +68,11 @@ _LOCK = threading.Lock()
 
 
 def model_dir() -> Path:
+    """محل نصب مدل = محل نصب برنامه (nlu-model کنار فایل‌های برنامه)."""
     override = os.environ.get("DIVAR_NLU_DIR")
     if override:
         return Path(override)
-    return user_data_dir() / "nlu-model"
+    return program_dir() / "nlu-model"
 
 
 def gguf_path() -> Path:
@@ -94,12 +115,16 @@ def status() -> Dict[str, Any]:
     out["installed"] = ready
     out["ready"] = ready
     out["model"] = MODEL_NAME
+    out["install_dir"] = str(model_dir())
+    out["download_dir"] = str(download_cache_dir())
+    out["role"] = "analyze_replies_listings_vehicles_images"
     if ready:
         out["path"] = str(gguf_path())
         out["percent"] = out.get("percent") or 100
         out["note"] = out.get("note") or "آماده"
     elif not out.get("note"):
-        out["note"] = "مدل محلی نیست — یک‌بار دانلود می‌شود و در پوشه پایدار می‌ماند"
+        out["note"] = ("مدل محلی نیست — هنگام نصب کنار فایل نصبی دانلود و "
+                       "کنار برنامه نصب می‌شود")
     return out
 
 
@@ -257,5 +282,50 @@ def infer_json(prompt: str, timeout: int = 45) -> str:
         out = (r.stdout or b"").decode("utf-8", errors="replace")
         err = (r.stderr or b"").decode("utf-8", errors="replace")
         return (out or err)[-4000:]
+    except Exception:
+        return ""
+
+
+def vision_exe() -> Optional[Path]:
+    root = model_dir()
+    names = ("llama-mtmd.exe", "llama-llava.exe", "llava-cli.exe")
+    for n in names:
+        p = root / n
+        if p.is_file():
+            return p
+    try:
+        for n in names:
+            for p in root.rglob(n):
+                return p
+    except Exception:
+        pass
+    return None
+
+
+def infer_vision(prompt: str, image_path: str, timeout: int = 60) -> str:
+    """اگر باینری بینایی محلی باشد تصویر را می‌خواند؛ وگرنه خالی."""
+    exe = vision_exe()
+    g = gguf_path()
+    img = Path(image_path)
+    if not exe or not g.is_file() or not img.is_file():
+        return ""
+    mmproj = None
+    try:
+        for p in model_dir().rglob("*mmproj*"):
+            mmproj = p
+            break
+    except Exception:
+        mmproj = None
+    cmd = [str(exe), "-m", str(g), "--image", str(img),
+           "-n", "120", "-p", prompt, "-no-cnv"]
+    if mmproj:
+        cmd.extend(["--mmproj", str(mmproj)])
+    try:
+        r = subprocess.run(
+            cmd, capture_output=True, timeout=timeout,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if sys.platform == "win32" else 0)
+        out = (r.stdout or b"").decode("utf-8", errors="replace")
+        return (out or "")[-4000:]
     except Exception:
         return ""

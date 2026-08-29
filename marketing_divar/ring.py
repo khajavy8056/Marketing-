@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+from .categories import platform_slug
+from .cities import slug_for_platform
 from .platforms import lead_token, listing_url
 from .pricing import parse_toman
 
@@ -46,14 +48,33 @@ def parse_listings(html: str) -> List[Dict[str, Any]]:
     return posts[:80]
 
 
+def search_url(city_slug: str = "", category: str = "", query: str = "") -> str:
+    url = "https://ring.ir/"
+    bits = []
+    if city_slug and city_slug not in ("iran", ""):
+        bits.append("city=" + city_slug)
+    if category:
+        bits.append("cat=" + category)
+    if query:
+        bits.append("q=" + query)
+    if bits:
+        url = "https://ring.ir/?" + "&".join(bits)
+    return url
+
+
 def search(client, query: str, cities=None, page: int = 1,
            category: Optional[str] = None) -> List[Dict[str, Any]]:
     base = str(getattr(client, "base", "") or "")
     if base and "divar.ir" not in base and "ring" not in base:
         return []
-    url = "https://ring.ir/"
-    if query:
-        url = "https://ring.ir/?q=" + query
+    city_id = None
+    if isinstance(cities, (list, tuple)) and cities:
+        city_id = cities[0]
+    elif cities not in (None, "", []):
+        city_id = cities
+    city = slug_for_platform(city_id, "ring")
+    cat = platform_slug(category, "ring")
+    url = search_url(city, cat, query or "")
     try:
         r = client._fetch("GET", url, timeout=25,
                           headers={"Accept": "text/html", "Accept-Language": "fa-IR"})

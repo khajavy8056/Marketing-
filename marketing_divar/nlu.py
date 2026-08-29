@@ -11,6 +11,7 @@ import re
 from typing import Any, Dict, Optional
 
 from .matching import normalize
+from .nlu_role import reply_prompt
 from .pricing import parse_toman
 
 INTENTS = (
@@ -178,7 +179,7 @@ def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
         if not is_ready():
             base["needs_human"] = True
             return base
-        raw = infer_json(_LLM_PROMPT.format(text=(text or "")[:600]))
+        raw = infer_json(reply_prompt(text or ""))
         parsed = _parse_llm_json(raw)
         if not parsed:
             base["needs_human"] = True
@@ -190,6 +191,14 @@ def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
     except Exception:
         base["needs_human"] = True
         return base
+
+
+def analyze_for_platform(text: str, platform: str = "divar",
+                         use_llm: bool = True) -> Dict[str, Any]:
+    """همان تحلیل برای دیوار/شیپور/رینگ — زبان پاسخ فارسی است."""
+    out = analyze(text, use_llm=use_llm)
+    out["platform"] = str(platform or "divar")
+    return out
 
 
 def apply_to_lead(con, token: str, result: Dict[str, Any],

@@ -78,7 +78,7 @@ class TestReclaimAndCity(unittest.TestCase):
         self.assertEqual(city_slug([1]), "tehran")
         self.assertEqual(city_slug(["3"]), "mashhad")
         self.assertEqual(city_slug(["shiraz"]), "shiraz")
-        self.assertEqual(city_slug([99]), "iran")
+        self.assertEqual(city_slug([999]), "iran")
 
 
 class TestPhoneLimiter(unittest.TestCase):

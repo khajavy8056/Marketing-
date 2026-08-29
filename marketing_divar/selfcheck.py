@@ -64,6 +64,10 @@ def _check_windows_installer() -> None:
         raise FileNotFoundError("setup_app.py missing independent Chromium progress")
     if "app-chromium" not in setup:
         raise FileNotFoundError("setup_app.py missing app-chromium folder")
+    if "install_nlu_model" not in setup or "nlu-model" not in setup or "nlu_bar" not in setup:
+        raise FileNotFoundError("setup_app.py must download NLU next to installer and install beside app")
+    if "NLU_START" not in setup or "DIVAR_NLU_DOWNLOAD" not in setup:
+        raise FileNotFoundError("setup_app.py missing NLU download cache beside installer")
     fetch = (root / "installer" / "fetch_chromium.py").read_text(encoding="utf-8")
     if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
         raise FileNotFoundError("fetch_chromium.py incomplete")
@@ -93,6 +97,11 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("category picker missing from panel")
     if "kw-city" not in html:
         raise FileNotFoundError("city picker missing from panel")
+    if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
+        if "multiple size" not in html:
+            raise FileNotFoundError("multi-city picker missing from panel")
+    if "set-plat-divar" not in html or "set-plat-sheypoor" not in html or "set-plat-ring" not in html:
+        raise FileNotFoundError("platform enable switches missing from panel")
     if "kw-price-min" not in html or "kw-vip" not in html:
         raise FileNotFoundError("price range / VIP missing from panel")
     if "cap-dlg" not in html or "cap-answer" not in html:

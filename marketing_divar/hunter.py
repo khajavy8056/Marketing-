@@ -31,8 +31,17 @@ def deal_level(price: int, median: Optional[float],
 
 
 def score_lead(price: int, samples: Sequence[int],
-               cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+               cfg: Optional[Dict[str, Any]] = None,
+               extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cfg = cfg or {}
+    extra = extra or {}
+    if extra.get("hunter_block") or extra.get("chassis") == "hit" \
+            or extra.get("paint") == "repainted":
+        return {
+            "median": 0, "sample_count": len([p for p in samples if p]),
+            "warm": False, "level": "none", "discount_pct": None,
+            "blocked": True,
+        }
     med = median_of(samples)
     level = deal_level(
         price, med,

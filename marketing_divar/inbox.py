@@ -121,7 +121,9 @@ def ingest_sms(con, phone: str, body: str, received_at: str = "",
         return {"ok": False, "reason": "unmatched"}
     nlu = analyze(body, use_llm=use_llm)
     rec = {
-        "token": lead["token"], "platform": "sms", "channel": "sms",
+        "token": lead["token"],
+        "platform": lead["platform"] if "platform" in lead.keys() else "divar",
+        "channel": "sms",
         "phone": normalize_ir_phone(phone), "body": body,
         "received_at": received_at, "nlu": nlu,
     }

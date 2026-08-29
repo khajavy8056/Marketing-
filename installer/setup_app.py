@@ -253,7 +253,46 @@ def launch(target: Path, workdir: Path, log) -> None:
     log("App will open the panel in dedicated Chromium (not Edge).")
 
 
-def run_install(progress, log, chrome_progress=None, dest: Path | None = None) -> None:
+def install_nlu_model(dest: Path, log, nlu_progress=None) -> bool:
+    """Download GGUF next to the installer, then install beside the app."""
+    dest = Path(dest)
+    model_dest = dest / "nlu-model"
+    model_dest.mkdir(parents=True, exist_ok=True)
+    if getattr(sys, "frozen", False):
+        setup_dir = Path(sys.executable).parent
+    else:
+        setup_dir = Path(__file__).resolve().parent
+    download_dir = setup_dir / "nlu-download"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["DIVAR_APP_DIR"] = str(dest)
+    os.environ["DIVAR_NLU_DIR"] = str(model_dest)
+    os.environ["DIVAR_NLU_DOWNLOAD"] = str(download_dir)
+    log("NLU_START")
+    log("Downloading local AI model next to installer, then installing beside the app ...")
+    if nlu_progress:
+        nlu_progress(0, "NLU started")
+    sys.path.insert(0, str(dest))
+    try:
+        from marketing_divar import nlu_model as nm  # type: ignore
+
+        def on_pct(pct: int) -> None:
+            if nlu_progress:
+                nlu_progress(min(100, int(pct)), "NLU %d%%" % pct)
+
+        nm.ensure_installed(log=log, progress=on_pct)
+        log("NLU OK -> " + str(model_dest))
+        if nlu_progress:
+            nlu_progress(100, "NLU Completed")
+        return True
+    except Exception as e:
+        log("NLU skipped (panel can retry). " + str(e))
+        if nlu_progress:
+            nlu_progress(0, "NLU failed - retry in panel")
+        return False
+
+
+def run_install(progress, log, chrome_progress=None, dest: Path | None = None,
+                nlu_progress=None) -> None:
     dest = Path(dest) if dest else default_install_dir()
     progress(8, "Preparing folder")
     dest.mkdir(parents=True, exist_ok=True)
@@ -266,6 +305,8 @@ def run_install(progress, log, chrome_progress=None, dest: Path | None = None) -
     progress(55, "App files ready")
     workdir = dest
     install_app_chromium(target, workdir, log, chrome_progress=chrome_progress)
+    progress(62, "Local AI model")
+    install_nlu_model(dest, log, nlu_progress=nlu_progress)
     progress(72, "Shortcuts")
     make_shortcut(target, workdir, ico_dst if ico_dst.exists() else ico_src, log)
     progress(80, "Network")
@@ -289,7 +330,7 @@ def gui() -> int:
 
     root = tk.Tk()
     root.title(APP_NAME + " Setup")
-    root.geometry("580x560")
+    root.geometry("580x620")
     root.resizable(False, False)
     try:
         ico = app_icon()
@@ -326,7 +367,12 @@ def gui() -> int:
                              fg="#334")
     chrome_status.pack(anchor="w", padx=18)
     chrome_bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
-    chrome_bar.pack(padx=18, pady=(4, 8))
+    chrome_bar.pack(padx=18, pady=(4, 4))
+    nlu_status = tk.Label(root, text="NLU model: waiting", font=("Segoe UI", 9),
+                          fg="#334")
+    nlu_status.pack(anchor="w", padx=18)
+    nlu_bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
+    nlu_bar.pack(padx=18, pady=(4, 8))
     logbox = tk.Text(root, height=11, font=("Consolas", 9), state="disabled")
     logbox.pack(fill="both", expand=True, padx=18, pady=6)
 
@@ -350,6 +396,12 @@ def gui() -> int:
             chrome_status.configure(text=label)
         root.after(0, _)
 
+    def nlu_progress(pct: int, label: str) -> None:
+        def _():
+            nlu_bar["value"] = pct
+            nlu_status.configure(text=label)
+        root.after(0, _)
+
     btns = tk.Frame(root)
     btns.pack(fill="x", padx=18, pady=10)
     btn = tk.Button(btns, text="Install", width=14, font=("Segoe UI", 10, "bold"))
@@ -363,7 +415,7 @@ def gui() -> int:
         def work():
             try:
                 run_install(progress, log, chrome_progress=chrome_progress,
-                            dest=Path(chosen))
+                            nlu_progress=nlu_progress, dest=Path(chosen))
                 root.after(0, lambda: status.configure(
                     text="Installed. App is starting — browser: http://127.0.0.1:8642",
                     fg="#166534"))
@@ -396,7 +448,10 @@ def main() -> int:
             i = sys.argv.index("--dest")
             if i + 1 < len(sys.argv):
                 dest = Path(sys.argv[i + 1])
-        run_install(prog, print, chrome_progress=chrome_prog, dest=dest)
+        def nlu_prog(p, s):
+            print(f"[NLU {p:3d}%] {s}")
+        run_install(prog, print, chrome_progress=chrome_prog,
+                    nlu_progress=nlu_prog, dest=dest)
         return 0
     return gui()
 

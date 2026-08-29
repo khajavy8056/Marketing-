@@ -171,6 +171,35 @@ class Monitor:
                                      limiter=self.limiter, base_url=self.base_url)
         return self._anon
 
+    def _search_platforms(self, q: str, cities_arg, page: int, cat) -> List[Dict[str, Any]]:
+        try:
+            from . import store as _st
+            from .platforms import enabled_from_settings
+            plats = enabled_from_settings(_st.settings_all(self.db_path))
+        except Exception:
+            plats = ["divar"]
+        posts: List[Dict[str, Any]] = []
+        if "divar" in plats:
+            posts.extend(self.anon.search(
+                q, cities=cities_arg, page=page, category=cat) or [])
+        if "sheypoor" in plats:
+            try:
+                from . import sheypoor as _sh
+                posts.extend(_sh.search(
+                    self.anon, q, cities=cities_arg, page=page,
+                    category=cat) or [])
+            except Exception:
+                pass
+        if "ring" in plats:
+            try:
+                from . import ring as _rg
+                posts.extend(_rg.search(
+                    self.anon, q, cities=cities_arg, page=page,
+                    category=cat) or [])
+            except Exception:
+                pass
+        return posts
+
     # ------------------------------------------------------------ جستجو 🔎 --
     def watch_once(self) -> int:
         """یک دور جستجوی همه کلمه‌کلیدی‌ها؛ تعداد سرنخ جدید را برمی‌گرداند."""
@@ -180,95 +209,87 @@ class Monitor:
             for spec in self.keywords:
                 kw = spec["keyword"]
                 cities = spec.get("cities")
+                city_ids = list(cities) if cities else [None]
                 pages = int(spec.get("pages", 1))
-                for page in range(1, pages + 1):
-                    try:
-                        posts = self.anon.search(
-                            "" if spec.get("match_all") else kw,
-                            cities=cities, page=page,
-                            category=spec.get("category") or None)
+                for city_id in city_ids:
+                    cities_arg = None if city_id in (None, 0, "0") else [city_id]
+                    for page in range(1, pages + 1):
+                        posts: List[Dict[str, Any]] = []
+                        cat = spec.get("category") or None
                         try:
-                            from . import store as _st
-                            from .platforms import enabled_from_settings
-                            plats = enabled_from_settings(_st.settings_all(self.db_path))
-                        except Exception:
-                            plats = ["divar"]
-                        if "sheypoor" in plats:
-                            try:
-                                from . import sheypoor as _sh
-                                posts = list(posts) + _sh.search(
-                                    self.anon, "" if spec.get("match_all") else kw,
-                                    cities=cities, page=page,
-                                    category=spec.get("category") or None)
-                            except Exception:
-                                pass
-                        if "ring" in plats:
-                            try:
-                                from . import ring as _rg
-                                posts = list(posts) + _rg.search(
-                                    self.anon, "" if spec.get("match_all") else kw,
-                                    cities=cities, page=page,
-                                    category=spec.get("category") or None)
-                            except Exception:
-                                pass
-                        bump_quota(con, "searches", len(posts))
-                    except DivarBlockedError as e:
-                        notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "
-                                         "watch_interval را در config.json بزرگ کنید",
-                               problem="rate_limit/captcha", operation="search",
-                               action="فاصله اسکن را زیاد کنید و وضعیت شبکه را بررسی کنید")
-                        self._ev("error", f"جستجو متوقف شد: {e}")
-                        return new_total
-                    except Exception as e:
-                        hint = ""
-                        if any(k in type(e).__name__ for k in ("Proxy", "Connect", "Timeout", "SSLError")) \
-                                or "proxy" in str(e).lower():
-                            hint = " — اتصال برقرار نشد؛ VPN/پروکسی و اینترنت را بررسی کنید"
-                        print(f"[!] جستجو «{kw}» صفحه {page}: {e}{hint}")
-                        self._ev("error", f"خطای جستجوی «{kw}»: {e}{hint}")
-                        break
-                    new_here = 0
-                    city = ",".join(str(c) for c in cities) if cities else "iran"
-                    browse = bool(spec.get("match_all"))
-                    if posts:
-                        self._ev("info",
-                                 f"جستجو «{kw}»"
-                                 + (f" / دسته {spec.get('category')}" if spec.get("category") else "")
-                                 + f": {len(posts)} آگهی")
-                    for p in posts:
-                        if consider_new_lead(con, self.anon, p, kw, city,
-                                             match_all=browse,
-                                             price_min=int(spec.get("price_min") or 0),
-                                             price_max=int(spec.get("price_max") or 0),
-                                             vip=bool(spec.get("vip"))):
-                            if spec.get("hunter"):
-                                try:
-                                    from .hunter import collect_samples, score_lead
-                                    from . import store as _st2
-                                    plat = str(p.get("platform") or "divar")
-                                    samples = collect_samples(con, kw, city, plat)
-                                    sc = score_lead(int(p.get("price") or 0), samples,
-                                                    _st2.settings_all(self.db_path))
-                                    if sc.get("warm") and not p.get("is_defect") \
-                                            and not p.get("is_placeholder"):
-                                        con.execute(
-                                            "UPDATE leads SET hunter_level=? WHERE token=?",
-                                            (sc.get("level") or "", p.get("token")))
-                                except Exception:
-                                    pass
-                            new_total += 1
-                            new_here += 1
-                            t = str(p.get("title") or "")
-                            where = ("دسته" if browse else
-                                     ("عنوان" if kw in t else "متن"))
-                            mark = "⭐ ویژه " if spec.get("vip") else ""
-                            self._ev("info", f"🆕 {mark}سرنخ جدید: «{t[:40]}» "
-                                             f"({where})")
-                            if spec.get("vip"):
-                                self._vip_found(p, spec, city)
-                    con.commit()
-                    if new_here == 0:
-                        break  # صفحه بعدی تکراری
+                            q = "" if spec.get("match_all") else kw
+                            posts = self._search_platforms(q, cities_arg, page, cat)
+                            bump_quota(con, "searches", len(posts))
+                        except DivarBlockedError as e:
+                            notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "
+                                             "watch_interval را در config.json بزرگ کنید",
+                                   problem="rate_limit/captcha", operation="search",
+                                   action="فاصله اسکن را زیاد کنید و وضعیت شبکه را بررسی کنید")
+                            self._ev("error", f"جستجو متوقف شد: {e}")
+                            return new_total
+                        except Exception as e:
+                            hint = ""
+                            if any(k in type(e).__name__ for k in
+                                   ("Proxy", "Connect", "Timeout", "SSLError")) \
+                                    or "proxy" in str(e).lower():
+                                hint = (" — اتصال برقرار نشد؛ VPN/پروکسی و "
+                                        "اینترنت را بررسی کنید")
+                            print(f"[!] جستجو «{kw}» صفحه {page}: {e}{hint}")
+                            self._ev("error", f"خطای جستجوی «{kw}»: {e}{hint}")
+                            break
+                        new_here = 0
+                        city = ",".join(str(c) for c in cities) if cities else "iran"
+                        browse = bool(spec.get("match_all"))
+                        if posts:
+                            self._ev("info",
+                                     f"جستجو «{kw}»"
+                                     + (f" / دسته {spec.get('category')}"
+                                        if spec.get("category") else "")
+                                     + f": {len(posts)} آگهی")
+                        for p in posts:
+                            p = dict(p)
+                            if cat:
+                                p.setdefault("category", cat)
+                            if consider_new_lead(
+                                    con, self.anon, p, kw, city,
+                                    match_all=browse,
+                                    price_min=int(spec.get("price_min") or 0),
+                                    price_max=int(spec.get("price_max") or 0),
+                                    vip=bool(spec.get("vip"))):
+                                if spec.get("hunter") and not p.get("hunter_block"):
+                                    try:
+                                        from .hunter import collect_samples, score_lead
+                                        from . import store as _st2
+                                        plat = str(p.get("platform") or "divar")
+                                        samples = collect_samples(con, kw, city, plat)
+                                        sc = score_lead(
+                                            int(p.get("price") or 0), samples,
+                                            _st2.settings_all(self.db_path),
+                                            extra=p)
+                                        if sc.get("warm") and not p.get("is_defect") \
+                                                and not p.get("is_placeholder") \
+                                                and not p.get("hunter_block") \
+                                                and sc.get("level") not in (
+                                                    "none", "suspicious"):
+                                            con.execute(
+                                                "UPDATE leads SET hunter_level=? "
+                                                "WHERE token=?",
+                                                (sc.get("level") or "", p.get("token")))
+                                    except Exception:
+                                        pass
+                                new_total += 1
+                                new_here += 1
+                                t = str(p.get("title") or "")
+                                where = ("دسته" if browse else
+                                         ("عنوان" if kw in t else "متن"))
+                                mark = "⭐ ویژه " if spec.get("vip") else ""
+                                self._ev("info", f"🆕 {mark}سرنخ جدید: «{t[:40]}» "
+                                                 f"({where})")
+                                if spec.get("vip"):
+                                    self._vip_found(p, spec, city)
+                        con.commit()
+                        if new_here == 0:
+                            break
             return new_total
         finally:
             con.close()

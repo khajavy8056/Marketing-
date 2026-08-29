@@ -187,6 +187,12 @@ _LEAD_MIGRATIONS = (
     ("last_reply_intent", "TEXT DEFAULT ''"),
     ("last_reply_at", "TEXT"),
     ("removed_reason", "TEXT DEFAULT ''"),
+    ("inspect_summary", "TEXT DEFAULT ''"),
+    ("chassis", "TEXT DEFAULT ''"),
+    ("paint", "TEXT DEFAULT ''"),
+    ("car_year", "INTEGER DEFAULT 0"),
+    ("mileage_km", "INTEGER DEFAULT 0"),
+    ("image_count", "INTEGER DEFAULT 0"),
 )
 
 
@@ -276,6 +282,19 @@ def upsert_lead(con: sqlite3.Connection, post: Dict[str, Any],
                  int(bool(post.get("is_placeholder"))),
                  int(bool(post.get("is_buyer"))),
                  str(post.get("inquiry_status") or ""),
+                 post["token"]))
+        except sqlite3.OperationalError:
+            pass
+        try:
+            con.execute(
+                "UPDATE leads SET inspect_summary=?, chassis=?, paint=?, "
+                "car_year=?, mileage_km=?, image_count=? WHERE token=?",
+                (str(post.get("inspect_summary") or "")[:240],
+                 str(post.get("chassis") or ""),
+                 str(post.get("paint") or ""),
+                 int(post.get("car_year") or 0),
+                 int(post.get("mileage_km") or 0),
+                 int(post.get("image_count") or 0),
                  post["token"]))
         except sqlite3.OperationalError:
             pass
