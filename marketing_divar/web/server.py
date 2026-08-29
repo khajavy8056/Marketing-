@@ -604,7 +604,9 @@ def _apply_sms_to_monitor() -> None:
               "ip_daily_limit", "phone_delay_sec",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "platform_divar", "platform_sheypoor", "platform_ring",
-              "sms_inbox_on", "nlu_use_local"):
+              "sms_inbox_on", "nlu_use_local",
+              "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
+              "sms_pattern_text"):
         if k in s:
             mon.cfg[k] = s[k]
 
@@ -1062,8 +1064,9 @@ def lead_send_sms(token: str):
         if r.get("ok"):
             try:
                 con.execute(
-                    "UPDATE leads SET sms_status='sent', sms_sent_at=? WHERE token=?",
-                    (_now(), token))
+                    "UPDATE leads SET sms_status='sent', sms_sent_at=?, "
+                    "sms_recid=?, sms_delivery_status='pending' WHERE token=?",
+                    (_now(), str(r.get("recid") or ""), token))
                 bump_quota(con, "sms")
                 con.commit()
             except Exception:
@@ -1079,6 +1082,54 @@ def lead_send_sms(token: str):
         return r
     finally:
         con.close()
+
+
+@app.post("/api/sms/delivery-check")
+def sms_delivery_check():
+    """وضعیت تحویل پیامک‌های «در انتظار» را از ملی‌پیامک (GetDeliveries2) می‌پرسد.
+
+    همهٔ سرنخ‌هایی که sms_status='sent' و delivery='pending' و recid دارند
+    چک می‌شوند؛ نتیجه به‌صورت delivered / failed ذخیره می‌شود.
+    """
+    from ..sms import delivery_melipayamak
+    s = store.settings_all(DB_PATH)
+    if (s.get("sms_provider") or "none") != "melipayamak":
+        raise HTTPException(400, "سرویس‌دهنده را ملی‌پیامک کنید")
+    user = s.get("sms_username") or ""
+    pwd = s.get("sms_password") or s.get("sms_api_key") or ""
+    if not user or not pwd:
+        raise HTTPException(400, "نام کاربری و رمز ملی‌پیامک را ذخیره کنید")
+    con = connect(DB_PATH)
+    updated = {"delivered": 0, "failed": 0, "pending": 0, "checked": 0}
+    try:
+        rows = con.execute(
+            "SELECT token, phone, sms_recid FROM leads WHERE sms_status='sent' "
+            "AND sms_delivery_status IN ('pending','') AND sms_recid IS NOT NULL "
+            "AND sms_recid != ''").fetchall()
+        for r in rows:
+            recid = str(r["sms_recid"])
+            d = delivery_melipayamak(user, pwd, recid)
+            st = d.get("status") or "unknown"
+            if st == "delivered":
+                con.execute(
+                    "UPDATE leads SET sms_delivery_status='delivered', "
+                    "sms_delivered_at=? WHERE token=?",
+                    (time.strftime("%Y-%m-%d %H:%M:%S"), r["token"]))
+                updated["delivered"] += 1
+            elif st == "failed":
+                con.execute(
+                    "UPDATE leads SET sms_delivery_status='failed' WHERE token=?",
+                    (r["token"],))
+                updated["failed"] += 1
+            else:
+                updated["pending"] += 1
+            updated["checked"] += 1
+        con.commit()
+    finally:
+        con.close()
+    log("success", f"بررسی تحویل پیامک: {updated['checked']} چک، "
+                   f"{updated['delivered']} تحویل، {updated['failed']} ناموفق")
+    return {"ok": True, **updated}
 
 
 # ------------------------------------------------------------ صفحه اصلی --

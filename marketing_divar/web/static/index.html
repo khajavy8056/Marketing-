@@ -71,6 +71,16 @@
   .checkline{display:flex; gap:8px; align-items:flex-start; font-size:13.5px; margin:8px 0}
   .checkline input{width:auto; margin-top:3px}
   .hint{font-size:12px; color:var(--mut); line-height:1.9}
+
+  .codebox{background:#eef2f8; border:1px solid var(--line); border-radius:8px;
+           padding:8px 10px; font-size:12px; direction:ltr; margin-top:6px; min-height:2em}
+  html[data-theme="dark"] .codebox{background:#121920}
+  .q{position:relative; display:inline-block; margin-right:4px; cursor:help; color:var(--pri); font-weight:700}
+  .q .qtip{position:absolute; display:none; width:280px; background:#1e2a3a; color:#fff;
+           padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.8; z-index:40;
+           right:0; top:1.4em; box-shadow:0 8px 24px rgba(0,0,0,.25); font-weight:400}
+  .q:hover .qtip,.q:focus-visible .qtip{display:block}
+  html[data-theme="dark"] .q .qtip{background:#0b1520}
   .warn-box{background:#fff8ea; border:1px solid #f2dfb6; color:#7a5a12;
             padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.9; margin:10px 0}
   .empty{color:var(--mut); font-size:13px; text-align:center; padding:26px}
@@ -555,8 +565,30 @@
       <input id="set-sms-user" dir="ltr" autocomplete="off">
       <div class="lbl">رمز عبور پنل (یا کلید API)</div>
       <input id="set-sms-key" type="password" dir="ltr" autocomplete="off">
-      <div class="lbl">شماره خط ارسال</div>
-      <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
+      <div class="lbl">روش ارسال</div>
+      <select id="set-sms-mode" onchange="smsModeChanged()">
+        <option value="line">خط اختصاصی</option>
+        <option value="pattern">پترن (خط خدماتی)</option>
+      </select>
+      <div id="sms-line-wrap">
+        <div class="lbl">شماره خط ارسال</div>
+        <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
+      </div>
+      <div id="sms-pattern-wrap" style="display:none">
+        <div class="lbl">کد پترن (bodyId)</div>
+        <input id="set-sms-bodyid" dir="ltr" placeholder="کد پترن تأییدشده">
+        <div class="lbl">متن پترن</div>
+        <textarea id="set-sms-pattern-text" oninput="patternPreview()"
+          placeholder="کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است."></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" type="button" onclick="copyPattern()">📋 کپی متن پترن (فرمت پنل)</button>
+          <button class="btn sm gray" type="button" onclick="fillPatternSample()">نمونهٔ آماده</button>
+        </div>
+        <div class="codebox" id="pattern-preview"></div>
+        <div class="hint" id="pattern-rules" style="margin-top:6px"></div>
+        <div class="lbl">ترتیب متغیرهای پترن</div>
+        <input id="set-sms-args" dir="ltr" placeholder="مثلاً title,city,price">
+      </div>
       <div class="lbl">سقف پیامک روزانه</div>
       <input id="set-sms-limit" type="number" dir="ltr">
       <div class="checkline">
@@ -569,7 +601,9 @@
         <button class="btn sm gray" type="button" onclick="smsTest('')">بررسی موجودی</button>
         <input id="set-sms-testto" dir="ltr" placeholder="09xxxxxxxxx آزمایش" style="max-width:180px">
         <button class="btn sm" type="button" onclick="smsTest($('set-sms-testto').value)">ارسال آزمایشی</button>
+        <button class="btn sm warn" type="button" onclick="smsDeliveryCheck()">📊 بررسی وضعیت تحویل پیامک‌ها</button>
       </div>
+      <div class="hint" id="sms-delivery-hint" style="margin-top:6px"></div>
     </div>
     <div class="card" style="display:flex; align-items:flex-end">
       <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
@@ -1278,6 +1312,11 @@ async function settingsLoad(){
     $('set-sms-line').value=s.sms_line_number||'';
     $('set-sms-limit').value=s.sms_daily_limit||40;
     $('set-sms-auto').checked=!!s.sms_auto_on_new;
+    if($('set-sms-mode')) $('set-sms-mode').value = s.sms_use_pattern ? 'pattern' : 'line';
+    if($('set-sms-bodyid')) $('set-sms-bodyid').value = s.sms_pattern_bodyid||'';
+    if($('set-sms-args')) $('set-sms-args').value = s.sms_pattern_args||'title,city';
+    if($('set-sms-pattern-text')) $('set-sms-pattern-text').value = s.sms_pattern_text||'';
+    if (typeof smsModeChanged==='function') smsModeChanged();
     if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
     if($('set-tg-on')) $('set-tg-on').checked = s.telegram_enabled!==false;
@@ -1377,6 +1416,72 @@ async function sendLeadSms(token){
   try{
     const r = await api('/api/leads/'+encodeURIComponent(token)+'/sms',{method:'POST',body:'{}'});
     toast((r.ok?'✓ ':'❌ ')+(r.message||''), !!r.ok);
+    leadsLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
+function smsModeChanged(){
+  const mode = ($('set-sms-mode')||{}).value || 'line';
+  const lineWrap = $('sms-line-wrap'), patWrap = $('sms-pattern-wrap');
+  if (lineWrap) lineWrap.style.display = (mode==='pattern') ? 'none' : 'block';
+  if (patWrap) patWrap.style.display = (mode==='pattern') ? 'block' : 'none';
+  patternPreview();
+}
+function patternVars(text){
+  const seen=[], re=/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g; let m;
+  while((m=re.exec(text||''))){ if(!seen.includes(m[1])) seen.push(m[1]); }
+  return seen;
+}
+function toMelipayamakText(text){
+  const vars=patternVars(text); let out=text||'';
+  vars.forEach((v,i)=>{ out=out.split('{'+v+'}').join('{'+i+'}'); });
+  return out;
+}
+function patternPreview(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  const txt=ta.value||''; const vars=patternVars(txt);
+  if($('set-sms-args')) $('set-sms-args').value=vars.join(',');
+  if($('pattern-preview')) $('pattern-preview').textContent = toMelipayamakText(txt);
+  const rules=$('pattern-rules'); if(!rules) return;
+  let w='', color='var(--mut)';
+  if(!txt.trim()) w='متن پترن خالی است — بنویسید.';
+  else if(vars.length===0) w='⚠️ پترن باید حداقل یک متغیر داشته باشد (مثلاً {title}).';
+  else if(!txt.replace(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g,'').replace(/\s+/g,'').length)
+    w='⚠️ پترن نباید فقط متغیر باشد؛ متن ثابت هم لازم است.';
+  else if(/https?:\/\/|www\.|\.ir\b|\.com\b|\.net\b|\.org\b/.test(txt))
+    w='⚠️ لینک در پترن رد می‌شود؛ آدرس سایت نگذارید.';
+  else { w='✓ متن قابل ثبت است — «کپی متن پترن» را بزنید و در پنل ملی‌پیامک ثبت کنید.'; color='var(--ok)'; }
+  rules.textContent=w; rules.style.color=color;
+}
+function copyTextFallback(text){
+  const ta=document.createElement('textarea'); ta.value=text;
+  ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta); return ok;
+}
+async function copyPattern(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  const out=toMelipayamakText(ta.value||'');
+  if(!out.trim()){ toast('اول متن پترن را بنویسید', false); return; }
+  let done=false;
+  try{ await navigator.clipboard.writeText(out); done=true; }
+  catch(e){ done=copyTextFallback(out); }
+  toast(done ? 'متن پترن (فرمت پنل) کپی شد ✓ — در پنل ملی‌پیامک ثبت کنید'
+             : 'کپی خودکار نشد — متنِ کادر خاکستری بالا را دستی کپی کنید', done);
+}
+function fillPatternSample(){
+  const ta=$('set-sms-pattern-text'); if(!ta) return;
+  ta.value='کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است. در صورت تمایل پاسخگو باشید.';
+  patternPreview();
+  toast('نمونهٔ آماده گذاشته شد — متغیرها: {title} و {city}');
+}
+async function smsDeliveryCheck(){
+  try{
+    const r = await api('/api/sms/delivery-check',{method:'POST',body:'{}'});
+    const m = `${r.checked||0} پیامک چک شد — ${r.delivered||0} تحویل ✓، ${r.failed||0} ناموفق ✗، ${r.pending||0} در انتظار`;
+    toast(m, true);
+    if($('sms-delivery-hint')) $('sms-delivery-hint').textContent = m;
     leadsLoad();
   }catch(e){ toast('❌ '+e.message,false); }
 }

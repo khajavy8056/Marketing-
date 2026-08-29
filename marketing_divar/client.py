@@ -1057,3 +1057,37 @@ class DivarClient:
         except ValueError:
             return {"status": "error", "message": "پاسخ غیر JSON"}
         return classify_contact_widgets(widgets)
+
+    # ------------------------------------------------------------- chat 💬 --
+    def send_chat(self, token: str, text: str) -> Dict[str, Any]:
+        """ارسال پیام چت به صاحب آگهی با همین اکانت لاگین‌شده (best-effort).
+
+        ⚠️ اندپوینت داخلی چت دیوار مستند عمومیِ ثابت ندارد و ممکن است تغییر
+        کند؛ بنابراین این تابع «قطعاً موفق» را وعده نمی‌دهد. هر پاسخ غیر 2xx
+        به‌صورت ``{"ok": False, "status": "requires_operator"}`` برمی‌گردد تا
+        جریان نیمه‌خودکار (اپراتور) ادامه دهد — هرگز «ارسال موفق» جعلی ثبت
+        نمی‌شود. محدودیت/کپچا (403/429) هم مثل بقیه به DivarBlockedError می‌خورد.
+        """
+        auth = self._auth_headers()  # DivarAuthError اگر لاگین نیست
+        if self.limiter:
+            self.limiter.wait("phone")
+        r = self._fetch(
+            "POST", f"{self.base}/v8/chat/conversations/{token}/messages",
+            headers={**auth, "Authorization": f"Bearer {self.token}",
+                     "Content-Type": "application/json",
+                     "Referer": f"https://divar.ir/v/{token}"},
+            json={"message": text, "text": text}, timeout=25)
+        self._check_block(r)
+        if r.status_code not in (200, 201):
+            return {"ok": False, "status": "requires_operator",
+                    "message": f"چت پاسخ HTTP {r.status_code} داد"}
+        try:
+            data = r.json()
+        except ValueError:
+            data = {}
+        if isinstance(data, dict):
+            st = str(data.get("status") or "").lower()
+            if st in ("error", "failed", "rejected"):
+                return {"ok": False, "status": "requires_operator",
+                        "message": str(data)[:200]}
+        return {"ok": True, "status": "sent", "message": "sent"}

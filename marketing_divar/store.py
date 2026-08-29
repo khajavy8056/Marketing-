@@ -63,6 +63,10 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "sms_auto_on_new": False,        # پیش‌فرض خاموش
     "sms_daily_limit": 40,
     "sms_inbox_on": True,            # پولینگ پاسخ پیامک ملی‌پیامک
+    "sms_use_pattern": False,        # ارسال از پترن (خط خدماتی) به‌جای خط اختصاصی
+    "sms_pattern_bodyid": "",        # کد پترن تأییدشده در پنل ملی‌پیامک
+    "sms_pattern_args": "title,city",  # ترتیب متغیرهای پترن (فیلدهای سرنخ با کاما)
+    "sms_pattern_text": "",          # متن پترن (طراحی در برنامه → کپی → ثبت در پنل ملی‌پیامک)
     "vip_telegram": True,            # هشدار ویژه در تلگرام
     "chat_auto_on_new": False,
     "chat_auto_daily_limit": 40,
@@ -346,7 +350,9 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
               "platform_divar", "platform_sheypoor", "platform_ring",
               "sms_inbox_on", "nlu_use_local",
-              "hunter_good_pct", "hunter_great_pct", "hunter_suspicious_pct"):
+              "hunter_good_pct", "hunter_great_pct", "hunter_suspicious_pct",
+              "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
+              "sms_pattern_text"):
         if k in s:
             cfg[k] = s[k]
     return cfg

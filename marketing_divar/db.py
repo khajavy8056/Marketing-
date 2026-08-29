@@ -170,6 +170,7 @@ _LEAD_MIGRATIONS = (
     ("sms_sent_at", "TEXT"),
     ("sms_recid", "TEXT DEFAULT ''"),
     ("sms_delivery_status", "TEXT DEFAULT ''"),
+    ("sms_delivered_at", "TEXT"),
     ("chat_sent_at", "TEXT"),
     ("chat_account", "TEXT DEFAULT ''"),
     ("chat_thread_id", "TEXT DEFAULT ''"),
