@@ -20,6 +20,19 @@ from marketing_divar.config import DEFAULTS  # noqa: E402
 from marketing_divar.accounts import AccountManager  # noqa: E402
 
 
+class TestThreeTabs(unittest.TestCase):
+    def test_platform_homes(self):
+        from marketing_divar.chromium_profile import (
+            HOME_URL, PLATFORM_HOME_URLS, extra_urls_for)
+        self.assertEqual(len(PLATFORM_HOME_URLS), 3)
+        self.assertTrue(any("divar.ir" in u for u in PLATFORM_HOME_URLS))
+        self.assertTrue(any("sheypoor.com" in u for u in PLATFORM_HOME_URLS))
+        self.assertTrue(any("ring.ir" in u for u in PLATFORM_HOME_URLS))
+        extra = extra_urls_for(HOME_URL)
+        self.assertEqual(len(extra), 2)
+        self.assertTrue(all("divar.ir/user" not in u for u in extra))
+
+
 class TestSafeName(unittest.TestCase):
     def test_persian_and_spaces(self):
         self.assertEqual(safe_name("محمد تهران 01"), "محمد-تهران-01")
@@ -113,12 +126,14 @@ class TestCreateOpenMocked(unittest.TestCase):
 
         with mock.patch.object(cp.subprocess, "Popen", side_effect=popen), \
              mock.patch.object(cp, "_cdp_alive", return_value=True), \
+             mock.patch.object(cp, "open_platform_tabs", return_value=2) as tabs, \
              mock.patch("marketing_divar.app_chromium.is_ready", return_value=True), \
              mock.patch("marketing_divar.app_chromium.ensure_installed"), \
              mock.patch("marketing_divar.app_chromium.apply_browser_env"), \
              mock.patch("marketing_divar.app_chromium.executable_path",
                         return_value="/opt/app/chrome"):
             res = cp.open_profile(d, "acc1", HOME_URL)
+        tabs.assert_called()
         self.assertTrue(res["ok"])
         cmd = cmds[0]
         joined = " ".join(cmd)

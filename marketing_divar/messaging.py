@@ -1,32 +1,90 @@
 # -*- coding: utf-8 -*-
-"""پیام‌سازی نیمه‌خودکار (Human-in-the-Loop) برای سرنخ‌های «فقط چت».
+"""پیام‌سازی با متغیر — چت خودکار و نیمه‌خودکار.
 
-جریان: متن شخصی‌سازی‌شده ساخته می‌شود → چت آگهی در مرورگر باز می‌شود →
-اپراتور متن را Paste و ارسال می‌کند → وضعیت سرنخ ثبت می‌شود.
-این مسیر بن نمی‌سازد چون ارسال واقعی را انسان انجام می‌دهد.
+متغیرها متن را برای هر آگهی عوض می‌کنند تا الگوی اسپم ساخته نشود.
 """
 
 from __future__ import annotations
 
+import random
 import sqlite3
 import time
 import webbrowser
 from typing import Any, Dict, Optional
 
+_GREETINGS = (
+    "سلام، وقت بخیر 🌹",
+    "سلام و درود 🙏",
+    "درود، روز بخیر ☀️",
+    "سلام، وقتتون بخیر 😊",
+    "سلام، امیدوارم حالتون خوب باشه 🌷",
+)
+_CLOSINGS = (
+    "ممنون از وقتی که می‌گذارید 🙏",
+    "سپاس از توجه شما 🌹",
+    "با تشکر، منتظر پاسخ شما هستم 😊",
+    "ممنونم و موفق باشید 🙏",
+    "پیشاپیش از پاسخ شما سپاسگزارم 🌷",
+)
+
+
+def _field(lead: Any, key: str, default: str = "") -> str:
+    try:
+        v = lead[key]
+    except (KeyError, IndexError, TypeError):
+        v = None
+    if v is None:
+        if isinstance(lead, dict):
+            v = lead.get(key)
+        else:
+            v = None
+    if v is None:
+        return default
+    return str(v).strip()
+
+
+def _format_price(value: Any) -> str:
+    try:
+        n = int(value or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0:
+        return ""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:g} میلیون تومان"
+    return f"{n:,} تومان"
+
 
 def build_message(template: str, lead: sqlite3.Row | Dict[str, Any]) -> str:
-    """قالب را با اطلاعات همان آگهی پر می‌کند (شخصی‌سازی = ضد اسپم)."""
-    return template.format(
-        title=(lead["title"] or "").strip() or "آگهی شما",
-        subtitle=lead["subtitle"] or "",
-        url=lead["url"] or "",
-    )
+    """قالب را با اطلاعات همان آگهی پر می‌کند (شخصی‌سازی = ضد اسپم).
+
+    {title} {subtitle} {url} {city} {keyword} {price} {published_at}
+    {greeting} {closing} {platform}
+    """
+    data = {
+        "title": _field(lead, "title", "آگهی شما"),
+        "subtitle": _field(lead, "subtitle"),
+        "url": _field(lead, "url"),
+        "city": _field(lead, "city"),
+        "keyword": _field(lead, "keyword"),
+        "price": _format_price(_field(lead, "price")),
+        "published_at": _field(lead, "published_at"),
+        "platform": _field(lead, "platform", "divar"),
+        "greeting": random.choice(_GREETINGS),
+        "closing": random.choice(_CLOSINGS),
+    }
+    class _Safe(dict):
+        def __missing__(self, key):
+            return ""
+    try:
+        return template.format_map(_Safe(data))
+    except (IndexError, ValueError):
+        return template
 
 
 def copy_to_clipboard(text: str) -> bool:
-    """کپی در کلیپ‌بورد اگر pyperclip باشد؛ وگرنه False (متن چاپ می‌شود)."""
     try:
-        import pyperclip  # اختیاری: pip install pyperclip
+        import pyperclip
         pyperclip.copy(text)
         return True
     except Exception:
@@ -36,7 +94,6 @@ def copy_to_clipboard(text: str) -> bool:
 def draft_flow(con: sqlite3.Connection, keyword: Optional[str] = None,
                template: str = "", limit: int = 0,
                only_chat_only: bool = False) -> None:
-    """حلقه تعاملی آماده‌سازی پیام چت برای سرنخ‌های در انتظار تماس."""
     q = ("SELECT * FROM leads WHERE lead_status='new' "
          "AND phone_status IN ('hidden','pending','found','error')")
     args: tuple = ()

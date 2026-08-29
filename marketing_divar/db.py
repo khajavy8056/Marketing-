@@ -62,8 +62,26 @@ CREATE TABLE IF NOT EXISTS quota (
     day TEXT PRIMARY KEY,
     phones INTEGER DEFAULT 0,
     searches INTEGER DEFAULT 0,
-    sms INTEGER DEFAULT 0
+    sms INTEGER DEFAULT 0,
+    chats INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT,
+    platform TEXT DEFAULT 'divar',
+    channel TEXT DEFAULT 'chat',
+    thread_id TEXT,
+    phone TEXT,
+    body TEXT,
+    direction TEXT DEFAULT 'in',
+    received_at TEXT,
+    nlu_intent TEXT,
+    nlu_confidence REAL,
+    nlu_summary TEXT,
+    nlu_slots TEXT,
+    acted INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_replies_token ON replies(token);
 CREATE TABLE IF NOT EXISTS quota_accounts (
     day TEXT,
     account TEXT,
@@ -109,19 +127,29 @@ def _ensure_quota_sms(con: sqlite3.Connection) -> None:
         con.commit()
 
 
+def _ensure_quota_chats(con: sqlite3.Connection) -> None:
+    cols = {r[1] for r in con.execute("PRAGMA table_info(quota)")}
+    if "chats" not in cols:
+        con.execute("ALTER TABLE quota ADD COLUMN chats INTEGER DEFAULT 0")
+        con.commit()
+
+
 def quota_today(con: sqlite3.Connection) -> Dict[str, int]:
     _ensure_quota_sms(con)
-    row = con.execute("SELECT phones, searches, sms FROM quota WHERE day=?",
+    _ensure_quota_chats(con)
+    row = con.execute("SELECT phones, searches, sms, chats FROM quota WHERE day=?",
                       (time.strftime("%Y-%m-%d"),)).fetchone()
     return {"phones": row["phones"] if row else 0,
             "searches": row["searches"] if row else 0,
-            "sms": (row["sms"] if row and "sms" in row.keys() else 0)}
+            "sms": (row["sms"] if row and "sms" in row.keys() else 0),
+            "chats": (row["chats"] if row and "chats" in row.keys() else 0)}
 
 
 def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
     """افزایش شمارنده روزانه؛ مقدار جدید را برمی‌گرداند."""
-    assert field in ("phones", "searches", "sms")
+    assert field in ("phones", "searches", "sms", "chats")
     _ensure_quota_sms(con)
+    _ensure_quota_chats(con)
     day = time.strftime("%Y-%m-%d")
     con.execute("INSERT INTO quota (day) VALUES (?) "
                 "ON CONFLICT(day) DO NOTHING", (day,))
@@ -140,8 +168,24 @@ _LEAD_MIGRATIONS = (
     ("last_error", "TEXT"),
     ("sms_status", "TEXT DEFAULT ''"),
     ("sms_sent_at", "TEXT"),
+    ("sms_recid", "TEXT DEFAULT ''"),
+    ("sms_delivery_status", "TEXT DEFAULT ''"),
+    ("chat_sent_at", "TEXT"),
+    ("chat_account", "TEXT DEFAULT ''"),
+    ("chat_thread_id", "TEXT DEFAULT ''"),
     ("vip", "INTEGER DEFAULT 0"),
     ("price", "INTEGER DEFAULT 0"),
+    ("platform", "TEXT DEFAULT 'divar'"),
+    ("native_id", "TEXT DEFAULT ''"),
+    ("price_kind", "TEXT DEFAULT ''"),
+    ("hunter_level", "TEXT DEFAULT ''"),
+    ("is_defect", "INTEGER DEFAULT 0"),
+    ("is_placeholder", "INTEGER DEFAULT 0"),
+    ("is_buyer", "INTEGER DEFAULT 0"),
+    ("inquiry_status", "TEXT DEFAULT ''"),
+    ("last_reply_intent", "TEXT DEFAULT ''"),
+    ("last_reply_at", "TEXT"),
+    ("removed_reason", "TEXT DEFAULT ''"),
 )
 
 
@@ -217,6 +261,23 @@ def upsert_lead(con: sqlite3.Connection, post: Dict[str, Any],
          post.get("matched_keywords") or keyword,
          post.get("published_at") or post.get("bottom") or "",
          chat_st, int(bool(post.get("vip"))), price))
+    if cur.rowcount > 0:
+        try:
+            con.execute(
+                "UPDATE leads SET platform=?, native_id=?, price_kind=?, "
+                "hunter_level=?, is_defect=?, is_placeholder=?, is_buyer=?, "
+                "inquiry_status=? WHERE token=?",
+                (str(post.get("platform") or "divar"),
+                 str(post.get("native_id") or ""),
+                 str(post.get("price_kind") or ""),
+                 str(post.get("hunter_level") or ""),
+                 int(bool(post.get("is_defect"))),
+                 int(bool(post.get("is_placeholder"))),
+                 int(bool(post.get("is_buyer"))),
+                 str(post.get("inquiry_status") or ""),
+                 post["token"]))
+        except sqlite3.OperationalError:
+            pass
     return cur.rowcount > 0
 
 

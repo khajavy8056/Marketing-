@@ -30,10 +30,15 @@ DEFAULTS: Dict[str, Any] = {
     "notify": {"telegram_bot_token": "", "telegram_chat_id": ""},
     # --- پیام چت نیمه‌خودکار ---
     "chat_template": (
-        "سلام، وقتتون بخیر 🌹\n"
+        "{greeting}\n"
         "آگهی «{title}» رو دیدم. "
         "اگر هنوز به نتیجه نرسیدید، خوشحال می‌شوم چند دقیقه صحبت کنیم.\n"
-        "ممنون از وقتی که می‌گذارید 🙏"
+        "{closing}"
+    ),
+    "inquire_template": (
+        "{greeting}\n"
+        "برای آگهی «{title}» قیمت نقدی نهایی چقدر است؟ کالا سالمه؟\n"
+        "{closing}"
     ),
     # --- سایر ---
     "interactive": True,          # هنگام کپچا از اپراتور بخواه حل کند

@@ -22,6 +22,11 @@ from typing import Any, Dict, List, Optional
 HOME_URL = "https://divar.ir/user"
 META_NAME = "account.json"
 CHROMIUM_DIR = "chromium"
+PLATFORM_HOME_URLS = (
+    "https://divar.ir/user",
+    "https://www.sheypoor.com/session",
+    "https://ring.ir/",
+)
 
 _LIVE: Dict[str, Dict[str, Any]] = {}
 _LOCK = threading.Lock()
@@ -112,8 +117,8 @@ def cookies_look_logged_in(cookies: List[Dict[str, Any]]) -> bool:
     for c in cookies or []:
         if not isinstance(c, dict):
             continue
-        domain = str(c.get("domain") or c.get("host_key") or "")
-        if domain and "divar.ir" not in domain.lower():
+        domain = str(c.get("domain") or c.get("host_key") or "").lower()
+        if domain and not any(h in domain for h in ("divar.ir", "sheypoor.com", "ring.ir")):
             continue
         names.add(str(c.get("name") or ""))
     if any(n in names for n in _LOGIN_COOKIE_HINTS):
@@ -399,6 +404,36 @@ def _spawn_chromium(exe: str, profile: Path, url: str,
     return subprocess.Popen(cmd, **kw)
 
 
+def extra_urls_for(primary: str) -> List[str]:
+    """سربرگ‌های دیگر همان پروفایل — لاگین/کپچا سه سایت."""
+    want = list(PLATFORM_HOME_URLS)
+    out = []
+    for u in want:
+        if primary and u.rstrip("/") == (primary or "").rstrip("/"):
+            continue
+        # اگر primary صفحه آگهی دیوار است، باز هم سه خانه باز می‌شوند
+        out.append(u)
+    if primary and primary.rstrip("/") not in {x.rstrip("/") for x in PLATFORM_HOME_URLS}:
+        # captcha on a listing: keep listing as first tab (already opened), add 3 homes
+        return list(PLATFORM_HOME_URLS)
+    return out
+
+
+def open_platform_tabs(port: int, urls: Optional[List[str]] = None) -> int:
+    """GET /json/new روی CDP — سه سربرگ در یک پروفایل."""
+    from urllib.parse import quote
+    from .session_view import _http_get_local
+    n = 0
+    for u in (urls or extra_urls_for(HOME_URL)):
+        try:
+            _http_get_local(int(port), "/json/new?" + quote(u, safe=":/?&=#%"), timeout=2.5)
+            n += 1
+            time.sleep(0.2)
+        except Exception:
+            pass
+    return n
+
+
 def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str, Any]:
     """Chromium همان اکانت را باز می‌کند — صفحهٔ تهران."""
     from .app_chromium import apply_browser_env, ensure_installed, is_ready
@@ -472,6 +507,12 @@ def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str,
         "status": "open", "last_error": "", "chromium_dir": str(prof),
     })
     _clog("open", "ok exe=%s profile=%s port=%s" % (exe, prof, port))
+    if bound:
+        try:
+            ntab = open_platform_tabs(port, extra_urls_for(url or HOME_URL))
+            _clog("open", "platform tabs +%s" % ntab)
+        except Exception as e:
+            _clog("open", "extra tabs: %s" % e, "warning")
     return {"ok": True, "name": name, "url": url or HOME_URL, "exe": exe,
             "profile": str(prof),
             "message": "پروفایل «%s» ساخته شد و دیوار روی همان پروفایل باز است. در همان پنجره لاگین کنید، بعد ذخیره پروفایل." % name}

@@ -1,0 +1,64 @@
+# -*- coding: utf-8 -*-
+"""کشف آگهی رینگ — وب Flutter؛ در فاز اول از HTML/لینک /a/{id}."""
+
+from __future__ import annotations
+
+import re
+from typing import Any, Dict, List, Optional
+
+from .platforms import lead_token, listing_url
+from .pricing import parse_toman
+
+_AD = re.compile(r"https?://(?:www\.)?ring\.ir/a/([A-Za-z0-9_-]+)", re.I)
+_AD_REL = re.compile(r"/a/([A-Za-z0-9_-]{4,})", re.I)
+
+
+def parse_listings(html: str) -> List[Dict[str, Any]]:
+    posts, seen = [], []
+    text = html or ""
+
+    def add(nid: str) -> None:
+        if nid in seen or nid.lower() in ("home", "faq", "login", "about"):
+            return
+        seen.append(nid)
+        token = lead_token("ring", nid)
+        posts.append({
+            "token": token,
+            "native_id": nid,
+            "platform": "ring",
+            "title": nid.replace("-", " "),
+            "subtitle": "",
+            "url": listing_url("ring", nid),
+            "has_chat": True,
+        })
+
+    for nid in _AD.findall(text):
+        add(nid)
+    for nid in _AD_REL.findall(text):
+        add(nid)
+    for p in posts:
+        nid = p.get("native_id") or ""
+        i = text.find(nid)
+        window = text[max(0, i - 300): i + 800] if i >= 0 else text[:2000]
+        price = parse_toman(window)
+        if price:
+            p["price"] = price
+    return posts[:80]
+
+
+def search(client, query: str, cities=None, page: int = 1,
+           category: Optional[str] = None) -> List[Dict[str, Any]]:
+    base = str(getattr(client, "base", "") or "")
+    if base and "divar.ir" not in base and "ring" not in base:
+        return []
+    url = "https://ring.ir/"
+    if query:
+        url = "https://ring.ir/?q=" + query
+    try:
+        r = client._fetch("GET", url, timeout=25,
+                          headers={"Accept": "text/html", "Accept-Language": "fa-IR"})
+    except Exception:
+        return []
+    if getattr(r, "status_code", 0) != 200:
+        return []
+    return parse_listings(getattr(r, "text", "") or "")

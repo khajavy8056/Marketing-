@@ -62,7 +62,19 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "sms_line_number": "",
     "sms_auto_on_new": False,        # پیش‌فرض خاموش
     "sms_daily_limit": 40,
+    "sms_inbox_on": True,            # پولینگ پاسخ پیامک ملی‌پیامک
     "vip_telegram": True,            # هشدار ویژه در تلگرام
+    "chat_auto_on_new": False,
+    "chat_auto_daily_limit": 40,
+    "chat_auto_delay_sec": 90,
+    "chat_auto_hourly_limit": 8,
+    "platform_divar": True,
+    "platform_sheypoor": True,
+    "platform_ring": True,
+    "hunter_good_pct": 10,
+    "hunter_great_pct": 22,
+    "hunter_suspicious_pct": 45,
+    "nlu_use_local": True,
 }
 
 
@@ -98,6 +110,9 @@ def _con(db_path: str) -> sqlite3.Connection:
         con.commit()
     if "vip" not in cols:
         con.execute("ALTER TABLE keywords ADD COLUMN vip INTEGER DEFAULT 0")
+        con.commit()
+    if "hunter" not in cols:
+        con.execute("ALTER TABLE keywords ADD COLUMN hunter INTEGER DEFAULT 0")
         con.commit()
     _apply_factory_defaults_2123(con)
     return con
@@ -140,14 +155,14 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
     with _con(db_path) as con:
         rows = con.execute(
             "SELECT id, keyword, cities, active, created_at, category, browse, "
-            "price_min, price_max, vip FROM keywords "
+            "price_min, price_max, vip, hunter FROM keywords "
             "ORDER BY id DESC").fetchall()
     from .cities import title_of_city
     out = []
     for r in rows:
         cat = ""
         browse = 0
-        pmin = pmax = vip = 0
+        pmin = pmax = vip = hunter = 0
         try:
             if "category" in r.keys():
                 cat = r["category"] or ""
@@ -159,6 +174,8 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
                 pmax = int(r["price_max"] or 0)
             if "vip" in r.keys():
                 vip = int(r["vip"] or 0)
+            if "hunter" in r.keys():
+                hunter = int(r["hunter"] or 0)
         except Exception:
             cat, browse = cat, 0
         cities = json.loads(r["cities"]) if r["cities"] else None
@@ -171,7 +188,8 @@ def keywords_list(db_path: str) -> List[Dict[str, Any]]:
                     "active": bool(r["active"]), "created_at": r["created_at"],
                     "category": cat, "category_title": title_of(cat),
                     "browse": bool(browse),
-                    "price_min": pmin, "price_max": pmax, "vip": bool(vip)})
+                    "price_min": pmin, "price_max": pmax, "vip": bool(vip),
+                    "hunter": bool(hunter)})
     return out
 
 
@@ -179,7 +197,7 @@ def keywords_add(db_path: str, keyword: str,
                  cities: Optional[List[int]] = None,
                  category: str = "",
                  price_min: int = 0, price_max: int = 0,
-                 vip: bool = False) -> bool:
+                 vip: bool = False, hunter: bool = False) -> bool:
     """افزودن کلمه و/یا دستهٔ دیوار.
 
     بدون کلمه + دسته = مرور کل دسته (عنوان آگهی مهم نیست).
@@ -198,21 +216,22 @@ def keywords_add(db_path: str, keyword: str,
     pmin = int(price_min or 0)
     pmax = int(price_max or 0)
     vip_i = int(bool(vip))
+    hun_i = int(bool(hunter))
     with _con(db_path) as con:
         for label in parts:
             cur = con.execute(
                 "INSERT OR IGNORE INTO keywords "
-                "(keyword, cities, created_at, category, browse, price_min, price_max, vip) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "(keyword, cities, created_at, category, browse, price_min, price_max, vip, hunter) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (label, json.dumps(cities) if cities else None,
-                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse, pmin, pmax, vip_i))
+                 time.strftime("%Y-%m-%d %H:%M:%S"), cat, browse, pmin, pmax, vip_i, hun_i))
             added = added or cur.rowcount > 0
             if cur.rowcount == 0:
                 con.execute(
                     "UPDATE keywords SET category=?, browse=?, cities=?, "
-                    "price_min=?, price_max=?, vip=? WHERE keyword=?",
+                    "price_min=?, price_max=?, vip=?, hunter=? WHERE keyword=?",
                     (cat, browse, json.dumps(cities) if cities else None,
-                     pmin, pmax, vip_i, label))
+                     pmin, pmax, vip_i, hun_i, label))
                 added = True
     return added
 
@@ -245,7 +264,8 @@ def keywords_active_specs(db_path: str) -> List[Dict[str, Any]]:
                       "category": cat, "match_all": match_all,
                       "price_min": int(k.get("price_min") or 0),
                       "price_max": int(k.get("price_max") or 0),
-                      "vip": bool(k.get("vip"))})
+                      "vip": bool(k.get("vip")),
+                      "hunter": bool(k.get("hunter"))})
     return specs
 
 
@@ -322,6 +342,11 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
                      "rubika_enabled": s.get("rubika_enabled", True)}
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
-              "adaptive_until_captcha"):
-        cfg[k] = s[k]
+              "adaptive_until_captcha",
+              "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
+              "platform_divar", "platform_sheypoor", "platform_ring",
+              "sms_inbox_on", "nlu_use_local",
+              "hunter_good_pct", "hunter_great_pct", "hunter_suspicious_pct"):
+        if k in s:
+            cfg[k] = s[k]
     return cfg

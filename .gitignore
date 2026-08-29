@@ -9,3 +9,5 @@ logs/
 .env
 config.json
 installer/install-log.txt
+*.gguf
+nlu-model/

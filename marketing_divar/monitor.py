@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -186,6 +187,30 @@ class Monitor:
                             "" if spec.get("match_all") else kw,
                             cities=cities, page=page,
                             category=spec.get("category") or None)
+                        try:
+                            from . import store as _st
+                            from .platforms import enabled_from_settings
+                            plats = enabled_from_settings(_st.settings_all(self.db_path))
+                        except Exception:
+                            plats = ["divar"]
+                        if "sheypoor" in plats:
+                            try:
+                                from . import sheypoor as _sh
+                                posts = list(posts) + _sh.search(
+                                    self.anon, "" if spec.get("match_all") else kw,
+                                    cities=cities, page=page,
+                                    category=spec.get("category") or None)
+                            except Exception:
+                                pass
+                        if "ring" in plats:
+                            try:
+                                from . import ring as _rg
+                                posts = list(posts) + _rg.search(
+                                    self.anon, "" if spec.get("match_all") else kw,
+                                    cities=cities, page=page,
+                                    category=spec.get("category") or None)
+                            except Exception:
+                                pass
                         bump_quota(con, "searches", len(posts))
                     except DivarBlockedError as e:
                         notify(self.cfg, f"جستجو هم محدود شد!؟ ({e}) — "
@@ -216,6 +241,21 @@ class Monitor:
                                              price_min=int(spec.get("price_min") or 0),
                                              price_max=int(spec.get("price_max") or 0),
                                              vip=bool(spec.get("vip"))):
+                            if spec.get("hunter"):
+                                try:
+                                    from .hunter import collect_samples, score_lead
+                                    from . import store as _st2
+                                    plat = str(p.get("platform") or "divar")
+                                    samples = collect_samples(con, kw, city, plat)
+                                    sc = score_lead(int(p.get("price") or 0), samples,
+                                                    _st2.settings_all(self.db_path))
+                                    if sc.get("warm") and not p.get("is_defect") \
+                                            and not p.get("is_placeholder"):
+                                        con.execute(
+                                            "UPDATE leads SET hunter_level=? WHERE token=?",
+                                            (sc.get("level") or "", p.get("token")))
+                                except Exception:
+                                    pass
                             new_total += 1
                             new_here += 1
                             t = str(p.get("title") or "")
@@ -299,6 +339,152 @@ class Monitor:
                 self._ev("warning", f"پیامک خودکار ناموفق: {r.get('message')}")
         except Exception as e:
             self._ev("warning", f"پیامک: {e}")
+
+    def _maybe_chat(self, con, row, account_name: str) -> None:
+        """چت خودکار برای فقط‌چت — متن با {title} متغیر است."""
+        try:
+            from . import store
+            from .chat import compose_chat, send_divar_chat
+            from .db import now as _now
+            s = store.settings_all(self.db_path)
+            if not s.get("chat_auto_on_new"):
+                return
+            lim = int(s.get("chat_auto_daily_limit") or 40)
+            if quota_today(con).get("chats", 0) >= lim:
+                self._ev("warning", "سقف چت خودکار امروز پر شد")
+                return
+            token = row["token"] if "token" in row.keys() else ""
+            if not token:
+                return
+            prev = con.execute("SELECT chat_status FROM leads WHERE token=?",
+                               (token,)).fetchone()
+            if prev and (prev["chat_status"] or "") == "sent":
+                return
+            delay = float(s.get("chat_auto_delay_sec") or 90)
+            if os.environ.get("DIVAR_BASE_URL"):
+                delay = 0
+            if delay > 0:
+                time.sleep(min(delay, 120))
+            tpl = (store.template_get(self.db_path, "chat") or {}).get("text") or ""
+            lead = {
+                "title": row["title"] if "title" in row.keys() else "",
+                "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
+                "url": row["url"] if "url" in row.keys() else "",
+                "city": row["city"] if "city" in row.keys() else "",
+                "keyword": row["keyword"] if "keyword" in row.keys() else "",
+                "price": row["price"] if "price" in row.keys() else 0,
+                "published_at": row["published_at"] if "published_at" in row.keys() else "",
+                "platform": row["platform"] if "platform" in row.keys() else "divar",
+                "token": token,
+            }
+            text = compose_chat(tpl, lead)
+            cl = self.client_for(account_name)
+
+            def _send(_c, tok, msg):
+                from .chat_browser import send_for_token
+                return send_for_token(
+                    tok, msg, client=_c,
+                    accounts_dir=str(self.mgr.dir), account=account_name,
+                    url=lead.get("url") or "")
+
+            r = send_divar_chat(cl, token, text, send_fn=_send)
+            st = "sent" if r.get("ok") else (r.get("status") or "requires_operator")
+            now_s = _now()
+            if st == "removed":
+                con.execute(
+                    "UPDATE leads SET phone_status='removed', chat_status='removed', "
+                    "removed_reason=?, last_error=? WHERE token=?",
+                    ("chat_gone", (r.get("message") or "")[:200], token))
+                con.commit()
+                self._ev("info", "آگهی/چت حذف شده — بدون خطا رد شد: %s" % (lead.get("title") or "")[:40])
+                return
+            con.execute(
+                "UPDATE leads SET chat_status=?, lead_status=?, chat_sent_at=?, "
+                "chat_account=?, chat_thread_id=? WHERE token=?",
+                (st, "contacted" if r.get("ok") else "new",
+                 now_s if r.get("ok") else "", account_name,
+                 r.get("thread_id") or "", token))
+            log_operation(con, token=token, account=account_name, operation="chat",
+                          result=st, error="" if r.get("ok") else r.get("message"),
+                          started_at=now_s)
+            con.commit()
+            if r.get("ok"):
+                bump_quota(con, "chats")
+                self._ev("success", "💬 چت خودکار ارسال شد (%s)" % account_name)
+            else:
+                self._ev("warning", "چت خودکار ناموفق — اپراتور: %s" % r.get("message"))
+        except Exception as e:
+            self._ev("warning", f"چت خودکار: {e}")
+
+    def drain_chat(self, max_items: int = 8) -> None:
+        """صف فقط‌چت باقی‌مانده را با تیک خودکار خالی می‌کند."""
+        try:
+            from . import store
+            s = store.settings_all(self.db_path)
+            if not s.get("chat_auto_on_new"):
+                return
+        except Exception:
+            return
+        con = connect(self.db_path)
+        try:
+            rows = chat_queue(con, limit=max_items)
+        finally:
+            con.close()
+        for row in rows:
+            if self.stop_event.is_set():
+                return
+            name = self.mgr.pick(self.db_path)
+            if not name:
+                return
+            con = connect(self.db_path)
+            try:
+                self._maybe_chat(con, row, name)
+            finally:
+                con.close()
+
+    def poll_inboxes(self) -> None:
+        """خواندن پاسخ چت (همان آگهی) و صندوق پیامک ملی‌پیامک."""
+        from . import store
+        s = store.settings_all(self.db_path)
+        con = connect(self.db_path)
+        try:
+            if s.get("sms_inbox_on") and s.get("sms_provider") == "melipayamak":
+                from .sms import live_sms_cfg, receive_melipayamak
+                from .inbox import ingest_sms
+                cfg = live_sms_cfg(self.db_path, self.cfg)
+                rec = receive_melipayamak(
+                    cfg.get("sms_username") or "",
+                    cfg.get("sms_password") or cfg.get("sms_api_key") or "")
+                for m in rec.get("messages") or []:
+                    ingest_sms(con, m.get("from") or "", m.get("body") or "",
+                               m.get("date") or "",
+                               use_llm=bool(s.get("nlu_use_local", True)))
+            # چت: سرنخ‌های ارسال‌شده را یکی‌یکی می‌خواند (تطبیق thread_id)
+            if s.get("chat_auto_on_new"):
+                from .chat_browser import read_thread
+                from .inbox import ingest_chat
+                rows = con.execute(
+                    "SELECT * FROM leads WHERE chat_status='sent' "
+                    "AND COALESCE(phone_status,'') != 'removed' "
+                    "ORDER BY id DESC LIMIT 6").fetchall()
+                acc = self.mgr.pick(self.db_path)
+                if acc:
+                    for row in rows:
+                        url = row["url"] if "url" in row.keys() else ""
+                        token = row["token"]
+                        if not url:
+                            continue
+                        th = read_thread(url, str(self.mgr.dir), acc, token=token)
+                        if th.get("status") == "removed":
+                            con.execute(
+                                "UPDATE leads SET phone_status='removed', "
+                                "removed_reason='chat_gone' WHERE token=?", (token,))
+                            con.commit()
+                            self._ev("info", "چت آگهی دیگر در دسترس نیست: %s" % token[:16])
+                            continue
+                        ingest_chat(con, th, use_llm=bool(s.get("nlu_use_local", True)))
+        finally:
+            con.close()
 
     def _global_quota_left(self, con) -> int:
         return self.cfg.get("ip_daily_limit", 240) - quota_today(con)["phones"]
@@ -453,6 +639,10 @@ class Monitor:
                 self._maybe_sms(con, row, res.get("phone") or "")
             elif st == "hidden":
                 print(f"  💬 − {name}: {row['title'][:32]} → فقط چت (رفت به لیست چت)")
+                try:
+                    self._maybe_chat(con, row, name)
+                except Exception as e:
+                    self._ev("warning", f"چت خودکار: {e}")
             elif st == "removed":
                 print(f"  × {row['title'][:32]} حذف شده")
             return "done"
@@ -517,6 +707,14 @@ class Monitor:
                 if new:
                     print(f"  🆕 {new} سرنخ جدید وارد صف شد")
                 self.drain()
+                try:
+                    self.drain_chat()
+                except Exception as e:
+                    self._ev("warning", f"صف چت: {e}")
+                try:
+                    self.poll_inboxes()
+                except Exception as e:
+                    self._ev("warning", f"صندوق پاسخ: {e}")
                 self.print_status()
                 q = None
                 try:

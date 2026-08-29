@@ -47,7 +47,7 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="2.1.25")
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.0.0")
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {
@@ -96,6 +96,7 @@ class KeywordAdd(BaseModel):
     price_min: float = 0         # میلیون تومان
     price_max: float = 0
     vip: bool = False
+    hunter: bool = False
 
 
 class SettingsUpdate(BaseModel):
@@ -550,7 +551,7 @@ def keywords_add(req: KeywordAdd):
         DB_PATH, req.keyword, req.cities, req.category,
         price_min=million_to_toman(req.price_min),
         price_max=million_to_toman(req.price_max),
-        vip=bool(req.vip))
+        vip=bool(req.vip), hunter=bool(req.hunter))
     log("info", f"پایش اضافه شد: {req.keyword or req.category}")
     return {"ok": added, "message": "اضافه شد" if added else "از قبل موجود بود"}
 
@@ -572,13 +573,15 @@ def keywords_toggle(kw_id: int, active: bool = True):
 def templates_get():
     chat = store.template_get(DB_PATH, "chat") or {"text": DEFAULTS["chat_template"]}
     sms = store.template_get(DB_PATH, "sms") or {"text": DEFAULTS["chat_template"]}
-    return {"chat": chat["text"], "sms": sms["text"]}
+    inq = store.template_get(DB_PATH, "inquire") or {
+        "text": DEFAULTS.get("inquire_template") or ""}
+    return {"chat": chat["text"], "sms": sms["text"], "inquire": inq["text"]}
 
 
 @app.post("/api/templates")
 def templates_set(req: TemplateUpdate):
-    if req.channel not in ("chat", "sms"):
-        raise HTTPException(400, "channel باید chat یا sms باشد")
+    if req.channel not in ("chat", "sms", "inquire"):
+        raise HTTPException(400, "channel باید chat یا sms یا inquire باشد")
     store.template_set(DB_PATH, req.channel, req.text)
     log("info", f"قالب پیام {req.channel} ذخیره شد")
     return {"ok": True}
@@ -598,8 +601,12 @@ def _apply_sms_to_monitor() -> None:
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "per_account_daily_limit", "adaptive_until_captcha",
-              "ip_daily_limit", "phone_delay_sec"):
-        mon.cfg[k] = s[k]
+              "ip_daily_limit", "phone_delay_sec",
+              "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
+              "platform_divar", "platform_sheypoor", "platform_ring",
+              "sms_inbox_on", "nlu_use_local"):
+        if k in s:
+            mon.cfg[k] = s[k]
 
 
 @app.post("/api/settings")
@@ -632,6 +639,93 @@ def sms_auto_toggle(req: SmsAuto):
     return {"ok": True, "on": bool(req.on), "ready": ready,
             "message": "ارسال خودکار روشن است — به محض پیدا شدن شماره پیامک می‌رود"
             if req.on else "ارسال خودکار خاموش شد"}
+
+
+class ChatAuto(BaseModel):
+    on: bool = True
+
+
+@app.post("/api/chat/auto")
+def chat_auto_toggle(req: ChatAuto):
+    store.settings_set(DB_PATH, "chat_auto_on_new", bool(req.on))
+    _apply_sms_to_monitor()
+    log("success" if req.on else "info",
+        "ارسال خودکار چت " + ("روشن شد" if req.on else "خاموش شد"))
+    return {"ok": True, "on": bool(req.on),
+            "message": "چت خودکار برای آگهی فقط‌چت روشن است (متن با {title} متغیر است)"
+            if req.on else "چت خودکار خاموش شد"}
+
+
+@app.get("/api/robot")
+def robot_status():
+    """پنل ربات هوشمند — وضعیت چت، صندوق، مدل محلی."""
+    from ..nlu_model import status as nlu_st
+    con = connect(DB_PATH)
+    try:
+        def _c(where: str) -> int:
+            try:
+                return con.execute("SELECT COUNT(*) c FROM leads WHERE " + where).fetchone()["c"]
+            except Exception:
+                return 0
+        replies_n = 0
+        try:
+            replies_n = con.execute("SELECT COUNT(*) c FROM replies").fetchone()["c"]
+        except Exception:
+            replies_n = 0
+        unread = 0
+        try:
+            unread = con.execute(
+                "SELECT COUNT(*) c FROM replies WHERE COALESCE(acted,0)=0").fetchone()["c"]
+        except Exception:
+            pass
+        s = store.settings_all(DB_PATH)
+        return {
+            "chat_auto": bool(s.get("chat_auto_on_new")),
+            "sms_auto": bool(s.get("sms_auto_on_new")),
+            "sms_inbox": bool(s.get("sms_inbox_on", True)),
+            "platforms": {
+                "divar": bool(s.get("platform_divar", True)),
+                "sheypoor": bool(s.get("platform_sheypoor", True)),
+                "ring": bool(s.get("platform_ring", True)),
+            },
+            "nlu": nlu_st(),
+            "chats_today": quota_today(con).get("chats", 0),
+            "sms_today": quota_today(con).get("sms", 0),
+            "chat_sent": _c("chat_status='sent'"),
+            "chat_need_operator": _c("chat_status='requires_operator'"),
+            "replied": _c("lead_status='replied'"),
+            "replies": replies_n,
+            "unread_replies": unread,
+            "hunter_great": _c("hunter_level='great'"),
+            "defect": _c("is_defect=1"),
+            "inquiry": _c("inquiry_status IN ('pending','sent')"),
+        }
+    finally:
+        con.close()
+
+
+@app.get("/api/replies")
+def replies_list(token: str = "", limit: int = 80):
+    from ..inbox import list_replies
+    con = connect(DB_PATH)
+    try:
+        return {"replies": list_replies(con, token=token, limit=min(limit, 200))}
+    finally:
+        con.close()
+
+
+@app.get("/api/nlu/status")
+def nlu_status():
+    from ..nlu_model import status as nlu_st
+    return nlu_st()
+
+
+@app.post("/api/nlu/install")
+def nlu_install():
+    from ..nlu_model import start_install_async
+    st = start_install_async()
+    log("info", "دانلود مدل محلی درک متن شروع شد")
+    return {"ok": True, "message": "دانلود مدل محلی شروع شد — یک‌بار در پوشه پایدار می‌ماند", **st}
 
 
 # ------------------------------------------------------------ API مانیتور --
@@ -768,6 +862,8 @@ def status():
         "sms_today": q.get("sms", 0),
         "ip_daily_limit": store.settings_all(DB_PATH).get("ip_daily_limit", 240),
         "sms_auto_on_new": bool(store.settings_all(DB_PATH).get("sms_auto_on_new")),
+        "chat_auto_on_new": bool(store.settings_all(DB_PATH).get("chat_auto_on_new")),
+        "chats_today": q.get("chats", 0),
         "sms_ready": sms_ready(store.settings_all(DB_PATH))[0],
         "data_dir": os.environ.get("DIVAR_DATA_DIR") or str(Path(DB_PATH).resolve().parent),
         "listen": listen_urls(APP_PORT),
@@ -846,12 +942,19 @@ def leads(filter: str = "all", limit: int = 100):
             where, args = "phone_status='found'", ()
         elif filter == "chat":
             where, args = "phone_status='hidden' AND lead_status='new'", ()
+        elif filter == "replied":
+            where, args = "lead_status='replied'", ()
+        elif filter == "hunter":
+            where, args = "hunter_level IN ('good','great')", ()
+        elif filter == "defect":
+            where, args = "is_defect=1", ()
         else:
             where, args = "1=1", ()
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
             f"matched_keywords,city,lead_status,chat_status,sms_status,url,first_seen_at,"
-            f"phone_checked_at,last_error FROM leads WHERE {where} "
+            f"phone_checked_at,last_error,platform,hunter_level,last_reply_intent,"
+            f"price_kind FROM leads WHERE {where} "
             f"ORDER BY id DESC LIMIT ?", (*args, min(limit, 500))).fetchall()
         return {"leads": [dict(r) for r in rows]}
     finally:
@@ -867,12 +970,20 @@ def export(filter: str = "phone"):
             where = "phone_status='found'"
         elif filter == "chat":
             where = "phone_status='hidden'"
+        elif filter == "hunter":
+            where = "hunter_level IN ('good','great')"
+        elif filter == "defect":
+            where = "is_defect=1"
+        elif filter == "inquiry":
+            where = "inquiry_status IN ('pending','sent')"
         else:
             where = "1=1"
         rows = con.execute(
             f"SELECT token,title,subtitle,description,phone,phone_status,keyword,"
             f"matched_keywords,city,lead_status,chat_status,sms_status,url,"
-            f"first_seen_at,phone_checked_at,published_at,sms_sent_at "
+            f"first_seen_at,phone_checked_at,published_at,sms_sent_at,"
+            f"platform,hunter_level,price_kind,is_defect,is_placeholder,"
+            f"inquiry_status,last_reply_intent "
             f"FROM leads WHERE {where} "
             f"ORDER BY id DESC").fetchall()
     finally:
@@ -882,7 +993,9 @@ def export(filter: str = "phone"):
     w.writerow(["توکن", "عنوان", "توضیح میانی", "متن", "شماره تماس", "وضعیت شماره",
                 "کلمه کلیدی", "کلمات منطبق", "شهر", "وضعیت پیگیری", "وضعیت چت",
                 "وضعیت پیامک", "لینک", "تاریخ‌ساعت کشف", "تاریخ‌ساعت استخراج شماره",
-                "زمان انتشار آگهی", "تاریخ‌ساعت ارسال پیامک"])
+                "زمان انتشار آگهی", "تاریخ‌ساعت ارسال پیامک",
+                "پلتفرم", "شکارچی", "نوع قیمت", "معیوب", "قیمت ساختگی",
+                "وضعیت استعلام", "نیت آخرین پاسخ"])
     for r in rows:
         w.writerow(list(r))
     buf.seek(0)

@@ -499,5 +499,54 @@ class TestMonitorFlow(unittest.TestCase):
         self.assertIn("مانیتور شروع شد", joined)
 
 
+class TestV3Panel(unittest.TestCase):
+    def test_robot_tab_and_apis(self):
+        r = client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-tab="robot"', r.text)
+        self.assertIn('id="tab-robot"', r.text)
+        self.assertIn('id="dash-chat-auto"', r.text)
+        self.assertIn('id="kw-hunter"', r.text)
+        self.assertIn('id="set-plat-divar"', r.text)
+        self.assertIn('id="set-plat-sheypoor"', r.text)
+        self.assertIn('id="set-plat-ring"', r.text)
+        self.assertIn("chatAutoToggle", r.text)
+        self.assertIn("/api/robot", r.text)
+        r = client.get("/api/robot")
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()
+        self.assertIn("nlu", body)
+        self.assertIn("platforms", body)
+        r = client.get("/api/nlu/status")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("ready", r.json())
+        r = client.post("/api/chat/auto", json={"on": True})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["on"])
+        self.assertTrue(client.get("/api/status").json().get("chat_auto_on_new"))
+        client.post("/api/chat/auto", json={"on": False})
+        r = client.get("/api/replies")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("replies", r.json())
+        r = client.post("/api/templates",
+                        json={"channel": "inquire", "text": "قیمت «{title}»؟"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(client.get("/api/templates").json()["inquire"], "قیمت «{title}»؟")
+        r = client.post("/api/keywords", json={"keyword": "شکارچی‌تست", "hunter": True})
+        self.assertEqual(r.status_code, 200, r.text)
+        one = next(k for k in client.get("/api/keywords").json()["keywords"]
+                   if k["keyword"] == "شکارچی‌تست")
+        self.assertTrue(one["hunter"])
+        r = client.get("/api/export?filter=hunter")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("شکارچی", r.text)
+        r = client.post("/api/settings", json={"values": {
+            "platform_divar": True, "platform_sheypoor": False, "platform_ring": True}})
+        self.assertEqual(r.status_code, 200)
+        s = client.get("/api/settings").json()
+        self.assertFalse(s["platform_sheypoor"])
+        self.assertTrue(s["platform_ring"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

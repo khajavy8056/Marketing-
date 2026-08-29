@@ -48,6 +48,9 @@ CITIES: List[Dict[str, Any]] = [
     {"id": 38, "slug": "dezful", "title": "دزفول"},
     {"id": 39, "slug": "abadan", "title": "آبادان"},
     {"id": 40, "slug": "amol", "title": "آمل"},
+    {"id": 41, "slug": "babol", "title": "بابل"},
+    {"id": 42, "slug": "qaemshahr", "title": "قائم‌شهر"},
+    {"id": 43, "slug": "babolsar", "title": "بابلسر"},
 ]
 
 _BY_ID = {c["id"]: c for c in CITIES}

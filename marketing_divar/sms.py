@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import requests
@@ -19,6 +19,8 @@ except ImportError:  # pragma: no cover
 
 MELI_SEND = "https://rest.payamak-panel.com/api/SendSMS/SendSMS"
 MELI_CREDIT = "https://rest.payamak-panel.com/api/SendSMS/GetCredit"
+MELI_RECEIVE = "https://rest.payamak-panel.com/api/ReceiveMessage/GetMessage"
+MELI_RECEIVE2 = "https://rest.payamak-panel.com/api/ReceiveMessage/GetMessages"
 
 
 def interpret_meli(resp: Any) -> Tuple[bool, str]:
@@ -88,8 +90,70 @@ def compose_sms(template: str, lead: Dict[str, Any]) -> str:
     from .messaging import build_message
     safe = {"title": lead.get("title") or "آگهی شما",
             "subtitle": lead.get("subtitle") or "",
-            "url": lead.get("url") or ""}
+            "url": lead.get("url") or "",
+            "city": lead.get("city") or "",
+            "keyword": lead.get("keyword") or "",
+            "price": lead.get("price") or 0,
+            "published_at": lead.get("published_at") or ""}
     return build_message(template or "سلام، آگهی «{title}» را دیدم.", safe)
+
+
+def parse_inbox_body(body: Any) -> List[Dict[str, str]]:
+    """خروجی GetMessage/GetMessages ملی‌پیامک را به فهرست {from,body,date} تبدیل می‌کند."""
+    out: List[Dict[str, str]] = []
+    if body is None:
+        return out
+    if isinstance(body, str):
+        return out
+    data = body
+    if isinstance(body, dict):
+        data = body.get("Data") or body.get("data") or body.get("Value") or body.get("Messages") or body
+    if isinstance(data, dict):
+        data = data.get("Messages") or data.get("messages") or [data]
+    if not isinstance(data, list):
+        return out
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        sender = str(item.get("From") or item.get("from") or item.get("Sender")
+                     or item.get("Mobile") or "")
+        txt = str(item.get("Body") or item.get("body") or item.get("Text")
+                  or item.get("Message") or "")
+        when = str(item.get("Date") or item.get("date") or item.get("ReceivedDate") or "")
+        if sender or txt:
+            out.append({"from": sender, "body": txt, "date": when})
+    return out
+
+
+def receive_melipayamak(username: str, password: str, location: int = 1,
+                        count: int = 50, http_post=None) -> Dict[str, Any]:
+    """پولینگ صندوق ورودی ملی‌پیامک (وب‌هوک روی ویندوز محلی نداریم).
+
+    مستند: ReceiveMessage/GetMessage و GetMessages با username+password.
+    location=1 معمولاً پیام‌های دریافتی است.
+    """
+    if not (username and password):
+        return {"ok": False, "messages": [], "message": "نام کاربری و رمز لازم است"}
+    poster = http_post
+    if poster is None:
+        if requests is None:
+            return {"ok": False, "messages": [], "message": "کتابخانه requests نصب نیست"}
+        poster = lambda url, data, timeout=20: requests.post(url, data=data, timeout=timeout)
+    last_err = ""
+    for url in (MELI_RECEIVE, MELI_RECEIVE2):
+        try:
+            r = poster(url, {
+                "username": username, "password": password,
+                "location": location, "index": 0, "count": count, "from": "",
+            }, timeout=20)
+            body = r.json() if hasattr(r, "json") else r
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
+            continue
+        msgs = parse_inbox_body(body)
+        return {"ok": True, "messages": msgs, "raw": body if isinstance(body, dict) else {},
+                "message": f"{len(msgs)} پیام"}
+    return {"ok": False, "messages": [], "message": last_err or "صندوق خوانده نشد"}
 
 
 def sms_ready(cfg: Dict[str, Any]) -> Tuple[bool, str]:
@@ -109,7 +173,8 @@ def live_sms_cfg(db_path: str, fallback: Optional[Dict[str, Any]] = None) -> Dic
     cfg = dict(fallback or {})
     s = store.settings_all(db_path)
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
-              "sms_line_number", "sms_auto_on_new", "sms_daily_limit"):
+              "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
+              "sms_inbox_on"):
         cfg[k] = s.get(k, cfg.get(k))
     return cfg
 

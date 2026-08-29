@@ -165,7 +165,7 @@
     <img src="/logo.png" alt="Divar Marketing" width="44" height="44">
     <div>
     <div class="logo">مارکتینگ دیوار</div>
-    <div class="sub">سیستم هوشمند بازاریابی و جمع‌آوری سرنخ از آگهی‌های دیوار</div>
+    <div class="sub">سیستم هوشمند بازاریابی — دیوار، شیپور، رینگ · ربات چت و درک پاسخ</div>
     </div>
   </div>
   </div>
@@ -182,6 +182,7 @@
   <button data-tab="keywords">🔑 کلمات کلیدی</button>
   <button data-tab="messages">✉️ پیام‌ها</button>
   <button data-tab="leads">📋 سرنخ‌ها</button>
+  <button data-tab="robot">🤖 ربات هوشمند</button>
   <button data-tab="settings">⚙️ تنظیمات</button>
   <button data-tab="logs">📝 لاگ‌ها</button>
 </nav>
@@ -214,6 +215,11 @@
       <label for="dash-sms-auto"><b>ارسال خودکار پیامک به محض پیدا شدن شماره</b> —
         متن قالب تب «پیام‌ها» همان لحظه از اکانت ملی‌پیامک شما به همان شخص می‌رود.</label>
     </div>
+    <div class="checkline">
+      <input type="checkbox" id="dash-chat-auto" onchange="chatAutoToggle(this.checked)">
+      <label for="dash-chat-auto"><b>ارسال خودکار چت برای آگهی فقط‌چت</b> —
+        قالب با متغیر <code dir="ltr">{title}</code> تا متن‌ها یکسان نباشند (ضد بلاک).</label>
+    </div>
     <div class="hint" id="dash-sms-hint">برای روشن کردن: در تنظیمات نام کاربری، رمز و خط ملی‌پیامک را ذخیره کنید.</div>
     <div class="row" style="margin-top:10px">
       <button class="btn ok" onclick="monitorStart()">▶️ شروع اسکن</button>
@@ -240,7 +246,9 @@
       باز می‌کند (نه Chrome/Edge شما) روی
       <b dir="ltr">divar.ir/user</b>. شما همان‌جا لاگین می‌کنید، بعد
       <b>ذخیره پروفایل</b> را می‌زنید — پنجره بسته می‌شود و لاگین می‌ماند.
-      کوکی تزریق نمی‌شود.</div>
+      کوکی تزریق نمی‌شود.
+      با باز کردن پروفایل، <b>سه تب</b> دیوار / شیپور / رینگ در همان Chromium باز می‌شود
+      تا لاگین و کپچای هر سایت جدا وارد شود.</div>
     <div id="chromium-box" class="warn-box" style="display:none">
       <b>دانلود Chromium اختصاصی</b>
       <div id="chromium-label">0%</div>
@@ -312,6 +320,10 @@
       <input type="checkbox" id="kw-vip">
       <label for="kw-vip"><b>هشدار ویژه (VIP)</b> — اگر آگهی در بازه باشد، همان لحظه تلگرام + صف شماره</label>
     </div>
+    <div class="checkline">
+      <input type="checkbox" id="kw-hunter">
+      <label for="kw-hunter"><b>شکارچی قیمت</b> — قیمت نقدی خیلی پایین نسبت به میانهٔ بازار (معیوب و توافقی جدا می‌مانند)</label>
+    </div>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="kwAdd()">➕ افزودن</button>
     </div>
@@ -336,9 +348,12 @@
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('chat')">💾 ذخیره قالب چت</button>
       </div>
-      <div class="hint" style="margin-top:8px">ارسال چت از طریق فرمان
-        <code dir="ltr">python -m marketing_divar draft --chat-only</code>
-        انجام می‌شود؛ متن آماده + باز شدن چت + ارسال با یک کلیک توسط شما (ضد بن).</div>
+      <div class="checkline">
+        <input type="checkbox" id="msg-chat-auto" onchange="chatAutoToggle(this.checked)">
+        <label for="msg-chat-auto"><b>چت خودکار برای فقط‌چت</b> — قالب باید {title} داشته باشد</label>
+      </div>
+      <div class="hint" style="margin-top:8px">اگر چت خودکار روشن باشد، برای آگهی بدون شماره همین قالب
+        با متغیرهای عنوان/شهر/قیمت ارسال می‌شود تا متن‌ها یکسان نباشند. چت حذف‌شده خطا نمی‌اندازد.</div>
     </div>
     <div class="card">
       <h3>قالب پیامک ملی‌پیامک</h3>
@@ -353,6 +368,13 @@
       <div class="hint" style="margin-top:8px">با روشن بودن این گزینه، به محض استخراج شمارهٔ آگهی منطبق
         همین قالب از خط رسمی ملی‌پیامک شما ارسال می‌شود. نیازی به ری‌استارت مانیتور نیست.</div>
     </div>
+    <div class="card">
+      <h3>قالب استعلام قیمت (VIP / قیمت نامشخص)</h3>
+      <textarea id="tpl-inquire" placeholder="سلام، قیمت واقعی «{title}» چقدر است؟"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="tplSave('inquire')">💾 ذخیره قالب استعلام</button>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -365,9 +387,15 @@
         <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
+        <button class="btn sm gray" onclick="leadsLoad('hunter')">شکارچی</button>
+        <button class="btn sm gray" onclick="leadsLoad('defect')">معیوب</button>
+        <button class="btn sm gray" onclick="leadsLoad('replied')">پاسخ‌ها</button>
         <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
         <a class="btn sm gray" href="/api/export?filter=phone" style="text-decoration:none">⬇️ خروجی اکسل (شماره‌ها)</a>
         <a class="btn sm gray" href="/api/export?filter=chat" style="text-decoration:none">⬇️ خروجی (چت‌ها)</a>
+        <a class="btn sm gray" href="/api/export?filter=hunter" style="text-decoration:none">⬇️ شکارچی</a>
+        <a class="btn sm gray" href="/api/export?filter=defect" style="text-decoration:none">⬇️ معیوب</a>
+        <a class="btn sm gray" href="/api/export?filter=inquiry" style="text-decoration:none">⬇️ استعلام</a>
       </div>
     </div>
     <div style="overflow-x:auto; margin-top:10px">
@@ -382,9 +410,51 @@
   </div>
 </section>
 
+<!-- ═══════════════════════ ربات هوشمند ═══════════════════════ -->
+<section id="tab-robot" class="tab">
+  <div class="grid g4">
+    <div class="card"><h3>هوش محلی</h3><div class="kpi" id="robot-nlu">—</div><small class="hint" id="robot-nlu-sub">مدل روی رایانه شما، بدون API ابری</small></div>
+    <div class="card"><h3>چت خودکار امروز</h3><div class="kpi" id="robot-chats">0</div></div>
+    <div class="card"><h3>پاسخ خوانده‌شده</h3><div class="kpi" id="robot-replies">0</div></div>
+    <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="robot-hunter" style="color:var(--ok)">0</div></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>🤖 ربات در حال کار است</h3>
+    <div class="hint" id="robot-status-line">وضعیت هوش، چت، صندوق پیامک و پلتفرم‌ها اینجا دیده می‌شود.</div>
+    <div class="checkline">
+      <input type="checkbox" id="robot-chat-auto" onchange="chatAutoToggle(this.checked)">
+      <label for="robot-chat-auto">چت خودکار فقط‌چت</label>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="robot-sms-inbox" checked>
+      <label for="robot-sms-inbox">خواندن صندوق ورودی ملی‌پیامک (نظرسنجی دوره‌ای، نه وب‌هوک)</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" type="button" onclick="nluInstall()">⬇️ دانلود مدل محلی (یک‌بار، در پوشه پایدار)</button>
+    </div>
+    <div class="warn-box">مدل GGUF داخل گیت نیست. اگر نباشد یک‌بار دانلود می‌شود و در پوشه دادهٔ کاربر می‌ماند.
+      پاسخ‌ها فقط برای درک نیت (قیمت / موجود / رد) تحلیل می‌شوند — معامله خودکار بسته نمی‌شود.
+      هر پاسخ چت فقط به همان آگهی وصل می‌شود.</div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>آخرین پاسخ‌ها (هر کدام روی یک آگهی)</h3>
+    <div id="robot-replies-list" class="feed" style="max-height:360px"></div>
+  </div>
+</section>
+
 <!-- ═══════════════════════ تنظیمات ═══════════════════════ -->
 <section id="tab-settings" class="tab">
   <div class="grid g2">
+    <div class="card">
+      <h3>پلتفرم‌های پایش</h3>
+      <div class="checkline"><input type="checkbox" id="set-plat-divar" checked>
+        <label for="set-plat-divar"><b>دیوار</b></label></div>
+      <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked>
+        <label for="set-plat-sheypoor"><b>شیپور</b></label></div>
+      <div class="checkline"><input type="checkbox" id="set-plat-ring" checked>
+        <label for="set-plat-ring"><b>رینگ</b></label></div>
+      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین هر سه در همان پروفایل Chromium با سه تب است.</div>
+    </div>
     <div class="card">
       <h3>⭐ هشدار ویژه (VIP)</h3>
       <div class="checkline">
@@ -665,6 +735,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab==='settings') settingsLoad();
   if (b.dataset.tab==='keywords') kwLoad();
   if (b.dataset.tab==='messages') tplLoad();
+  if (b.dataset.tab==='robot') robotLoad();
 });
 
 /* ───────────────────────── داشبورد ───────────────────────── */
@@ -684,6 +755,10 @@ async function refreshStatus(){
     const autoOn = !!s.sms_auto_on_new;
     ['dash-sms-auto','msg-sms-auto','set-sms-auto'].forEach(id=>{
       if ($(id) && document.activeElement !== $(id)) $(id).checked = autoOn;
+    });
+    const chatOn = !!s.chat_auto_on_new;
+    ['dash-chat-auto','msg-chat-auto','robot-chat-auto'].forEach(id=>{
+      if ($(id) && document.activeElement !== $(id)) $(id).checked = chatOn;
     });
     if ($('dash-sms-hint')) {
       $('dash-sms-hint').textContent = autoOn
@@ -1067,6 +1142,7 @@ async function kwLoad(){
         <b>${esc(k.keyword)}</b>
         ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}${k.browse?' — کل دسته':''}</span>`:''}
         ${k.vip?`<span class="tag warn">⭐ ویژه</span>`:''}
+        ${k.hunter?`<span class="tag ok">🎯 شکارچی</span>`:''}
         <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
         <span class="hint">${esc(k.city_title|| (k.cities?k.cities.join('،'):tt('همه کشور','All country')))}</span>
         ${_priceHint(k)?`<span class="hint">${esc(_priceHint(k))}</span>`:''}
@@ -1086,9 +1162,11 @@ async function kwAdd(){
   const price_min=parseFloat(($('kw-price-min')||{}).value)||0;
   const price_max=parseFloat(($('kw-price-max')||{}).value)||0;
   const vip=!!($('kw-vip')&&$('kw-vip').checked);
-  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip})) {
+  const hunter=!!($('kw-hunter')&&$('kw-hunter').checked);
+  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip, hunter})) {
     $('kw-input').value=''; if($('kw-price-min'))$('kw-price-min').value='';
     if($('kw-price-max'))$('kw-price-max').value=''; if($('kw-vip'))$('kw-vip').checked=false;
+    if($('kw-hunter'))$('kw-hunter').checked=false;
     kwLoad();
   }
 }
@@ -1097,8 +1175,10 @@ async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwL
 
 /* ───────────────────────── پیام‌ها ───────────────────────── */
 async function tplLoad(){ try{ const s=await api('/api/templates');
-  $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms; }catch(e){} }
-async function tplSave(ch){ const text = ch==='chat'?$('tpl-chat').value:$('tpl-sms').value;
+  $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms;
+  if($('tpl-inquire')) $('tpl-inquire').value=s.inquire||''; }catch(e){} }
+async function tplSave(ch){
+  const text = ch==='chat'?$('tpl-chat').value:(ch==='inquire'?($('tpl-inquire')||{}).value:$('tpl-sms').value);
   await act('/api/templates',{channel:ch, text}); }
 
 /* ───────────────────────── سرنخ‌ها ───────────────────────── */
@@ -1207,6 +1287,9 @@ async function settingsLoad(){
     if($('set-rubika-token')) $('set-rubika-token').value = s.rubika_bot_token||'';
     if($('set-rubika-chat')) $('set-rubika-chat').value = s.rubika_chat_id||'';
     if($('set-rubika-on')) $('set-rubika-on').checked = s.rubika_enabled!==false;
+    if($('set-plat-divar')) $('set-plat-divar').checked = s.platform_divar!==false;
+    if($('set-plat-sheypoor')) $('set-plat-sheypoor').checked = s.platform_sheypoor!==false;
+    if($('set-plat-ring')) $('set-plat-ring').checked = s.platform_ring!==false;
   }catch(e){}
 }
 async function settingsSave(){
@@ -1237,8 +1320,51 @@ async function settingsSave(){
     rubika_bot_token:$('set-rubika-token')?$('set-rubika-token').value.trim():'',
     rubika_chat_id:$('set-rubika-chat')?$('set-rubika-chat').value.trim():'',
     rubika_enabled:!$('set-rubika-on') || !!$('set-rubika-on').checked,
+    platform_divar:!$('set-plat-divar') || !!$('set-plat-divar').checked,
+    platform_sheypoor:!$('set-plat-sheypoor') || !!$('set-plat-sheypoor').checked,
+    platform_ring:!$('set-plat-ring') || !!$('set-plat-ring').checked,
   };
   if (await act('/api/settings',{values})) toast('تنظیمات ذخیره شد ✓');
+}
+async function chatAutoToggle(on){
+  try{
+    const r = await api('/api/chat/auto',{method:'POST',body:JSON.stringify({on:!!on})});
+    ['dash-chat-auto','msg-chat-auto','robot-chat-auto'].forEach(id=>{ if($(id)) $(id).checked=!!on; });
+    toast(r.message||'ثبت شد', !!r.ok);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function robotLoad(){
+  try{
+    const s = await api('/api/robot');
+    const nlu = s.nlu || {};
+    if($('robot-nlu')) $('robot-nlu').textContent = nlu.ready ? 'آماده' : (nlu.running ? 'دانلود…' : 'نیاز به مدل');
+    if($('robot-nlu-sub')) $('robot-nlu-sub').textContent = nlu.ready
+      ? ('مدل محلی: '+(nlu.model||''))
+      : (nlu.note || 'دانلود یک‌بار در پوشه پایدار');
+    if($('robot-chats')) $('robot-chats').textContent = s.chats_today||0;
+    if($('robot-replies')) $('robot-replies').textContent = s.replies||0;
+    if($('robot-hunter')) $('robot-hunter').textContent = s.hunter_great||0;
+    if($('robot-status-line')) $('robot-status-line').textContent =
+      'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')
+      +' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')
+      +' · صندوق پیامک: '+(s.sms_inbox?'روشن':'خاموش')
+      +' · دیوار/شیپور/رینگ: '+(s.platforms&&s.platforms.divar?'✓':'—')
+      +'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—')
+      +'/'+(s.platforms&&s.platforms.ring?'✓':'—');
+    if($('robot-chat-auto')) $('robot-chat-auto').checked = !!s.chat_auto;
+    const rr = await api('/api/replies');
+    const list = (rr.replies||[]).map(x=>
+      `<div><time>${esc(x.received_at||'')}</time> <b>${esc(x.channel||'')}</b>
+       · ${esc(x.intent||x.nlu_intent||'')} · ${esc((x.body||'').slice(0,80))}</div>`).join('');
+    if($('robot-replies-list')) $('robot-replies-list').innerHTML = list || '<div class="empty">هنوز پاسخی ثبت نشده</div>';
+  }catch(e){}
+}
+async function nluInstall(){
+  try{
+    const r = await api('/api/nlu/install',{method:'POST',body:'{}'});
+    toast(r.message||'دانلود شروع شد');
+    robotLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 async function smsAutoToggle(on){
   try{
@@ -1400,6 +1526,7 @@ refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();
 setInterval(()=>{ refreshStatus();
   if(document.querySelector('#tab-leads.active')) leadsLoad();
   if(document.querySelector('#tab-accounts.active')) accRefresh();
+  if(document.querySelector('#tab-robot.active')) robotLoad();
 }, 4000);
 </script>
 

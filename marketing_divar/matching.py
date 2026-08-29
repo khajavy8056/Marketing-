@@ -132,8 +132,23 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     if not token or lead_exists(con, token):
         return False
 
+    from .classify import classify_post
     price = price_from_post(post)
+    post = dict(post)
+    if price:
+        post["price"] = price
+    cls = classify_post(post, category=str(post.get("category") or ""))
+    if cls.get("reject") or cls.get("is_buyer"):
+        return False
+    post["price_kind"] = cls.get("price_kind") or ""
+    post["is_defect"] = cls.get("is_defect")
+    post["is_placeholder"] = cls.get("is_placeholder")
+    post["is_buyer"] = cls.get("is_buyer")
+    if cls.get("needs_inquiry"):
+        post["inquiry_status"] = "pending"
     if not in_range(price, int(price_min or 0), int(price_max or 0)):
+        return False
+    if cls.get("is_placeholder") and (price_min or price_max):
         return False
 
     blob = search_blob(post)
