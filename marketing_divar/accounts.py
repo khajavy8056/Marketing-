@@ -145,15 +145,16 @@ class AccountManager:
         self._save_states(st)
 
     # ------------------------------------------------------------- چرخش --
-    def pick(self, db_path: str) -> Optional[str]:
-        """بهترین اکانت فعال برای درخواست بعدی:
-        سشن سالم + بدون کپچا/کوچ + زیر سهمیه روزانه + کم‌ترین مصرف امروز."""
+    def pick(self, db_path: str, skip: Optional[str] = None) -> Optional[str]:
+        """بهترین اکانت فعال برای درخواست بعدی (چرخش: کم‌مصرف‌ترین؛ skip = اکانت قبلی چت).
+        سشن سالم یا پروفایل Chromium + بدون کپچا/کوچ + زیر سهمیه روزانه."""
         now = time.time()
         con = connect(db_path)
         try:
             per_limit = int(self.cfg.get("per_account_daily_limit", 60) or 60)
             adaptive = bool(self.cfg.get("adaptive_until_captcha", True))
             best, best_used = None, None
+            alt, alt_used = None, None
             for name in self.list_accounts():
                 rec = self._load_states().get(name) or {}
                 status = rec.get("status", "active")
@@ -161,15 +162,18 @@ class AccountManager:
                     continue
                 if status == "cooldown" and now < rec.get("cooldown_until", 0):
                     continue
-                if not self.has_token(name):
+                if not (self.has_token(name) or self.has_full_login(name)):
                     continue
                 used = account_quota_today(con, name)
-                # سقف نرم: اگر حالت هوشمند روشن باشد تا کپچای واقعی دیوار ادامه می‌دهد
                 if used >= per_limit and not adaptive:
+                    continue
+                if skip and name == skip:
+                    if alt_used is None or used < alt_used:
+                        alt, alt_used = name, used
                     continue
                 if best_used is None or used < best_used:
                     best, best_used = name, used
-            return best
+            return best or alt
         finally:
             con.close()
 

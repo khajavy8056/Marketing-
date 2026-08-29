@@ -109,6 +109,11 @@ class TestUIBasics(unittest.TestCase):
         self.assertIn('id="quit-btn"', r.text)
         self.assertIn("quitApp", r.text)
         self.assertIn("/api/shutdown", r.text)
+        self.assertIn('id="license-gate"', r.text)
+        self.assertIn('id="lic-remember"', r.text)
+        self.assertIn('data-tab="profile"', r.text)
+        self.assertIn("/api/license/login", r.text)
+        self.assertIn("licenseBoot", r.text)
 
     def test_index_bilingual_toggle(self):
         """رابط باید دوزبانه باشد: دکمه تغییر زبان + دیکشنری ترجمه + dir راست‌چین."""

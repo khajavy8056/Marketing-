@@ -68,6 +68,8 @@ class TestLicenseLedger(unittest.TestCase):
             self.assertEqual(ok["days_left"], (datetime(2026, 9, 15) -
                                                datetime(2026, 8, 29)).days)
             self.assertEqual(ok["full_name"], "علی دمو")
+            self.assertEqual(ok["span_days"], 45)
+            self.assertEqual(ok["started"], "2026-08-01")
             self.assertEqual(check_login("demo", "wrong",
                                          url="https://example.test/ok.csv")["reason"],
                              "bad_pass")

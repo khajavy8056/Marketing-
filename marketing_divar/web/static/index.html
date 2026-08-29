@@ -130,6 +130,8 @@
   html[data-theme="dark"] .btn.gray:hover{background:#2e3c4e}
   html[data-theme="dark"] dialog{background:var(--card); color:var(--txt)}
 
+
+  body.gated header, body.gated nav, body.gated main, body.gated footer{visibility:hidden}
   body.booting{overflow:hidden}
   #boot-splash{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(1200px 700px at 70% -10%,#1b4f8a 0%,#0b1a30 48%,#071018 100%);
@@ -155,9 +157,46 @@
   @keyframes pingpulse{0%{box-shadow:0 0 0 0 rgba(46,158,91,.55)}70%{box-shadow:0 0 0 8px rgba(46,158,91,0)}100%{box-shadow:0 0 0 0 rgba(46,158,91,0)}}
   html[data-theme="dark"] #link-badge{background:#16351f;color:#6fd99a}
   @media(max-width:640px){ header{padding:14px} main{margin:12px auto} }
+
+  #license-gate{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 800px at 20% -10%,#1b4f8a 0%,#0b1a30 46%,#071018 100%);
+    color:#e8eef5;padding:24px}
+  #license-gate.hidden{display:none}
+  .gate-card{width:min(420px,94vw);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);
+    border-radius:22px;padding:28px 26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.35);backdrop-filter:blur(10px)}
+  .gate-card img{width:64px;height:64px;border-radius:16px;background:#fff;object-fit:cover;display:block;margin:0 auto 14px}
+  .gate-card h1{text-align:center;font-size:22px;font-weight:800;margin-bottom:4px}
+  .gate-card .gate-sub{text-align:center;color:#9ec4f0;font-size:13px;margin-bottom:18px;line-height:1.8}
+  .gate-card .lbl{color:#bcd3ea}
+  .gate-card input[type=text], .gate-card input[type=password]{
+    background:rgba(7,16,24,.55);color:#e8eef5;border:1px solid rgba(255,255,255,.18)}
+  .gate-card .btn{width:100%;justify-content:center;margin-top:14px;padding:13px 20px;font-size:15px;font-weight:700}
+  .gate-err{min-height:1.6em;color:#ffb4b0;font-size:13px;margin-top:10px;text-align:center;line-height:1.7}
+  .remain-bar{height:12px;background:#e3e8f0;border-radius:99px;overflow:hidden;margin:10px 0 6px}
+  .remain-bar > i{display:block;height:100%;background:linear-gradient(90deg,#1976d2,#2e9e5b);width:0}
+  html[data-theme="dark"] .remain-bar{background:#243040}
 </style>
 </head>
-<body class="booting">
+<body class="booting gated">
+
+
+<div id="license-gate" class="hidden" role="dialog" aria-labelledby="gate-title">
+  <form class="gate-card" onsubmit="licenseSubmit(event)">
+    <img src="/logo.png" alt="">
+    <h1 id="gate-title">مارکتینگ دیوار</h1>
+    <div class="gate-sub">ورود به برنامه — اعتبار از دفترچهٔ آنلاین خوانده می‌شود<br>ساعت از اینترنت است، نه از ویندوز</div>
+    <div class="lbl">نام کاربری</div>
+    <input id="lic-user" name="username" autocomplete="username" dir="ltr" placeholder="username">
+    <div class="lbl">رمز عبور</div>
+    <input id="lic-pass" name="password" type="password" autocomplete="current-password" dir="ltr">
+    <div class="checkline" style="margin-top:12px">
+      <input type="checkbox" id="lic-remember">
+      <label for="lic-remember">به‌خاطر سپردن روی این رایانه</label>
+    </div>
+    <button class="btn ok" type="submit" id="lic-go">ورود</button>
+    <div class="gate-err" id="lic-err"></div>
+  </form>
+</div>
 
 <div id="boot-splash" aria-live="polite">
   <img class="boot-logo" src="/logo.png" alt="">
@@ -193,6 +232,7 @@
   <button data-tab="messages">✉️ پیام‌ها</button>
   <button data-tab="leads">📋 سرنخ‌ها</button>
   <button data-tab="robot">🤖 ربات هوشمند</button>
+  <button data-tab="profile">🪪 اشتراک</button>
   <button data-tab="settings">⚙️ تنظیمات</button>
   <button data-tab="logs">📝 لاگ‌ها</button>
 </nav>
@@ -454,6 +494,21 @@
   <div class="card" style="margin-top:14px">
     <h3>آخرین پاسخ‌ها (هر کدام روی یک آگهی)</h3>
     <div id="robot-replies-list" class="feed" style="max-height:360px"></div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════ اشتراک ═══════════════════════ -->
+<section id="tab-profile" class="tab">
+  <div class="card">
+    <h3>اشتراک این برنامه</h3>
+    <div class="hint" id="lic-who">—</div>
+    <div class="kpi" id="lic-days">—</div>
+    <div class="remain-bar" aria-hidden="true"><i id="lic-bar"></i></div>
+    <div class="hint" id="lic-span">مانده از اعتبار</div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn gray" type="button" onclick="licenseLogout()">خروج از حساب برنامه</button>
+    </div>
   </div>
 </section>
 
@@ -769,6 +824,7 @@ const BOOT_MS = 240000;
     el.classList.add('gone');
     setTimeout(()=>{ try{ el.remove(); }catch(e){} }, 800);
     startLinkPulse();
+    if (typeof licenseBoot === 'function') licenseBoot();
   }
   requestAnimationFrame(tick);
 })();
@@ -783,6 +839,73 @@ function startLinkPulse(){
   setInterval(pulse, 2600);
 }
 
+
+
+/* ───────────────────────── ورود برنامه (دفترچه CSV) ───────────────────────── */
+let _lic = null;
+function applyLicense(me){
+  _lic = me || null;
+  licensePaint();
+}
+function licensePaint(){
+  const me = _lic || {};
+  const who = $('lic-who'), days = $('lic-days'), bar = $('lic-bar'), span = $('lic-span');
+  if (!who) return;
+  const plan = me.plan==='demo' ? 'دمو' : 'کامل';
+  who.textContent = (me.full_name || me.username || '—') + (me.username ? '  ·  '+me.username : '') + '  ·  طرح '+plan;
+  const left = me.days_left;
+  days.textContent = (left===0 || left) ? (left+' روز مانده') : '—';
+  const pct = Math.max(0, Math.min(100, me.pct||0));
+  if (bar) bar.style.width = pct+'%';
+  if (span) span.textContent = me.expires
+    ? ('تا تاریخ '+me.expires+'  ·  از کل '+(me.span_days||'—')+' روز')
+    : 'مانده از اعتبار';
+}
+function showGate(msg){
+  const g = $('license-gate');
+  if (g) g.classList.remove('hidden');
+  document.body.classList.add('gated');
+  if ($('lic-err')) $('lic-err').textContent = msg || '';
+}
+function hideGate(){
+  const g = $('license-gate');
+  if (g) g.classList.add('hidden');
+  document.body.classList.remove('gated');
+}
+async function licenseBoot(){
+  try{
+    const me = await api('/api/license/me');
+    if (me && me.ok){ applyLicense(me); hideGate(); return; }
+    showGate(me && me.message_fa ? me.message_fa : '');
+  }catch(e){
+    showGate(e.message || 'برای ورود اینترنت لازم است');
+  }
+}
+async function licenseSubmit(ev){
+  if (ev) ev.preventDefault();
+  const user = ($('lic-user')||{}).value||'';
+  const pass = ($('lic-pass')||{}).value||'';
+  const remember = !!($('lic-remember')&&$('lic-remember').checked);
+  if ($('lic-err')) $('lic-err').textContent = '';
+  try{
+    const r = await fetch('/api/license/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:user, password:pass, remember})
+    });
+    const me = await r.json();
+    if (!r.ok || !me.ok){
+      showGate(me.message_fa || me.detail || 'ورود ناموفق');
+      return false;
+    }
+    applyLicense(me); hideGate(); toast('ورود موفق');
+  }catch(e){ showGate('❌ '+(e.message||'بدون اینترنت نمی‌توان وارد شد')); }
+  return false;
+}
+async function licenseLogout(){
+  try{ await fetch('/api/license/logout', {method:'POST'}); }catch(e){}
+  _lic = null;
+  showGate('خارج شدید — دوباره وارد شوید');
+}
 
 /* ───────────────────────── ابزارهای عمومی ───────────────────────── */
 const $ = id => document.getElementById(id);
@@ -809,6 +932,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab==='keywords') kwLoad();
   if (b.dataset.tab==='messages') tplLoad();
   if (b.dataset.tab==='robot') robotLoad();
+  if (b.dataset.tab==='profile') licensePaint();
 });
 
 /* ───────────────────────── داشبورد ───────────────────────── */

@@ -131,6 +131,13 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     token = post.get("token")
     if not token or lead_exists(con, token):
         return False
+    from .platforms import split_token
+    plat, nid = split_token(token)
+    post = dict(post)
+    post.setdefault("platform", plat)
+    post.setdefault("native_id", nid)
+    if plat != "divar":
+        fetch_details = False
 
     from .classify import classify_post
     price = price_from_post(post)

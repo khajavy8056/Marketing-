@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .. import logging_util, store
@@ -47,7 +47,121 @@ log = logging_util.log
 from ..brand import APP_NAME_EN, APP_NAME_FA, PORT as APP_PORT
 from ..netinfo import listen_urls
 
-app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version="3.2.0")
+from .. import __version__ as _APP_VER
+app = FastAPI(title=f"{APP_NAME_FA} — {APP_NAME_EN}", version=_APP_VER)
+
+
+@app.middleware("http")
+async def _license_gate(request: Request, call_next):
+    from ..license_session import cookie_ok, is_public, license_enforced
+    if not license_enforced():
+        return await call_next(request)
+    path = request.url.path or "/"
+    if is_public(path):
+        return await call_next(request)
+    if path.startswith("/api/") and not cookie_ok(request):
+        return JSONResponse({"detail": "برای ورود به برنامه ابتدا وارد شوید"},
+                            status_code=401)
+    return await call_next(request)
+
+
+class LicenseLogin(BaseModel):
+    username: str = ""
+    password: str = ""
+    remember: bool = False
+
+
+def _license_payload(res: Dict[str, Any]) -> Dict[str, Any]:
+    from ..license_session import payload_from_check, session_public
+    packed = payload_from_check(res)
+    pub = session_public({**packed, "u": packed.get("u"),
+                          "n": packed.get("n"), "p": packed.get("p")})
+    pub["message_fa"] = res.get("message_fa") or ""
+    pub["reason"] = res.get("reason") or "ok"
+    return packed, pub
+
+
+@app.post("/api/license/login")
+def license_login(req: LicenseLogin):
+    from fastapi.responses import JSONResponse as _JR
+    from ..license_ledger import check_login
+    from ..license_session import (clear_remember, load_remember, save_remember,
+                                   set_cookie, sign_payload)
+    user, pwd = (req.username or "").strip(), (req.password or "")
+    if not user or not pwd:
+        rem = load_remember()
+        user = user or rem.get("username") or ""
+        pwd = pwd or rem.get("password") or ""
+    if not user or not pwd:
+        raise HTTPException(400, "نام کاربری و رمز را وارد کنید")
+    res = check_login(user, pwd)
+    if not res.get("ok"):
+        return _JR({"ok": False, "reason": res.get("reason"),
+                    "message_fa": res.get("message_fa") or "ورود ناموفق"},
+                   status_code=401)
+    packed, pub = _license_payload(res)
+    if req.remember:
+        save_remember(user, pwd)
+    body = {"ok": True, **pub}
+    out = _JR(body)
+    set_cookie(out, sign_payload(packed), bool(req.remember),
+               int(res.get("days_left") or 0))
+    log("success", "ورود لایسنس «%s»" % (pub.get("username") or user))
+    return out
+
+
+@app.get("/api/license/me")
+def license_me(request: Request):
+    from fastapi.responses import JSONResponse as _JR
+    from ..license_ledger import refresh_user
+    from ..license_session import (cookie_from_request, license_enforced,
+                                   load_remember, session_public,
+                                   set_cookie, sign_payload, verify_payload)
+    if not license_enforced():
+        return {"ok": True, "skipped": True, "plan": "full", "days_left": 365,
+                "span_days": 365, "pct": 100, "full_name": "",
+                "username": "", "expires": ""}
+    data = verify_payload(cookie_from_request(request))
+    user = (data or {}).get("u") or ""
+    pwd = ""
+    if not user:
+        rem = load_remember()
+        user = rem.get("username") or ""
+        pwd = rem.get("password") or ""
+        if user and pwd:
+            from ..license_ledger import check_login
+            res = check_login(user, pwd)
+            if not res.get("ok"):
+                return {"ok": False, "reason": res.get("reason"),
+                        "message_fa": res.get("message_fa"),
+                        "remember": True}
+            packed, pub = _license_payload(res)
+            out = _JR({"ok": True, "remember": True, **pub})
+            set_cookie(out, sign_payload(packed), True,
+                       int(res.get("days_left") or 0))
+            return out
+        return {"ok": False, "reason": "need_login",
+                "message_fa": "برای ورود نام کاربری و رمز را وارد کنید"}
+    res = refresh_user(user)
+    if not res.get("ok"):
+        return {"ok": False, "reason": res.get("reason"),
+                "message_fa": res.get("message_fa")}
+    packed, pub = _license_payload(res)
+    out = _JR({"ok": True, **pub})
+    set_cookie(out, sign_payload(packed), False,
+               int(res.get("days_left") or 0))
+    return out
+
+
+@app.post("/api/license/logout")
+def license_logout(forget: bool = False):
+    from fastapi.responses import JSONResponse as _JR
+    from ..license_session import clear_cookie, clear_remember
+    if forget:
+        clear_remember()
+    out = _JR({"ok": True, "message_fa": "خارج شدید"})
+    clear_cookie(out)
+    return out
 
 # --------------------------------------------------------- وضعیت سراسری --
 _state: Dict[str, Any] = {

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """دفترچهٔ لایسنس — یک فایل سطری + ساعت واقعی از اینترنت.
 
-بخش ۱: هنوز صفحهٔ ورود نیست. فقط خواندن دفترچه و تاریخ سرور.
-لینک را با DIVAR_LICENSE_URL عوض کنید (مثلاً Gist خصوصی).
+ورود برنامه دفترچه را سطری می‌خواند: اول نام کاربری، بعد رمز، بعد زمان اینترنت.
+لینک را با DIVAR_LICENSE_URL عوض کنید (مثلاً Gist خصوصی / هاست).
 """
 
 from __future__ import annotations
@@ -170,8 +170,68 @@ def check_login(username: str, password: str, url: str = "",
                 "message_fa": _REASON_FA["expired"],
                 "days_left": left, "plan": row.get("plan") or "",
                 "row": row, "now": now}
+    started = row.get("started") or ""
+    expires = row.get("expires") or ""
+    span = 1
+    a, b = parse_day(started), parse_day(expires)
+    if a and b and b >= a:
+        span = max((b - a).days, 1)
+    else:
+        span = max(left, 1)
     return {"ok": True, "reason": "ok", "message_fa": _REASON_FA["ok"],
             "days_left": left, "plan": row.get("plan") or "full",
             "row": row, "now": now,
+            "started": started, "expires": expires, "span_days": span,
+            "username": row.get("username") or user,
+            "full_name": ("%s %s" % (row.get("first_name") or "",
+                                     row.get("last_name") or "")).strip()}
+
+
+def refresh_user(username: str, url: str = "", timeout: float = 20.0
+                 ) -> Dict[str, Any]:
+    """تمدید نشست: سطر نام کاربری + زمان اینترنت — بدون رمز."""
+    user = (username or "").strip().casefold()
+    rows, now, err = fetch_ledger(url, timeout=timeout)
+    if err:
+        return {"ok": False, "reason": err, "message_fa": _REASON_FA[err],
+                "days_left": None, "plan": "", "row": None, "now": now}
+    if now is None:
+        return {"ok": False, "reason": "no_internet",
+                "message_fa": _REASON_FA["no_internet"],
+                "days_left": None, "plan": "", "row": None, "now": None}
+    row = next((r for r in rows if r["username"] == user), None)
+    if not row:
+        return {"ok": False, "reason": "bad_user",
+                "message_fa": _REASON_FA["bad_user"],
+                "days_left": None, "plan": "", "row": None, "now": now}
+    if row.get("status") != "active":
+        return {"ok": False, "reason": "disabled",
+                "message_fa": _REASON_FA["disabled"],
+                "days_left": days_left(row.get("expires") or "", now),
+                "plan": row.get("plan") or "", "row": row, "now": now}
+    left = days_left(row.get("expires") or "", now)
+    if left is None:
+        return {"ok": False, "reason": "bad_row",
+                "message_fa": _REASON_FA["bad_row"],
+                "days_left": None, "plan": row.get("plan") or "",
+                "row": row, "now": now}
+    if left < 0:
+        return {"ok": False, "reason": "expired",
+                "message_fa": _REASON_FA["expired"],
+                "days_left": left, "plan": row.get("plan") or "",
+                "row": row, "now": now}
+    started = row.get("started") or ""
+    expires = row.get("expires") or ""
+    span = 1
+    a, b = parse_day(started), parse_day(expires)
+    if a and b and b >= a:
+        span = max((b - a).days, 1)
+    else:
+        span = max(left, 1)
+    return {"ok": True, "reason": "ok", "message_fa": _REASON_FA["ok"],
+            "days_left": left, "plan": row.get("plan") or "full",
+            "row": row, "now": now,
+            "started": started, "expires": expires, "span_days": span,
+            "username": row.get("username") or user,
             "full_name": ("%s %s" % (row.get("first_name") or "",
                                      row.get("last_name") or "")).strip()}

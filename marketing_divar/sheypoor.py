@@ -66,6 +66,9 @@ def parse_listings(html: str) -> List[Dict[str, Any]]:
     return posts[:80]
 
 
+_TITLE_NEAR = re.compile(r"<[^>]+>([^<]{6,90})</")
+
+
 def _enrich(html: str, posts: List[Dict[str, Any]]) -> None:
     for p in posts:
         nid = p.get("native_id") or ""
@@ -81,6 +84,15 @@ def _enrich(html: str, posts: List[Dict[str, Any]]) -> None:
         if m:
             p["condition"] = m.group(1).strip()
             p["status_text"] = p["condition"]
+        from .contact import parse_visible_phone
+        ph = parse_visible_phone(window)
+        if ph:
+            p["phone"] = ph
+        title_m = _TITLE_NEAR.search(window)
+        if title_m:
+            cand = title_m.group(1).strip()
+            if cand and "sheypoor" not in cand.lower() and len(cand) > 5:
+                p["title"] = cand
 
 
 def search(client, query: str, cities=None, page: int = 1,

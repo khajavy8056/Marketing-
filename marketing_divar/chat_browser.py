@@ -59,16 +59,26 @@ def _js_gone_check() -> str:
     )
 
 
-def _js_send(text: str) -> str:
+def _chat_click_labels(platform: str) -> list:
+    if platform == "sheypoor":
+        return ["چت", "گفتگو", "ارسال پیام", "پیام", "شروع گفتگو",
+                "پیام به فروشنده", "Chat", "Message"]
+    if platform == "ring":
+        return ["چت", "گفتگو", "پیام", "ارسال پیام", "Message", "Chat"]
+    return ["چت", "گفتگو", "ارسال پیام", "پیام", "شروع گفتگو",
+            "چت با", "Chat", "Message"]
+
+
+def _js_send(text: str, platform: str = "divar") -> str:
     payload = json.dumps(text, ensure_ascii=False)
+    labels = json.dumps(_chat_click_labels(platform), ensure_ascii=False)
     return (
         """(async () => {
           const text = %s;
           const gone = %s;
           const g = eval(gone);
           if (g && g.gone) return {ok:false, status:'removed', message:'آگهی حذف شده'};
-          const clickTxt = ['چت', 'گفتگو', 'ارسال پیام', 'پیام', 'شروع گفتگو',
-                            'چت با', 'Chat', 'Message'];
+          const clickTxt = %s;
           const nodes = Array.from(document.querySelectorAll('button,a,[role=button]'));
           let btn = nodes.find(el => clickTxt.some(t => (el.innerText||'').trim().startsWith(t)));
           if (!btn) btn = nodes.find(el => /چت|گفتگو|پیام/.test(el.innerText||''));
@@ -94,7 +104,8 @@ def _js_send(text: str) -> str:
           else box.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
           await new Promise(r => setTimeout(r, 600));
           return {ok:true, status:'sent', href: location.href, title: document.title||''};
-        })()""" % (payload, json.dumps(_js_gone_check()), json.dumps(list(_GONE_MARKERS), ensure_ascii=False))
+        })()""" % (payload, json.dumps(_js_gone_check()), labels,
+                   json.dumps(list(_GONE_MARKERS), ensure_ascii=False))
     )
 
 
@@ -203,7 +214,8 @@ def send_on_url(url: str, text: str, accounts_dir: str, account: str,
         if isinstance(gone, dict) and gone.get("gone"):
             return {"ok": False, "status": "removed",
                     "message": "آگهی حذف شده یا چت در دسترس نیست"}
-        res = _cdp_eval(cdp, _js_send(text), timeout=25)
+        plat, _nid = split_token(token)
+        res = _cdp_eval(cdp, _js_send(text, plat), timeout=25)
         if not isinstance(res, dict):
             return {"ok": False, "status": "requires_operator",
                     "message": "پاسخ صفحه نامعتبر"}

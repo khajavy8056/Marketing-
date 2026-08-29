@@ -16,13 +16,13 @@ _AD_REL = re.compile(r"/a/([A-Za-z0-9_-]{4,})", re.I)
 
 
 def parse_listings(html: str) -> List[Dict[str, Any]]:
-    posts, seen = [], []
+    posts, seen = [], set()
     text = html or ""
 
     def add(nid: str) -> None:
         if nid in seen or nid.lower() in ("home", "faq", "login", "about"):
             return
-        seen.append(nid)
+        seen.add(nid)
         token = lead_token("ring", nid)
         posts.append({
             "token": token,

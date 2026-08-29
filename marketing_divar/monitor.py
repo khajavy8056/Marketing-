@@ -258,23 +258,7 @@ class Monitor:
                                     vip=bool(spec.get("vip"))):
                                 if spec.get("hunter") and not p.get("hunter_block"):
                                     try:
-                                        from .hunter import collect_samples, score_lead
-                                        from . import store as _st2
-                                        plat = str(p.get("platform") or "divar")
-                                        samples = collect_samples(con, kw, city, plat)
-                                        sc = score_lead(
-                                            int(p.get("price") or 0), samples,
-                                            _st2.settings_all(self.db_path),
-                                            extra=p)
-                                        if sc.get("warm") and not p.get("is_defect") \
-                                                and not p.get("is_placeholder") \
-                                                and not p.get("hunter_block") \
-                                                and sc.get("level") not in (
-                                                    "none", "suspicious"):
-                                            con.execute(
-                                                "UPDATE leads SET hunter_level=? "
-                                                "WHERE token=?",
-                                                (sc.get("level") or "", p.get("token")))
+                                        self._score_hunter(con, p, spec, kw, city)
                                     except Exception:
                                         pass
                                 new_total += 1
@@ -559,6 +543,11 @@ class Monitor:
             token = row["token"] if "token" in row.keys() else ""
             if not token:
                 return
+            try:
+                if (row["phone_status"] if "phone_status" in row.keys() else "") == "found":
+                    return  # شماره هست → پیامک، نه چت
+            except Exception:
+                pass
             prev = con.execute("SELECT chat_status FROM leads WHERE token=?",
                                (token,)).fetchone()
             if prev and (prev["chat_status"] or "") == "sent":
@@ -734,7 +723,14 @@ class Monitor:
             started = time.strftime("%Y-%m-%d %H:%M:%S")
             mark_processing(con, row["token"])
             try:
-                res = cl.get_phone(row["token"])
+                from .contact import get_contact
+                from .platforms import split_token
+                plat, _nid = split_token(row["token"])
+                ad_url = row["url"] if "url" in row.keys() else ""
+                res = get_contact(
+                    row["token"], client=cl if plat == "divar" else None,
+                    accounts_dir=str(self.mgr.dir), account=name,
+                    url=ad_url or "")
             except DivarAuthError as e:
                 con.execute("UPDATE leads SET phone_status='pending' WHERE token=?",
                             (row["token"],))
@@ -922,6 +918,10 @@ class Monitor:
                     self.drain_chat()
                 except Exception as e:
                     self._ev("warning", f"صف چت: {e}")
+                try:
+                    self.drain_hunter_inquire()
+                except Exception as e:
+                    self._ev("warning", f"استعلام شکارچی: {e}")
                 try:
                     self.poll_inboxes()
                 except Exception as e:
