@@ -39,7 +39,8 @@ def _check_windows_installer() -> None:
                    "barChrome", "SOURCE_FAIL", "BYTES", "SHA256",
                    "CHROMIUM_START", "DOWNLOAD_COMPLETED",
                    "Find-Python", "Install-Python", "python.org",
-                   "WindowStyle Minimized"):
+                   "WindowStyle Minimized",
+                   "--install-nlu", "barNlu", "nlu-model", "DIVAR_NLU_DOWNLOAD"):
         if needle not in ps1:
             raise FileNotFoundError(f"installer incomplete — missing {needle}")
     if "installer.ps1" not in bat or "install-console.ps1" not in bat:
@@ -49,7 +50,8 @@ def _check_windows_installer() -> None:
     for needle in ("Find-Python", ".venv", "requirements.txt", "main.py --check",
                    "DivarMarketing", "localhost:8642",
                    "--install-chromium", "app-chromium",
-                   "ungoogled-chromium"):
+                   "ungoogled-chromium",
+                   "--install-nlu", "nlu-model", "DIVAR_NLU_DOWNLOAD"):
         if needle not in console:
             raise FileNotFoundError(f"console installer incomplete — missing {needle}")
     setup = (root / "installer" / "setup_app.py").read_text(encoding="utf-8")
@@ -128,6 +130,10 @@ def _check_static_ui() -> None:
         raise FileNotFoundError("server-link badge / 4-minute splash missing")
     if 'id="quit-btn"' not in html or "quitApp" not in html:
         raise FileNotFoundError("panel exit button missing")
+    if 'id="license-gate"' not in html or "lic-remember" not in html:
+        raise FileNotFoundError("in-app license login missing from panel")
+    if 'data-tab="profile"' not in html or "lic-bar" not in html:
+        raise FileNotFoundError("subscription remaining-time bar missing from panel")
     if "/api/shutdown" not in html:
         raise FileNotFoundError("shutdown API not wired in panel")
     cp = Path(__file__).parent / "chromium_profile.py"

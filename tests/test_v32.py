@@ -73,9 +73,11 @@ class TestHunterProfile(unittest.TestCase):
         self.assertIn(sc["raw_level"], ("good", "great", "market", "none"))
 
     def test_lenient_thresholds_find_deals(self):
-        from marketing_divar.hunter import evaluate
+        from marketing_divar.hunter import evaluate, median_of
         from marketing_divar.hunter_profile import default_profile
-        samples = [10_000_000] * 6
+        self.assertIsNone(median_of([1, 2]))
+        self.assertIsNotNone(median_of([10_000_000] * 3))
+        samples = [10_000_000] * 3
         prof = default_profile("mobile-phones", "آیفون")
         sc = evaluate(9_000_000, samples, extra={"category": "mobile-phones"},
                       profile=prof, text="آیفون در حد نو")

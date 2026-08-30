@@ -66,7 +66,7 @@ Get-ChildItem -LiteralPath $Root -Recurse -Include *.ps1,*.bat -ErrorAction Sile
 try {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Divar Marketing Setup"
-$form.Size = New-Object System.Drawing.Size(640, 600)
+$form.Size = New-Object System.Drawing.Size(640, 680)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
@@ -108,26 +108,37 @@ $barChrome.Location = New-Object System.Drawing.Point(20, 156)
 $barChrome.Size = New-Object System.Drawing.Size(586, 22)
 $barChrome.Minimum = 0; $barChrome.Maximum = 100; $barChrome.Value = 0
 
+$lblNlu = New-Object System.Windows.Forms.Label
+$lblNlu.Location = New-Object System.Drawing.Point(20, 184)
+$lblNlu.Size = New-Object System.Drawing.Size(586, 20)
+$lblNlu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblNlu.Text = "NLU model: waiting"
+
+$barNlu = New-Object System.Windows.Forms.ProgressBar
+$barNlu.Location = New-Object System.Drawing.Point(20, 206)
+$barNlu.Size = New-Object System.Drawing.Size(586, 22)
+$barNlu.Minimum = 0; $barNlu.Maximum = 100; $barNlu.Value = 0
+
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Object System.Drawing.Point(20, 184)
-$logBox.Size = New-Object System.Drawing.Size(586, 260)
+$logBox.Location = New-Object System.Drawing.Point(20, 234)
+$logBox.Size = New-Object System.Drawing.Size(586, 230)
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = "Vertical"
 $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
 
 $btnStart = New-Object System.Windows.Forms.Button
-$btnStart.Location = New-Object System.Drawing.Point(20, 516)
+$btnStart.Location = New-Object System.Drawing.Point(20, 536)
 $btnStart.Size = New-Object System.Drawing.Size(180, 36)
 $btnStart.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $btnStart.Text = "Start Install"
 
 $btnClose = New-Object System.Windows.Forms.Button
-$btnClose.Location = New-Object System.Drawing.Point(426, 516)
+$btnClose.Location = New-Object System.Drawing.Point(426, 536)
 $btnClose.Size = New-Object System.Drawing.Size(180, 36)
 $btnClose.Text = "Close"
 
-$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $logBox, $btnStart, $btnClose))
+$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $lblNlu, $barNlu, $logBox, $btnStart, $btnClose))
 } catch {
     Write-InstallLog "GUI build failed: $_"
     try { Write-Host "GUI build failed: $_" } catch {}
@@ -412,8 +423,68 @@ $btnStart.Add_Click({
         $bar.Value = 82
 
 
-Log "[4] Health check"
-        Set-Step "Health check" 80
+
+        Log "[3c] Installing local NLU model (download beside installer, install beside app)"
+        Set-Step "Local AI model" 84
+        $lblNlu.Text = "NLU: started"
+        $barNlu.Style = "Blocks"
+        $barNlu.Value = 0
+        $nluDir = Join-Path $Root "nlu-model"
+        $nluDl = Join-Path $Root "installer\nlu-download"
+        New-Item -ItemType Directory -Force -Path $nluDir | Out-Null
+        New-Item -ItemType Directory -Force -Path $nluDl | Out-Null
+        $env:DIVAR_APP_DIR = $Root
+        $env:DIVAR_NLU_DIR = $nluDir
+        $env:DIVAR_NLU_DOWNLOAD = $nluDl
+        $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarnlu-" + [guid]::NewGuid().ToString("N") + ".log")
+        $inner = '"' + $appPy + '" main.py --install-nlu > "' + $outFile + '" 2>&1'
+        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+        $pinfo.FileName = "cmd.exe"
+        $pinfo.Arguments = '/c "' + $inner + '"'
+        $pinfo.WorkingDirectory = $Root
+        $pinfo.UseShellExecute = $false
+        $pinfo.CreateNoWindow = $true
+        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+        $pinfo.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
+        $pinfo.EnvironmentVariables["DIVAR_APP_DIR"] = $Root
+        $pinfo.EnvironmentVariables["DIVAR_NLU_DIR"] = $nluDir
+        $pinfo.EnvironmentVariables["DIVAR_NLU_DOWNLOAD"] = $nluDl
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $pinfo
+        [void]$proc.Start()
+        $logged = 0
+        while (-not $proc.HasExited) {
+            Start-Sleep -Milliseconds 400
+            [System.Windows.Forms.Application]::DoEvents()
+            $logged = Stream-File $outFile $logged
+            try {
+                $tail = Get-Content -LiteralPath $outFile -Tail 16 -ErrorAction SilentlyContinue
+                foreach ($ln in $tail) {
+                    if ($ln -match "NLU_START") {
+                        $lblNlu.Text = "NLU: started"
+                    }
+                    if ($ln -match "NLU OK" -or $ln -match "NLU model:") {
+                        $barNlu.Value = 100
+                        $lblNlu.Text = "NLU Completed"
+                    }
+                }
+            } catch {}
+        }
+        $proc.WaitForExit()
+        $logged = Stream-File $outFile $logged
+        Remove-Item $outFile -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -ne 0) {
+            Log "[3c] NLU download failed (code $($proc.ExitCode)) - panel can retry"
+            $lblNlu.Text = "NLU failed - retry in panel"
+        } else {
+            Log "[3c] NLU OK -> $nluDir"
+            $barNlu.Value = 100
+            $lblNlu.Text = "NLU Completed"
+        }
+        $bar.Value = 86
+
+        Log "[4] Health check"
+        Set-Step "Health check" 90
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"
         $pinfo.WorkingDirectory = $Root

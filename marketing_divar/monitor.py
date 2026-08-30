@@ -188,16 +188,16 @@ class Monitor:
                 posts.extend(_sh.search(
                     self.anon, q, cities=cities_arg, page=page,
                     category=cat) or [])
-            except Exception:
-                pass
+            except Exception as e:
+                self._ev("warning", "جستجوی شیپور: %s" % e)
         if "ring" in plats:
             try:
                 from . import ring as _rg
                 posts.extend(_rg.search(
                     self.anon, q, cities=cities_arg, page=page,
                     category=cat) or [])
-            except Exception:
-                pass
+            except Exception as e:
+                self._ev("warning", "جستجوی رینگ: %s" % e)
         return posts
 
     # ------------------------------------------------------------ جستجو 🔎 --
@@ -622,10 +622,11 @@ class Monitor:
             rows = chat_queue(con, limit=max_items)
         finally:
             con.close()
+        last = ""
         for row in rows:
             if self.stop_event.is_set():
                 return
-            name = self.mgr.pick(self.db_path)
+            name = self.mgr.pick(self.db_path, skip=last or None)
             if not name:
                 return
             con = connect(self.db_path)
@@ -633,6 +634,7 @@ class Monitor:
                 self._maybe_chat(con, row, name)
             finally:
                 con.close()
+            last = name
 
     def poll_inboxes(self) -> None:
         """خواندن پاسخ چت (همان آگهی) و صندوق پیامک ملی‌پیامک."""

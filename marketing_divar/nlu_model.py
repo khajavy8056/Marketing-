@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -44,17 +45,32 @@ LogFn = Callable[[str], None]
 MODEL_NAME = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
 MARKER = "INSTALLED.json"
 
-# آینه‌های HuggingFace — اگر یکی قطع شد بعدی
+# آینه‌های HuggingFace — اگر یکی قطع شد بعدی (ایران: hf-mirror)
 GGUF_URLS = (
     "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
     "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    "https://hf-mirror.com/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    "qwen2.5-1.5b-instruct-q4_k_m.gguf",
     "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
     "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "https://hf-mirror.com/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "https://huggingface.co/QuantFactory/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf",
+    "https://hf-mirror.com/QuantFactory/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf",
 )
 
 # باینری پیش‌ساخته llama.cpp ویندوز (cpu)
+# b4179 آخرین ساخت پایدار Win10 21H2 (issue #11479)؛ بعد ggml-org / ggerganov
 LLAMA_ZIP_URLS = (
+    "https://github.com/ggerganov/llama.cpp/releases/download/b4179/"
+    "llama-b4179-bin-win-avx2-x64.zip",
+    "https://github.com/ggml-org/llama.cpp/releases/download/b4179/"
+    "llama-b4179-bin-win-avx2-x64.zip",
     "https://github.com/ggerganov/llama.cpp/releases/download/b4381/"
+    "llama-b4381-bin-win-avx2-x64.zip",
+    "https://github.com/ggml-org/llama.cpp/releases/download/b4381/"
     "llama-b4381-bin-win-avx2-x64.zip",
     "https://github.com/ggerganov/llama.cpp/releases/download/b3600/"
     "llama-b3600-bin-win-avx2-x64.zip",
@@ -176,35 +192,63 @@ def _extract_zip(zpath: Path, dest: Path, log: Optional[LogFn]) -> None:
         log("NLU unzip ok")
 
 
+def _file_ok(p: Path, min_size: int = 50_000_000) -> bool:
+    try:
+        return p.is_file() and p.stat().st_size >= min_size
+    except OSError:
+        return False
+
+
+def _copy_if_needed(src: Path, dest: Path, log: Optional[LogFn] = None) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if src.resolve() == dest.resolve():
+        return
+    shutil.copy2(src, dest)
+    if log:
+        log("NLU copied cache -> " + str(dest))
+
+
 def ensure_installed(log: Optional[LogFn] = None,
                      progress: Optional[Callable[[int], None]] = None,
                      force: bool = False) -> Path:
     d = model_dir()
     d.mkdir(parents=True, exist_ok=True)
+    cache = download_cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
     with _LOCK:
         _STATUS["running"] = True
         _STATUS["error"] = ""
         _STATUS["note"] = "شروع دانلود مدل"
         _STATUS["percent"] = 0
+    if log:
+        log("NLU_START")
     try:
         g = gguf_path()
-        if force or not g.is_file() or g.stat().st_size < 50_000_000:
-            last = None
-            for url in GGUF_URLS:
-                try:
-                    if log:
-                        log("NLU model " + url)
-                    _download(url, g, log, progress)
-                    last = None
-                    break
-                except Exception as e:
-                    last = e
-                    if log:
-                        log("NLU model fail: %s" % e)
-            if last:
-                raise last
+        cached = cache / MODEL_NAME
+        if force or not _file_ok(g):
+            if not force and _file_ok(cached):
+                if log:
+                    log("NLU using cached model " + str(cached))
+                _copy_if_needed(cached, g, log)
+            else:
+                last = None
+                for url in GGUF_URLS:
+                    try:
+                        if log:
+                            log("NLU model " + url)
+                        _download(url, cached, log, progress)
+                        last = None
+                        break
+                    except Exception as e:
+                        last = e
+                        if log:
+                            log("NLU model fail: %s" % e)
+                if last and not _file_ok(cached):
+                    raise last
+                if _file_ok(cached):
+                    _copy_if_needed(cached, g, log)
         if sys.platform == "win32" and llama_exe() is None:
-            zpath = d / "llama.zip"
+            zpath = cache / "llama.zip"
             last = None
             for url in LLAMA_ZIP_URLS:
                 try:

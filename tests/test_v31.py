@@ -128,6 +128,14 @@ class TestVehicleHunter(unittest.TestCase):
 
 
 class TestNluThreePlatforms(unittest.TestCase):
+    def test_gguf_mirrors(self):
+        from marketing_divar.nlu_model import GGUF_URLS, LLAMA_ZIP_URLS
+        blob = "\n".join(GGUF_URLS)
+        self.assertIn("hf-mirror.com", blob)
+        self.assertIn("QuantFactory", blob)
+        self.assertTrue(any("b4179" in u for u in LLAMA_ZIP_URLS))
+        self.assertTrue(any("ggml-org" in u for u in LLAMA_ZIP_URLS))
+
     def test_same_analyzer_all_platforms(self):
         from marketing_divar.nlu import analyze_for_platform, analyze_rules
         from marketing_divar.nlu_role import ROLE_FA
@@ -166,6 +174,30 @@ class TestNluThreePlatforms(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
+    def test_ensure_copies_from_installer_cache(self):
+        from marketing_divar import nlu_model as nm
+        old = {k: os.environ.get(k) for k in
+               ("DIVAR_APP_DIR", "DIVAR_NLU_DIR", "DIVAR_NLU_DOWNLOAD")}
+        tmp = tempfile.mkdtemp()
+        os.environ["DIVAR_APP_DIR"] = tmp
+        os.environ.pop("DIVAR_NLU_DIR", None)
+        os.environ["DIVAR_NLU_DOWNLOAD"] = os.path.join(tmp, "setup", "nlu-download")
+        try:
+            cache = nm.download_cache_dir()
+            cache.mkdir(parents=True, exist_ok=True)
+            fake = cache / nm.MODEL_NAME
+            fake.write_bytes(b"x" * 50_000_001)
+            path = nm.ensure_installed()
+            self.assertTrue(path.is_file())
+            self.assertGreaterEqual(path.stat().st_size, 50_000_000)
+            self.assertEqual(path.name, nm.MODEL_NAME)
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
     def test_inbox_platform_column(self):
         from marketing_divar.db import connect, upsert_lead
         from marketing_divar.inbox import ingest_sms
@@ -194,6 +226,18 @@ class TestInstallerNluNeedles(unittest.TestCase):
         self.assertIn("nlu_bar", body)
         self.assertIn("DIVAR_NLU_DOWNLOAD", body)
         self.assertFalse(any("\u0600" <= ch <= "\u06ff" for ch in body))
+        ps1 = open(os.path.join(ROOT, "installer", "installer.ps1"), encoding="utf-8-sig").read()
+        self.assertIn("--install-nlu", ps1)
+        self.assertIn("barNlu", ps1)
+        cons = open(os.path.join(ROOT, "installer", "install-console.ps1"), encoding="utf-8-sig").read()
+        self.assertIn("--install-nlu", cons)
+        main = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()
+        self.assertIn("--install-nlu", main)
+        self.assertIn("log=print", main)
+        mon = open(os.path.join(ROOT, "marketing_divar", "monitor.py"), encoding="utf-8").read()
+        self.assertIn("skip=last", mon)
+        drain = mon.split("def drain_chat", 1)[1].split("def poll_inboxes", 1)[0]
+        self.assertNotIn("record_use", drain)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from .hunter_profile import (
 
 def median_of(prices: Sequence[int]) -> Optional[float]:
     vals = [int(p) for p in prices if isinstance(p, (int, float)) and int(p) > 0]
-    if len(vals) < 5:
+    if len(vals) < 3:
         return None
     return float(statistics.median(vals))
 

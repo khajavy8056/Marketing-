@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from .categories import search_slug as platform_slug
 from .cities import slug_for_platform
@@ -13,6 +14,7 @@ from .pricing import parse_toman
 
 _AD = re.compile(r"https?://(?:www\.)?ring\.ir/a/([A-Za-z0-9_-]+)", re.I)
 _AD_REL = re.compile(r"/a/([A-Za-z0-9_-]{4,})", re.I)
+_TITLE_NEAR = re.compile(r"<[^>]+>([^<]{6,90})</")
 
 
 def parse_listings(html: str) -> List[Dict[str, Any]]:
@@ -38,13 +40,19 @@ def parse_listings(html: str) -> List[Dict[str, Any]]:
         add(nid)
     for nid in _AD_REL.findall(text):
         add(nid)
+    from .contact import parse_visible_phone
     for p in posts:
         nid = p.get("native_id") or ""
         i = text.find(nid)
-        window = text[max(0, i - 300): i + 800] if i >= 0 else text[:2000]
+        window = text[max(0, i - 400): i + 1000] if i >= 0 else text[:2000]
         price = parse_toman(window)
         if price:
             p["price"] = price
+        ph = parse_visible_phone(window)
+        if ph:
+            p["phone"] = ph
+        if "توافقی" in window:
+            p["price_kind"] = "negotiable"
     return posts[:80]
 
 
@@ -56,7 +64,7 @@ def search_url(city_slug: str = "", category: str = "", query: str = "") -> str:
     if category:
         bits.append("cat=" + category)
     if query:
-        bits.append("q=" + query)
+        bits.append("q=" + quote(query))
     if bits:
         url = "https://ring.ir/?" + "&".join(bits)
     return url

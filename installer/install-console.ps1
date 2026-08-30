@@ -127,7 +127,23 @@ try {
 
 
 
-    L "Health check (main.py --check) ..."
+    
+    L "Installing local NLU model (cache beside installer) ..."
+    $nluDir = Join-Path $Root "nlu-model"
+    $nluDl = Join-Path $Root "installer\nlu-download"
+    New-Item -ItemType Directory -Force -Path $nluDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $nluDl | Out-Null
+    $env:DIVAR_APP_DIR = $Root
+    $env:DIVAR_NLU_DIR = $nluDir
+    $env:DIVAR_NLU_DOWNLOAD = $nluDl
+    & $venvPy "main.py" "--install-nlu"
+    if ($LASTEXITCODE -ne 0) {
+        L "NLU download failed - panel can retry"
+    } else {
+        L "NLU OK -> $nluDir"
+    }
+
+L "Health check (main.py --check) ..."
 
     & $venvPy "main.py" "--check"
     if ($LASTEXITCODE -ne 0) { throw "health check failed" }

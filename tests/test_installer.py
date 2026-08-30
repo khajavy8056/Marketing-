@@ -43,6 +43,10 @@ class TestWindowsInstaller(unittest.TestCase):
             "Install-Python",
             "python.org",
             "WindowStyle Minimized",
+            "--install-nlu",
+            "barNlu",
+            "nlu-model",
+            "DIVAR_NLU_DOWNLOAD",
         ):
             self.assertIn(needle, ps1, f"installer missing: {needle}")
         self.assertFalse(any("\u0600" <= ch <= "\u06FF" for ch in ps1),
@@ -57,7 +61,8 @@ class TestWindowsInstaller(unittest.TestCase):
         for needle in ("Find-Python", "venv", "requirements.txt", "main.py --check",
                        "DivarMarketing", "localhost:8642", "mirror-pypi",
                        "--install-chromium", "app-chromium",
-                       "ungoogled-chromium"):
+                       "ungoogled-chromium",
+                       "--install-nlu", "nlu-model", "DIVAR_NLU_DOWNLOAD"):
             self.assertIn(needle, body)
 
     def test_entry_bats_are_windows_safe(self):

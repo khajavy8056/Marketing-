@@ -10,7 +10,8 @@ if getattr(sys, "frozen", False):
 def _pause_on_crash(msg: str) -> None:
     print(msg)
     if sys.platform == "win32" and "--check" not in sys.argv \
-            and "--install-chromium" not in sys.argv:
+            and "--install-chromium" not in sys.argv \
+            and "--install-nlu" not in sys.argv:
         try:
             input("Press Enter to close this window...")
         except Exception:
@@ -27,7 +28,7 @@ except Exception as e:
 if len(sys.argv) > 1 and sys.argv[1] == "--install-nlu":
     from marketing_divar.nlu_model import ensure_installed as _nlu_install
     try:
-        path = _nlu_install()
+        path = _nlu_install(log=print)
         print("NLU model:", path)
         sys.exit(0)
     except Exception as e:

@@ -11,7 +11,7 @@ python -m marketing_divar.web        # مرورگر باز می‌شود: http:/
 یا ویندوز: دابل‌کلیک روی `scripts/run_web.bat`
 
 
-## 🔐 ورود برنامه (v3.3.0)
+## 🔐 ورود برنامه (v3.3.1)
 صفحهٔ ورود داخل خود برنامه است. دفترچه یک فایل CSV کوچک روی همین مخزن است
 (`license/ok.csv` — لینک خام). هر مشتری یک سطر. برنامه اول نام کاربری را در سطرها
 می‌گردد، بعد رمز، بعد تاریخ انقضا را با **ساعت اینترنت** (هدر Date) می‌سنجد.
@@ -97,9 +97,9 @@ data/, logs/             دادهٔ موقت کنار سورس (به گیت نم
 2. بعد `ساخت-نصب-استاندارد.bat` را دابل‌کلیک کنید
 3. خروجی: `dist\\DivarLead.exe` و کپی روی دسکتاپ
 
-## 📥 دانلود و اجرای سریع روی ویندوز (نسخه ۳.۳.۰)
-1. از [Releases v3.3.0](https://github.com/khajavy8056/Marketing-/releases/tag/v3.3.0) فایل **Source code (zip)** را دانلود کنید
-   یا مستقیم: https://github.com/khajavy8056/Marketing-/archive/refs/tags/v3.3.0.zip
+## 📥 دانلود و اجرای سریع روی ویندوز (نسخه ۳.۳.۱)
+1. از [Releases v3.3.1](https://github.com/khajavy8056/Marketing-/releases/tag/v3.3.1) فایل **Source code (zip)** را دانلود کنید
+   یا مستقیم: https://github.com/khajavy8056/Marketing-/archive/refs/tags/v3.3.1.zip
 2. روی زیپ **راست‌کلیک → Extract All** (از داخل پنجرهٔ زیپ اجرا نکنید)
 3. داخل پوشهٔ استخراج‌شده روی **`Install-and-Run.bat`** دابل‌کلیک کنید
 4. اگر پایتون نصب نباشد نصب‌کننده خودش Python 3.11 را دانلود و نصب می‌کند
