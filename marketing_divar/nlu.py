@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""درک پاسخ چت/پیامک — قاعده اول، مدل محلی فقط اگر مبهم باشد.
+"""درک پاسخ چت/پیامک — قاعده اول، مدل محلی فقط اگر مبهم باشد + حافظه + رویداد.
+
+این نسخه کاملاً تعاملی است مثل n8n:
+- هر تحلیل → حافظه (nlu_memory) به‌روز می‌شود تا درکش اضافه شود
+- هر تحلیل → رویداد reply_received → شکارچی دوباره امتیاز می‌دهد
+- تنظیمات پیشرفته (hunter_profile) در پرامپت اعمال می‌شود
+- مدل نقش ثابت دارد (nlu_role.ROLE_FA) و فقط JSON می‌دهد
 
 مدل پیام بازاریابی بعدی را نمی‌فرستد؛ فقط intent/slots می‌دهد.
 """
@@ -36,7 +42,6 @@ def _slots_price(text: str) -> Optional[int]:
     n = parse_toman(text)
     if n and n >= 10_000:
         return n
-    # «بیست و پنج میلیون» ساده
     m = re.search(r"(\d+(?:[.,]\d+)?)\s*(میلیون|ملیون)", text or "")
     if m:
         try:
@@ -77,7 +82,7 @@ def analyze_rules(text: str) -> Dict[str, Any]:
         if intent in ("unclear", "greeting", "available_yes", "negotiate"):
             intent, conf = "price_quote", 0.88
         elif intent == "defect_admit":
-            conf = 0.86  # هر دو اسلات پر
+            conf = 0.86
 
     if intent == "unclear":
         if any(normalize(w) in n for w in _REFUSE):
@@ -169,35 +174,67 @@ def _parse_llm_json(blob: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
-    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد."""
+def analyze(text: str, use_llm: bool = True, keyword: str = "", category: str = "") -> Dict[str, Any]:
+    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد.
+    
+    با حافظه گره خورده: اگر کلمه/دسته داده شود، پرامپت با حافظه غنی می‌شود.
+    """
     base = analyze_rules(text)
+    # اگر اطمینان بالا یا LLM خاموش → همان قاعده + حافظه
     if base["confidence"] >= 0.75 or not use_llm:
+        # حتی در این حالت حافظه برای یادگیری
+        try:
+            from .nlu_memory import remember_reply
+            # ذخیره نمی‌کنیم چون هنوز token نداریم، ولی stats
+        except Exception:
+            pass
         return base
     try:
         from .nlu_model import is_ready, infer_json
+        from .nlu_memory import enrich_prompt_with_memory
         if not is_ready():
             base["needs_human"] = True
             return base
-        raw = infer_json(reply_prompt(text or ""))
+        # پرامپت با حافظه غنی می‌شود — هر بار که کاربر چیزی اضافه می‌کند درک اضافه می‌شود
+        prompt_base = reply_prompt(text or "")
+        prompt = enrich_prompt_with_memory(prompt_base, keyword=keyword, category=category)
+        raw = infer_json(prompt)
         parsed = _parse_llm_json(raw)
         if not parsed:
             base["needs_human"] = True
+            base["llm_raw"] = raw[:500]
             return base
         parsed["raw"] = (text or "")[:800]
+        parsed["llm_raw"] = raw[:500]
         if parsed["confidence"] < 0.45:
             parsed["needs_human"] = True
-        return parsed
-    except Exception:
+        # اگر مدل بهتر از قاعده بود، آن را بده
+        if parsed["confidence"] > base["confidence"]:
+            return parsed
+        return base
+    except Exception as e:
         base["needs_human"] = True
+        base["error"] = str(e)[:200]
         return base
 
 
 def analyze_for_platform(text: str, platform: str = "divar",
-                         use_llm: bool = True) -> Dict[str, Any]:
+                         use_llm: bool = True, keyword: str = "", category: str = "") -> Dict[str, Any]:
     """همان تحلیل برای دیوار/شیپور/رینگ — زبان پاسخ فارسی است."""
-    out = analyze(text, use_llm=use_llm)
+    out = analyze(text, use_llm=use_llm, keyword=keyword, category=category)
     out["platform"] = str(platform or "divar")
+    # رویداد — مدل فعال است
+    try:
+        from .events import emit
+        emit("reply_received", {
+            "platform": out["platform"],
+            "intent": out.get("intent"),
+            "confidence": out.get("confidence"),
+            "text": text[:200],
+            "source": out.get("source"),
+        })
+    except Exception:
+        pass
     return out
 
 
@@ -241,17 +278,36 @@ def apply_to_lead(con, token: str, result: Dict[str, Any],
         acted = "error"
     result = dict(result)
     result["acted"] = acted
+    # حافظه و رویداد
+    try:
+        from .nlu_memory import remember_reply
+        remember_reply(token, intent, float(result.get("confidence") or 0),
+                       text=result.get("raw") or "", slots=slots)
+    except Exception:
+        pass
+    try:
+        from .events import emit
+        emit("reply_received", {
+            "token": token,
+            "intent": intent,
+            "confidence": result.get("confidence"),
+            "acted": acted,
+            "context": context,
+        })
+    except Exception:
+        pass
     return result
 
 
 def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
-    """اسلات پروفایل از پاسخ فروشنده + امتیاز دوباره شکارچی."""
+    """اسلات پروفایل از پاسخ فروشنده + امتیاز دوباره شکارچی حرفه‌ای + مذاکره."""
     try:
         row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
         if not row:
             return
-        from .hunter import collect_samples, evaluate
+        from .hunter import collect_samples_detailed, evaluate
         from .hunter_profile import default_profile, fill_from_reply, merge_overrides
+
         keyword = row["keyword"] if "keyword" in row.keys() else ""
         adv: Dict[str, Any] = {}
         cat = ""
@@ -269,44 +325,208 @@ def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
         prof = merge_overrides(default_profile(cat, keyword), adv)
         text = result.get("raw") or ""
         filled = fill_from_reply(text, prof)
-        chassis = filled.get("chassis") or (
-            row["chassis"] if "chassis" in row.keys() else "")
-        paint = filled.get("paint") or (
-            row["paint"] if "paint" in row.keys() else "")
-        year = filled.get("year") or (
-            row["car_year"] if "car_year" in row.keys() else 0)
-        km = filled.get("mileage_km") or (
-            row["mileage_km"] if "mileage_km" in row.keys() else 0)
-        price = filled.get("price_toman") or (
-            row["price"] if "price" in row.keys() else 0)
+        chassis = filled.get("chassis") or (row["chassis"] if "chassis" in row.keys() else "")
+        paint = filled.get("paint") or (row["paint"] if "paint" in row.keys() else "")
+        year = filled.get("year") or (row["car_year"] if "car_year" in row.keys() else 0)
+        km = filled.get("mileage_km") or (row["mileage_km"] if "mileage_km" in row.keys() else 0)
+        price = filled.get("price_toman") or (row["price"] if "price" in row.keys() else 0)
+
         extra = {
             "title": row["title"] if "title" in row.keys() else "",
-            "chassis": chassis, "paint": paint,
+            "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
+            "description": row["description"] if "description" in row.keys() else "",
+            "chassis": chassis,
+            "paint": paint,
             "hunter_flags": filled.get("flags") or {},
-            "category": cat, "keyword": keyword,
+            "category": cat,
+            "keyword": keyword,
             "is_defect": bool(row["is_defect"]) if "is_defect" in row.keys() else False,
             "is_placeholder": False,
             "is_buyer": bool(row["is_buyer"]) if "is_buyer" in row.keys() else False,
+            "year": year,
+            "car_year": year,
+            "mileage_km": km,
         }
         city = row["city"] if "city" in row.keys() else ""
         plat = row["platform"] if "platform" in row.keys() else "divar"
-        samples = collect_samples(con, keyword, city, plat)
+
+        # نمونه‌های دقیق برای آنالیزور حرفه‌ای
+        try:
+            samples = collect_samples_detailed(con, keyword, city, plat)
+        except Exception:
+            from .hunter import collect_samples
+
+            samples = collect_samples(con, keyword, city, plat)
+
         sc = evaluate(int(price or 0), samples, extra=extra, profile=prof, text=text)
         level = sc.get("level") or ""
         if result.get("intent") == "defect_admit":
             level = ""
+
+        # --- مذاکره: اگر پاسخ جدید قیمت دارد، تاریخچه مذاکره را به‌روز کن ---
+        negotiation_status = ""
+        negotiated_price = 0
+        negotiation_history: List[Dict[str, Any]] = []
+        try:
+            raw_hist = row["negotiation_history"] if "negotiation_history" in row.keys() else ""
+            if raw_hist:
+                negotiation_history = json.loads(raw_hist)
+        except Exception:
+            negotiation_history = []
+
+        # پاسخ فروشنده را به تاریخچه اضافه کن
+        if text:
+            negotiation_history.append({"role": "seller", "text": text[:500], "price": price})
+
+        # اگر قیمت جدید اعلام شده، negotiated_price را به‌روز کن
+        if result.get("slots", {}).get("price_toman"):
+            try:
+                negotiated_price = int(result["slots"]["price_toman"])
+            except Exception:
+                negotiated_price = int(price or 0)
+        else:
+            # اگر قبلاً negotiated_price داشت
+            try:
+                negotiated_price = int(row["negotiated_price"] if "negotiated_price" in row.keys() else 0)
+            except Exception:
+                negotiated_price = 0
+
+        # تصمیم مذاکره
+        try:
+            from .hunter_negotiator import (
+                analyze_negotiation_reply,
+                build_vip_payload,
+                should_continue_negotiation,
+                should_start_negotiation,
+            )
+
+            # اگر شکار good/great است و هنوز مذاکره نکرده‌ایم → شروع مذاکره
+            if should_start_negotiation(sc) and not negotiation_history:
+                # فقط اگر قبلاً inquiry جواب داده شده
+                negotiation_status = "negotiating"
+            elif negotiation_history:
+                # تحلیل ادامه
+                cont, stage = should_continue_negotiation(negotiation_history, sc)
+                if not cont:
+                    if stage == "negotiated":
+                        negotiation_status = "negotiated"
+                    elif stage == "refused":
+                        negotiation_status = "refused"
+                    else:
+                        negotiation_status = "negotiated" if level in ("good", "great") else "pending"
+                else:
+                    negotiation_status = "negotiating"
+
+            # اگر مذاکره تمام و شکار است → VIP
+            if negotiation_status in ("negotiated", "negotiating") and level in ("good", "great"):
+                # اگر توافق شده یا حتی در حال مذاکره ولی قیمت خوب است، VIP
+                if sc.get("confidence", 0) >= 0.5:
+                    # VIP payload
+                    vip_payload = build_vip_payload(
+                        token=token,
+                        title=str(row["title"] if "title" in row.keys() else ""),
+                        original_price=int(row["price"] if "price" in row.keys() else price or 0),
+                        negotiated_price=negotiated_price or None,
+                        fair_price=int(sc.get("fair") or 0),
+                        healthy_median=int(sc.get("healthy_median") or sc.get("median") or 0),
+                        discount_pct=sc.get("discount_pct"),
+                        level=level,
+                        flags=sc.get("flags") or {},
+                        confidence=float(sc.get("confidence") or 0),
+                        market=sc.get("market") or {},
+                        negotiation_history=negotiation_history,
+                        url=str(row["url"] if "url" in row.keys() else ""),
+                        phone=str(row["phone"] if "phone" in row.keys() else ""),
+                        city=str(city),
+                    )
+                    try:
+                        from .events import emit
+
+                        emit("hunter_vip", vip_payload)
+                        emit("hunter_negotiated", vip_payload)
+                    except Exception:
+                        pass
+                    # اگر negotiated_price داریم و بهتر از قیمت اصلی است، قیمت را به‌روز کن
+                    if negotiated_price and negotiated_price > 0:
+                        try:
+                            con.execute(
+                                "UPDATE leads SET negotiated_price=?, negotiation_status='vip', vip=1 WHERE token=?",
+                                (negotiated_price, token),
+                            )
+                        except Exception:
+                            pass
+        except Exception as e:
+            # مذاکره خطا → نادیده
+            pass
+
+        # ذخیره نهایی
         try:
             con.execute(
                 "UPDATE leads SET chassis=?, paint=?, car_year=?, mileage_km=?, "
                 "hunter_level=?, hunter_adj_pct=?, hunter_questions=?, "
+                "hunter_confidence=?, hunter_fair_price=?, hunter_discount_pct=?, hunter_market_median=?, "
+                "negotiation_history=?, negotiated_price=?, "
                 "inquiry_status=CASE WHEN inquiry_status IN ('pending','sent') "
                 "THEN 'answered' ELSE inquiry_status END WHERE token=?",
-                (str(chassis or ""), str(paint or ""), int(year or 0), int(km or 0),
-                 level, float(sc.get("adj_pct") or 0),
-                 str(sc.get("questions") or "")[:400], token))
+                (
+                    str(chassis or ""),
+                    str(paint or ""),
+                    int(year or 0),
+                    int(km or 0),
+                    level,
+                    float(sc.get("adj_pct") or 0),
+                    str(sc.get("questions") or "")[:400],
+                    float(sc.get("confidence") or 0),
+                    int(sc.get("fair") or 0),
+                    float(sc.get("discount_pct") or 0),
+                    int(sc.get("healthy_median") or sc.get("median") or 0),
+                    json.dumps(negotiation_history, ensure_ascii=False)[:4000],
+                    int(negotiated_price or 0),
+                    token,
+                ),
+            )
         except Exception:
-            con.execute(
-                "UPDATE leads SET chassis=?, paint=? WHERE token=?",
-                (str(chassis or ""), str(paint or ""), token))
+            try:
+                con.execute(
+                    "UPDATE leads SET chassis=?, paint=?, car_year=?, mileage_km=?, "
+                    "hunter_level=?, hunter_adj_pct=?, hunter_questions=? WHERE token=?",
+                    (
+                        str(chassis or ""),
+                        str(paint or ""),
+                        int(year or 0),
+                        int(km or 0),
+                        level,
+                        float(sc.get("adj_pct") or 0),
+                        str(sc.get("questions") or "")[:400],
+                        token,
+                    ),
+                )
+            except Exception:
+                con.execute(
+                    "UPDATE leads SET chassis=?, paint=? WHERE token=?",
+                    (str(chassis or ""), str(paint or ""), token),
+                )
+
+        # رویداد شکارچی
+        try:
+            from .events import emit
+
+            emit(
+                "hunter_evaluated",
+                {
+                    "token": token,
+                    "level": level,
+                    "price": price,
+                    "fair": sc.get("fair"),
+                    "healthy_median": sc.get("healthy_median"),
+                    "discount_pct": sc.get("discount_pct"),
+                    "confidence": sc.get("confidence"),
+                    "chassis": chassis,
+                    "paint": paint,
+                    "negotiation_status": negotiation_status,
+                },
+            )
+        except Exception:
+            pass
     except Exception:
         return

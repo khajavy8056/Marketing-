@@ -13,10 +13,11 @@ IDS = ("divar", "sheypoor", "ring")
 TITLES = {
     "divar": "دیوار",
     "sheypoor": "شیپور",
-    "ring": "رینگ",
+    "ring": "رینگ (غیرفعال)",
 }
 
-# صفحهٔ لاگین / خانه — سه سربرگ داخل یک پروفایل
+# صفحهٔ لاگین / خانه — هر پلتفرم تب جدا در یک پروفایل
+# الان فقط دیوار و شیپور فعال، رینگ کنار
 LOGIN_TABS: List[Tuple[str, str]] = [
     ("divar", "https://divar.ir/user"),
     ("sheypoor", "https://www.sheypoor.com/session"),
@@ -28,6 +29,9 @@ CAPTCHA_TABS: List[Tuple[str, str]] = [
     ("sheypoor", "https://www.sheypoor.com/"),
     ("ring", "https://ring.ir/"),
 ]
+
+# فقط دیوار و شیپور فعال پیش‌فرض
+ACTIVE_IDS = ("divar", "sheypoor")
 
 
 def normalize_id(raw: Any) -> str:
@@ -76,12 +80,23 @@ def enabled_from_settings(s: Dict[str, Any] | None) -> List[str]:
     out = []
     for pid in IDS:
         key = "platform_%s" % pid
-        if s.get(key, True) is False or s.get(key) in (0, "0", "false", "False"):
+        # رینگ پیش‌فرض غیرفعال
+        default_on = True if pid in ACTIVE_IDS else False
+        val = s.get(key, default_on)
+        if val is False or val in (0, "0", "false", "False"):
             continue
         out.append(pid)
     if not out:
         out = ["divar"]
+    # فیلتر نهایی: اگر فقط رینگ بود، دیوار را برگردان
+    if out == ["ring"]:
+        out = ["divar"]
     return out
+
+
+def active_platforms() -> List[str]:
+    """فقط دیوار و شیپور فعال"""
+    return list(ACTIVE_IDS)
 
 
 def login_urls(enabled: List[str] | None = None) -> List[str]:

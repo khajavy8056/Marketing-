@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Entry point — console text is English only."""
+"""Entry point — console text is English only.
+Supports:
+  --install-nlu        download Qwen model with download manager
+  --install-chromium   download Chromium with download manager
+  --desktop / --tira / --app   open native desktop window (Tira) without browser
+  --web                force browser mode (old)
+  --check              self check
+"""
 import os
 import sys
 
@@ -53,7 +60,33 @@ if len(sys.argv) > 1 and sys.argv[1] == "--session-view":
     from marketing_divar.session_view import main as session_view_main
     sys.exit(session_view_main(sys.argv[2:]))
 
+if len(sys.argv) > 1 and sys.argv[1] in ("--desktop", "--tira", "--app"):
+    try:
+        from marketing_divar.desktop_app import main as desktop_main  # noqa: E402
+        sys.exit(desktop_main())
+    except Exception as e:
+        _pause_on_crash(f"Desktop app failed: {e}")
+        raise
+
 print(f"Data folder: {_data}")
+
+# اگر pywebview نصب باشد و کاربر --web نزده، دسکتاپ مستقل زیباتر است
+_use_desktop = "--web" not in sys.argv
+if _use_desktop:
+    try:
+        import webview  # noqa: F401
+        from marketing_divar.desktop_app import main as desktop_main  # noqa: E402
+        print("Desktop mode (pywebview) detected — opening native Tira window")
+        try:
+            desktop_main()
+            sys.exit(0)
+        except SystemExit:
+            raise
+        except Exception as e:
+            print(f"Desktop fallback to web: {e}")
+    except ImportError:
+        pass
+
 try:
     from marketing_divar.web.__main__ import main  # noqa: E402
 except Exception as e:

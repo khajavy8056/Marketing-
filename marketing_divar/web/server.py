@@ -709,6 +709,234 @@ def keywords_hunter_adv(kw_id: int, req: HunterAdvUpdate):
     return {"ok": True, "message": "تنظیمات پیشرفته شکارچی ذخیره شد"}
 
 
+@app.get("/api/hunter/analyze/{token}")
+def hunter_analyze_token(token: str):
+    """آنالیز حرفه‌ای یک آگهی — بازار سالم + اطمینان + مذاکره."""
+    from ..hunter import collect_samples_detailed, evaluate
+    from ..hunter_profile import default_profile, merge_overrides
+    import json as _json
+
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        kw = row["keyword"] if "keyword" in row.keys() else ""
+        city = row["city"] if "city" in row.keys() else ""
+        plat = row["platform"] if "platform" in row.keys() else "divar"
+        cat = ""
+        adv = {}
+        try:
+            kwrow = con.execute("SELECT category, hunter_adv FROM keywords WHERE keyword=?", (kw,)).fetchone()
+            if kwrow:
+                cat = kwrow["category"] or ""
+                raw = kwrow["hunter_adv"] or ""
+                if raw:
+                    adv = _json.loads(raw)
+        except Exception:
+            pass
+        prof = merge_overrides(default_profile(cat, kw), adv)
+        extra = dict(row)
+        extra["keyword"] = kw
+        extra["category"] = cat
+        blob = " ".join(str(row[k] or "") for k in ("title", "subtitle", "description", "inspect_summary") if k in row.keys())
+        samples = collect_samples_detailed(con, kw, city, plat, limit=80)
+        sc = evaluate(int(row["price"] if "price" in row.keys() else 0), samples, extra=extra, profile=prof, text=blob)
+        # مذاکره
+        history = []
+        try:
+            raw_hist = row["negotiation_history"] if "negotiation_history" in row.keys() else ""
+            if raw_hist:
+                history = _json.loads(raw_hist)
+        except Exception:
+            history = []
+        return {"ok": True, "analysis": sc, "negotiation_history": history, "lead": dict(row)}
+    finally:
+        con.close()
+
+
+@app.post("/api/hunter/negotiate/{token}")
+def hunter_negotiate_trigger(token: str):
+    """شروع/ادامه مذاکره دستی برای یک آگهی شکار."""
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        # اگر مانیتور در حال اجراست، از متدش استفاده کن، وگرنه فقط رویداد بزن
+        mon = _state.get("monitor")
+        if mon:
+            try:
+                mon._maybe_hunter_negotiate(con, row, phone=row["phone"] if "phone" in row.keys() else "")
+                return {"ok": True, "message": "مذاکره ارسال شد"}
+            except Exception as e:
+                raise HTTPException(400, str(e))
+        else:
+            # بدون مانیتور — فقط تحلیل مذاکره را برگردان
+            from ..hunter_negotiator import generate_negotiation_message
+
+            context = {
+                "price": int(row["price"] if "price" in row.keys() else 0),
+                "fair": int(row["hunter_fair_price"] if "hunter_fair_price" in row.keys() else 0),
+                "healthy_median": int(row["hunter_market_median"] if "hunter_market_median" in row.keys() else 0),
+                "discount_pct": float(row["hunter_discount_pct"] if "hunter_discount_pct" in row.keys() else 0),
+                "title": str(row["title"] if "title" in row.keys() else ""),
+                "level": str(row["hunter_level"] if "hunter_level" in row.keys() else ""),
+            }
+            msg = generate_negotiation_message(context, [], stage="opener")
+            return {"ok": True, "message": msg, "text": msg}
+    finally:
+        con.close()
+
+
+@app.get("/api/hunter/vip")
+def hunter_vip_list(limit: int = 50):
+    """لیست شکارهای ویژه — VIP آلارم‌ها."""
+    con = connect(DB_PATH)
+    try:
+        rows = con.execute(
+            "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+            "hunter_confidence,negotiated_price,negotiation_status,url,phone,city,platform "
+            "FROM leads WHERE hunter_level IN ('good','great') ORDER BY id DESC LIMIT ?",
+            (min(limit, 200),),
+        ).fetchall()
+        return {"ok": True, "vip": [dict(r) for r in rows]}
+    finally:
+        con.close()
+
+
+@app.get("/api/hunter/recheck-week")
+def hunter_recheck_week(limit: int = 20):
+    """هفته گذشته — شکارهایی که پیام نرفته یا مذاکره نیمه‌کاره است."""
+    from ..monitor import recheck_week_old_leads
+    res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 100))
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/recheck-week/run")
+def hunter_recheck_week_run(limit: int = 12):
+    """اجرای مذاکره/استعلام برای آگهی‌های هفته گذشته که پیام نرفته."""
+    mon = _state.get("monitor")
+    if mon:
+        stats = mon.drain_week_old(max_items=min(limit, 30))
+        return {"ok": True, "ran": True, "stats": stats, "message": f"{stats.get('negotiated',0)} مذاکره و {stats.get('inquired',0)} استعلام ارسال شد"}
+    else:
+        # بدون مانیتور — فقط لیست را برگردان، ارسال دستی از طریق negotiate/inquire
+        from ..monitor import recheck_week_old_leads
+        res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 30))
+        need = [x for x in res.get("items", []) if x.get("needs_action")]
+        return {"ok": True, "ran": False, "needs_action": len(need), "items": need,
+                "message": f"مانیتور خاموش است — {len(need)} مورد نیاز به اقدام دستی دارد. مانیتور را روشن کن یا دکمه مذاکره را بزن"}
+
+
+# --------------------------------------------------- AI شکارچی — تنظیمات با کمک AI --
+class HunterAIChatReq(BaseModel):
+    message: str = ""
+    session_id: str = "default"
+    reset: bool = False
+
+
+class HunterAIApplyReq(BaseModel):
+    session_id: str = "default"
+    config: Optional[Dict[str, Any]] = None  # اگر مستقیم بفرستد
+    city_ids: Optional[List[int]] = None  # شهرهای پیش‌فرض برای پایش
+
+
+@app.post("/api/hunter/ai-start")
+def hunter_ai_start(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    res = wiz.start()
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/ai-chat")
+def hunter_ai_chat(req: HunterAIChatReq):
+    from ..hunter_ai_wizard import get_wizard
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+    if req.reset:
+        wiz.reset()
+        start = wiz.start()
+        return {"ok": True, **start}
+    # اگر هنوز start نشده، start کن
+    if not wiz.state.get("messages"):
+        wiz.start()
+    result = wiz.handle_user(req.message or "")
+    return {"ok": True, **result}
+
+
+@app.get("/api/hunter/ai-config")
+def hunter_ai_config(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    cfg = wiz.build_config()
+    return {"ok": True, "config": cfg, "state": wiz.get_state(), "ready": bool(wiz.state.get("done"))}
+
+
+@app.post("/api/hunter/ai-apply")
+def hunter_ai_apply(req: HunterAIApplyReq):
+    """ست کردن تنظیمات AI — خودکار کلمات کلیدی + hunter_adv می‌سازد"""
+    from ..hunter_ai_wizard import get_wizard
+    from ..cities import parse_city_ids
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+
+    cfg = req.config or wiz.build_config()
+    if not cfg or not cfg.get("keywords"):
+        raise HTTPException(400, "هنوز تنظیماتی آماده نیست — اول با AI چت کن")
+
+    cities = parse_city_ids(req.city_ids) if req.city_ids else None
+    # اگر شهر نداده، از تنظیمات قبلی یا None (همه ایران)
+    if cities is None:
+        try:
+            specs = store.keywords_active_specs(DB_PATH)
+            if specs and specs[0].get("cities"):
+                cities = specs[0].get("cities")
+        except Exception:
+            cities = None
+
+    added = 0
+    for kw in cfg.get("keywords", []):
+        keyword = kw.get("keyword") or kw.get("model") or ""
+        category = kw.get("category") or "mobile-phones"
+        price_min = int(kw.get("price_min") or 0)
+        price_max = int(kw.get("price_max") or 0)
+        hunter_adv = kw.get("hunter_adv") or {}
+        # تضمین vip+hunter
+        ok = store.keywords_add(
+            DB_PATH, keyword, cities, category,
+            price_min=price_min, price_max=price_max,
+            vip=True, hunter=True, hunter_adv=hunter_adv
+        )
+        if ok:
+            added += 1
+
+    log("success", f"تنظیمات AI شکارچی اعمال شد — {added} کلمه کلیدی: {', '.join([k['keyword'] for k in cfg.get('keywords',[])])}")
+    return {
+        "ok": True,
+        "added": added,
+        "message": f"{added} تنظیم شکارچی ست شد ✅ دیوار و شیپور هر دو فعال — مانیتور را شروع کن",
+        "config": cfg,
+        "warnings": cfg.get("warnings", []),
+    }
+
+
+@app.get("/api/platforms")
+def platforms_status():
+    from ..platforms import active_platforms, enabled_from_settings, TITLES
+    s = store.settings_all(DB_PATH)
+    enabled = enabled_from_settings(s)
+    return {
+        "ok": True,
+        "active_default": list(active_platforms()),
+        "enabled": enabled,
+        "titles": TITLES,
+        "settings": {f"platform_{pid}": bool(s.get(f"platform_{pid}", pid in active_platforms())) for pid in ("divar", "sheypoor", "ring")},
+        "note": "رینگ غیرفعال پیش‌فرض — فقط دیوار و شیپور فعال",
+    }
+
+
 # ------------------------------------------------------------- API پیام‌ها --
 @app.get("/api/templates")
 def templates_get():
@@ -829,7 +1057,7 @@ def robot_status():
             "platforms": {
                 "divar": bool(s.get("platform_divar", True)),
                 "sheypoor": bool(s.get("platform_sheypoor", True)),
-                "ring": bool(s.get("platform_ring", True)),
+                "ring": bool(s.get("platform_ring", False)),
             },
             "nlu": nlu_st(),
             "chats_today": quota_today(con).get("chats", 0),
@@ -865,11 +1093,65 @@ def nlu_status():
 
 
 @app.post("/api/nlu/install")
-def nlu_install():
+def nlu_install(small: bool = False):
     from ..nlu_model import start_install_async
-    st = start_install_async()
+    st = start_install_async(small=small)
     log("info", "دانلود مدل محلی درک متن شروع شد")
     return {"ok": True, "message": "دانلود مدل محلی شروع شد — کنار برنامه نصب می‌شود", **st}
+
+
+@app.post("/api/nlu/install-dummy")
+def nlu_install_dummy():
+    """نصب مدل تستی 10MB برای تست صفر تا صد بدون دانلود 1.5GB — fallback هوشمند فعال."""
+    from ..nlu_model import ensure_dummy_model_for_test, status as nlu_st
+    try:
+        ensure_dummy_model_for_test()
+        log("success", "مدل تستی نصب شد — fallback هوشمند فعال")
+        return {"ok": True, "message": "مدل تستی نصب شد — سیستم کامل با fallback هوشمند کار می‌کند", **nlu_st()}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/nlu/memory")
+def nlu_memory():
+    from ..nlu_memory import get_memory, get_stats
+    return {"memory": get_memory(), "stats": get_stats()}
+
+
+@app.get("/api/nlu/events")
+def nlu_events(limit: int = 50):
+    from ..events import recent
+    return {"events": recent(limit)}
+
+
+@app.get("/api/nlu/engine")
+def nlu_engine_status():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.status()
+
+
+@app.post("/api/nlu/selftest")
+def nlu_selftest():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    res = eng.full_selftest()
+    log("success" if res.get("ok") else "warning", f"تست صفر تا صد: {res.get('summary')}")
+    return res
+
+
+class NluAnalyzeReq(BaseModel):
+    text: str = ""
+    keyword: str = ""
+    category: str = ""
+    platform: str = "divar"
+
+
+@app.post("/api/nlu/analyze")
+def nlu_analyze(req: NluAnalyzeReq):
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.analyze_reply(req.text, keyword=req.keyword, category=req.category, platform=req.platform)
 
 
 # ------------------------------------------------------------ API مانیتور --

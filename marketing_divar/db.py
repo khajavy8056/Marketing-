@@ -195,6 +195,13 @@ _LEAD_MIGRATIONS = (
     ("image_count", "INTEGER DEFAULT 0"),
     ("hunter_adj_pct", "REAL DEFAULT 0"),
     ("hunter_questions", "TEXT DEFAULT ''"),
+    ("negotiation_status", "TEXT DEFAULT ''"),
+    ("negotiated_price", "INTEGER DEFAULT 0"),
+    ("negotiation_history", "TEXT DEFAULT ''"),
+    ("hunter_confidence", "REAL DEFAULT 0"),
+    ("hunter_fair_price", "INTEGER DEFAULT 0"),
+    ("hunter_discount_pct", "REAL DEFAULT 0"),
+    ("hunter_market_median", "INTEGER DEFAULT 0"),
 )
 
 
