@@ -805,6 +805,117 @@ def hunter_vip_list(limit: int = 50):
         con.close()
 
 
+# --------------------------------------------------- AI شکارچی — تنظیمات با کمک AI --
+class HunterAIChatReq(BaseModel):
+    message: str = ""
+    session_id: str = "default"
+    reset: bool = False
+
+
+class HunterAIApplyReq(BaseModel):
+    session_id: str = "default"
+    config: Optional[Dict[str, Any]] = None  # اگر مستقیم بفرستد
+    city_ids: Optional[List[int]] = None  # شهرهای پیش‌فرض برای پایش
+
+
+@app.post("/api/hunter/ai-start")
+def hunter_ai_start(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    res = wiz.start()
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/ai-chat")
+def hunter_ai_chat(req: HunterAIChatReq):
+    from ..hunter_ai_wizard import get_wizard
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+    if req.reset:
+        wiz.reset()
+        start = wiz.start()
+        return {"ok": True, **start}
+    # اگر هنوز start نشده، start کن
+    if not wiz.state.get("messages"):
+        wiz.start()
+    result = wiz.handle_user(req.message or "")
+    return {"ok": True, **result}
+
+
+@app.get("/api/hunter/ai-config")
+def hunter_ai_config(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    cfg = wiz.build_config()
+    return {"ok": True, "config": cfg, "state": wiz.get_state(), "ready": bool(wiz.state.get("done"))}
+
+
+@app.post("/api/hunter/ai-apply")
+def hunter_ai_apply(req: HunterAIApplyReq):
+    """ست کردن تنظیمات AI — خودکار کلمات کلیدی + hunter_adv می‌سازد"""
+    from ..hunter_ai_wizard import get_wizard
+    from ..cities import parse_city_ids
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+
+    cfg = req.config or wiz.build_config()
+    if not cfg or not cfg.get("keywords"):
+        raise HTTPException(400, "هنوز تنظیماتی آماده نیست — اول با AI چت کن")
+
+    cities = parse_city_ids(req.city_ids) if req.city_ids else None
+    # اگر شهر نداده، از تنظیمات قبلی یا None (همه ایران)
+    if cities is None:
+        try:
+            from ... import store as _store
+            # شهرهای آخرین پایش فعال
+            specs = _store.keywords_active_specs(DB_PATH)
+            if specs and specs[0].get("cities"):
+                cities = specs[0].get("cities")
+        except Exception:
+            cities = None
+
+    added = 0
+    from ..pricing import million_to_toman
+    for kw in cfg.get("keywords", []):
+        keyword = kw.get("keyword") or kw.get("model") or ""
+        category = kw.get("category") or "mobile-phones"
+        price_min = int(kw.get("price_min") or 0)
+        price_max = int(kw.get("price_max") or 0)
+        hunter_adv = kw.get("hunter_adv") or {}
+        # تضمین vip+hunter
+        ok = store.keywords_add(
+            DB_PATH, keyword, cities, category,
+            price_min=price_min, price_max=price_max,
+            vip=True, hunter=True, hunter_adv=hunter_adv
+        )
+        if ok:
+            added += 1
+
+    log("success", f"تنظیمات AI شکارچی اعمال شد — {added} کلمه کلیدی: {', '.join([k['keyword'] for k in cfg.get('keywords',[])])}")
+    return {
+        "ok": True,
+        "added": added,
+        "message": f"{added} تنظیم شکارچی ست شد ✅ دیوار و شیپور هر دو فعال — مانیتور را شروع کن",
+        "config": cfg,
+        "warnings": cfg.get("warnings", []),
+    }
+
+
+@app.get("/api/platforms")
+def platforms_status():
+    from ..platforms import active_platforms, enabled_from_settings, TITLES
+    s = store.settings_all(DB_PATH)
+    enabled = enabled_from_settings(s)
+    return {
+        "ok": True,
+        "active_default": list(active_platforms()),
+        "enabled": enabled,
+        "titles": TITLES,
+        "settings": {f"platform_{pid}": bool(s.get(f"platform_{pid}", pid in active_platforms())) for pid in ("divar", "sheypoor", "ring")},
+        "note": "رینگ غیرفعال پیش‌فرض — فقط دیوار و شیپور فعال",
+    }
+
+
 # ------------------------------------------------------------- API پیام‌ها --
 @app.get("/api/templates")
 def templates_get():
@@ -925,7 +1036,7 @@ def robot_status():
             "platforms": {
                 "divar": bool(s.get("platform_divar", True)),
                 "sheypoor": bool(s.get("platform_sheypoor", True)),
-                "ring": bool(s.get("platform_ring", True)),
+                "ring": bool(s.get("platform_ring", False)),
             },
             "nlu": nlu_st(),
             "chats_today": quota_today(con).get("chats", 0),

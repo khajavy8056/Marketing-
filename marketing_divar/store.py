@@ -74,7 +74,7 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "chat_auto_hourly_limit": 8,
     "platform_divar": True,
     "platform_sheypoor": True,
-    "platform_ring": True,
+    "platform_ring": False,
     "hunter_good_pct": 10,
     "hunter_great_pct": 22,
     "hunter_suspicious_pct": 45,

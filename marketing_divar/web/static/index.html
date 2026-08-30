@@ -229,6 +229,7 @@
   <button data-tab="dash" class="active">📊 داشبورد</button>
   <button data-tab="accounts">👤 اکانت‌ها</button>
   <button data-tab="keywords">🔑 کلمات کلیدی</button>
+  <button data-tab="hunter-ai">🧠 شکارچی AI</button>
   <button data-tab="messages">✉️ پیام‌ها</button>
   <button data-tab="leads">📋 سرنخ‌ها</button>
   <button data-tab="robot">🤖 ربات هوشمند</button>
@@ -390,6 +391,39 @@
   </div>
 </section>
 
+<!-- ═══════════════════════ شکارچی AI — ویزارد فارسی ═══════════════════════ -->
+<section id="tab-hunter-ai" class="tab">
+  <div class="grid g2">
+    <div class="card">
+      <h3>🧠 شکارچی AI — دستیار تنظیم خودکار</h3>
+      <div class="warn-box">بنویس: «دنبال مچ دستگاهی آیفون X 12 13 14 15 قیمت خوب بخریم» — ربات می‌فهمه چه مدل‌هایی، قیمت فروش سالم چقدره، سود مورد انتظار، تعداد، وضعیت. قدم به قدم می‌پرسه و آخر کارت تنظیمات آماده با دکمه «ست کردن تنظیمات» می‌ده. مدل فقط برای فهم حرف آدمه، قیمت از شما می‌گیره نه از خودش.</div>
+      <div id="ai-chat-log" class="feed" style="max-height:420px; min-height:220px; border:1px solid var(--line); border-radius:10px; padding:10px; background:#fafbfd"></div>
+      <div class="row" style="margin-top:10px">
+        <input id="ai-chat-input" placeholder="مثلاً: دنبال آیفون ۱۲ و ۱۳ تمیز میخوام، هر کدوم ۲ میلیون سود…" style="flex:1">
+        <button class="btn ok" type="button" onclick="aiSend()">ارسال</button>
+        <button class="btn gray" type="button" onclick="aiReset()">شروع دوباره</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Enter هم ارسال می‌کند. اگر گیج شد «شروع دوباره» بزن.</div>
+    </div>
+    <div class="card" id="ai-config-card" style="display:none">
+      <h3>📋 پیش‌نمایش تنظیمات — کارت آماده</h3>
+      <div id="ai-config-summary" class="hint" style="line-height:2"></div>
+      <div style="max-height:320px; overflow:auto; margin-top:10px">
+        <table style="width:100%; font-size:12.5px"><thead><tr><th>مدل</th><th>فروش سالم</th><th>سود</th><th>حداکثر خرید</th><th>شرایط</th></tr></thead><tbody id="ai-config-tbody"></tbody></table>
+      </div>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">شهرها (اختیاری — خالی = همه ایران)</div>
+          <select id="ai-city" multiple size="6"><option value="0">همه ایران</option></select></div>
+        <div><div class="lbl">توضیح</div><div class="hint" id="ai-config-note"></div></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn ok" type="button" id="ai-apply-btn" onclick="aiApply()">⭐ ست کردن تنظیمات</button>
+        <span class="hint" id="ai-apply-hint"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════════════════ پیام‌ها ═══════════════════════ -->
 <section id="tab-messages" class="tab">
   <div class="grid g2">
@@ -522,9 +556,9 @@
         <label for="set-plat-divar"><b>دیوار</b></label></div>
       <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked>
         <label for="set-plat-sheypoor"><b>شیپور</b></label></div>
-      <div class="checkline"><input type="checkbox" id="set-plat-ring" checked>
-        <label for="set-plat-ring"><b>رینگ</b></label></div>
-      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین هر سه در همان پروفایل Chromium با سه تب است.</div>
+      <div class="checkline"><input type="checkbox" id="set-plat-ring">
+        <label for="set-plat-ring"><b>رینگ</b> — موقتاً غیرفعال پیش‌فرض (فقط دیوار و شیپور فعال)</label></div>
+      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین دیوار+شیپور در همان پروفایل Chromium با دو تب است. رینگ فعلاً غیرفعال پیش‌فرض است.</div>
     </div>
     <div class="card">
       <h3>⭐ هشدار ویژه (VIP)</h3>
@@ -961,6 +995,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab==='leads') leadsLoad('all');
   if (b.dataset.tab==='settings') settingsLoad();
   if (b.dataset.tab==='keywords') kwLoad();
+  if (b.dataset.tab==='hunter-ai') aiLoad();
   if (b.dataset.tab==='messages') tplLoad();
   if (b.dataset.tab==='robot') robotLoad();
   if (b.dataset.tab==='profile') licensePaint();
@@ -1981,6 +2016,106 @@ async function requeueHidden(){
 async function requeueOne(token){
   if (await act('/api/leads/requeue',{token})) leadsLoad();
 }
+
+/* ───────────────────────── شکارچی AI ویزارد ───────────────────────── */
+let _aiSid = localStorage.getItem('ai_sid') || ('ai-'+Date.now());
+localStorage.setItem('ai_sid', _aiSid);
+let _aiConfig = null;
+function aiRenderLog(msgs){
+  const box = $('ai-chat-log'); if(!box) return;
+  box.innerHTML = (msgs||[]).map(m=>{
+    const who = m.role==='user' ? '🧑 شما' : (m.role==='system' ? '⚙️ سیستم' : '🤖 سلفمونی');
+    const cls = m.role==='user' ? 'tag gray' : (m.role==='assistant' ? 'tag ok' : 'tag warn');
+    return `<div style="padding:8px; border-bottom:1px dashed var(--line)"><span class="${cls}">${who}</span> <span style="margin-right:8px">${esc(m.text||'')}</span></div>`;
+  }).join('') || '<div class="empty">سلام! بگو چی میخوای شکار کنی؟ مثلا «دنبال آیفون X 12 13 14 15 قیمت خوب»</div>';
+  box.scrollTop = box.scrollHeight;
+}
+function aiRenderConfig(cfg){
+  _aiConfig = cfg;
+  const card = $('ai-config-card');
+  if(!cfg || !cfg.items || !cfg.items.length){ if(card) card.style.display='none'; return; }
+  if(card) card.style.display='block';
+  const sum = $('ai-config-summary');
+  if(sum){
+    const q = cfg.quantity ? `تعداد هدف: ${cfg.quantity} · ` : '';
+    const cond = cfg.conditions ? `شرایط: ${esc((cfg.conditions||[]).join('، '))}` : '';
+    sum.innerHTML = `${q}${cond}<br>وضعیت استخراج: ${esc(cfg.state||'')}`.trim();
+  }
+  const tb = $('ai-config-tbody');
+  if(tb){
+    tb.innerHTML = cfg.items.map(it=>{
+      const maxBuy = it.max_buy ? it.max_buy.toLocaleString() : '—';
+      const sell = it.healthy_sell_price ? it.healthy_sell_price.toLocaleString() : '—';
+      const prof = it.desired_profit ? it.desired_profit.toLocaleString() : '—';
+      return `<tr><td>${esc(it.model)}</td><td dir="ltr">${sell}</td><td dir="ltr">${prof}</td><td dir="ltr"><b>${maxBuy}</b></td><td>${esc((it.conditions||[]).join('، ')||cfg.conditions||'')}</td></tr>`;
+    }).join('');
+  }
+  if($('ai-config-note')) $('ai-config-note').textContent = 'قیمت فروش سالم و سود از حرف شما استخراج شده، مدل قیمت نساخته. برای خرید زیر «حداکثر خرید» شکار می‌کند.';
+  // fill city select clone from kw-city
+  try{
+    const src = $('kw-city');
+    const dst = $('ai-city');
+    if(src && dst && dst.options.length<=1){
+      dst.innerHTML = src.innerHTML;
+    }
+  }catch(e){}
+}
+async function aiLoad(){
+  try{
+    const r = await api('/api/hunter/ai-start',{method:'POST', body: JSON.stringify({session_id:_aiSid})});
+    aiRenderLog(r.messages);
+    if(r.config && r.config.items && r.config.items.length) aiRenderConfig(r.config);
+    // load cities
+    try{
+      const cs = await api('/api/cities');
+      const dst = $('ai-city'); if(dst && cs.cities){
+        if(dst.options.length<=1){
+          dst.innerHTML = (cs.cities||[]).map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('') || '<option value="0">همه ایران</option>';
+        }
+      }
+    }catch(e){}
+  }catch(e){}
+}
+async function aiSend(){
+  const inp = $('ai-chat-input'); if(!inp) return;
+  const txt = inp.value.trim(); if(!txt) return;
+  inp.value='';
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message:txt})});
+    aiRenderLog(r.messages);
+    if(r.config) aiRenderConfig(r.config);
+    if(r.done) toast('تنظیمات آماده است — دکمه ست کردن را بزن');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function aiReset(){
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, reset:true, message:''})});
+    aiRenderLog(r.messages); aiRenderConfig(null);
+    toast('گفتگو از اول شروع شد');
+  }catch(e){}
+}
+async function aiApply(){
+  if(!_aiConfig || !_aiConfig.items || !_aiConfig.items.length){ toast('اول با ربات صحبت کن تا تنظیمات آماده شود', false); return; }
+  const sel = $('ai-city');
+  let city_ids = null;
+  if(sel){
+    const ids=[...sel.selectedOptions].map(o=>parseInt(o.value,10)).filter(n=>n>0);
+    if(ids.length) city_ids = ids;
+  }
+  try{
+    const r = await api('/api/hunter/ai-apply',{method:'POST', body: JSON.stringify({session_id:_aiSid, config:_aiConfig, city_ids})});
+    if($('ai-apply-hint')) $('ai-apply-hint').textContent = r.message||'';
+    toast(r.message||'تنظیمات ست شد', !!r.ok);
+    kwLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+// Enter to send
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = $('ai-chat-input');
+  if(inp) inp.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); aiSend(); }});
+});
+// auto load when tab clicked — handled via nav onclick wrapper below
+const _origTabClick = null;
 
 function resolveTheme(){
   const mode = localStorage.getItem('theme') || 'auto';
