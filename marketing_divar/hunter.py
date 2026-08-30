@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from .hunter_profile import (
     adjustment_pct, build_questions, default_profile, extract_flags,
-    missing_ask_slots,
+    mileage_adjustment, missing_ask_slots,
 )
 
 
@@ -74,8 +74,29 @@ def evaluate(price: int, samples: Sequence[int],
         return blocked
     flags = _merge_flags(text, profile, extra)
     adj = adjustment_pct(flags, profile)
+    # کارکرد و سال — افت جدا بر اساس تحقیق
+    mileage_km = extra.get("mileage_km") or extra.get("car_mileage")
+    year = extra.get("year") or extra.get("car_year")
+    # اگر از متن استخراج نشده، از متن آگهی بخوان
+    if not mileage_km or not year:
+        try:
+            from .vehicle import extract_mileage, extract_year
+            if not mileage_km:
+                mileage_km = extract_mileage(text)
+            if not year:
+                year = extract_year(text)
+        except Exception:
+            pass
+    try:
+        km_per_year = float(profile.get("km_per_year") or 20000)
+    except Exception:
+        km_per_year = 20000.0
+    mileage_adj = mileage_adjustment(mileage_km, year, km_per_year) if mileage_km else 0.0
+    # جمع افت = پرچم‌ها + کارکرد
+    total_adj = adj + mileage_adj
+    total_adj = max(-45.0, min(5.0, total_adj))
     med = median_of(samples)
-    fair = (med * (1.0 + adj / 100.0)) if med else None
+    fair = (med * (1.0 + total_adj / 100.0)) if med else None
     good = float(profile.get("good_pct") or cfg.get("hunter_good_pct") or 8)
     great = float(profile.get("great_pct") or cfg.get("hunter_great_pct") or 15)
     sus = float(profile.get("suspicious_pct") or cfg.get("hunter_suspicious_pct") or 55)
@@ -99,7 +120,11 @@ def evaluate(price: int, samples: Sequence[int],
         "level": level,
         "raw_level": raw,
         "discount_pct": pct,
-        "adj_pct": round(adj, 1),
+        "adj_pct": round(total_adj, 1),
+        "adj_flags_pct": round(adj, 1),
+        "adj_mileage_pct": round(mileage_adj, 1),
+        "mileage_km": int(mileage_km) if mileage_km else 0,
+        "year": int(year) if year else 0,
         "blocked": False,
         "pending": pending,
         "questions": questions,

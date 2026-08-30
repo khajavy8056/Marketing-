@@ -732,35 +732,65 @@
 </dialog>
 
 
-<dialog id="hunter-adv-warn" style="width:min(480px,92vw)">
-  <h3>تنظیمات تخصصی شکارچی</h3>
-  <p class="hint" style="margin:10px 0 14px;line-height:1.9">این فیلدها را یک کاسب حرفه‌ای برای هر دسته پر کرده (خودرو، موبایل، لپ‌تاپ، لوازم…).
-    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.
-    اگر بلد نیستید دست نزنید. اگر کاسبید، درصد افت را کمی سفت‌تر کنید.</p>
+<dialog id="hunter-adv-warn" style="width:min(520px,94vw)">
+  <h3>⚠️ تنظیمات تخصصی شکارچی — بخش مهم</h3>
+  <div class="warn-box" style="margin:10px 0">
+    <b>این بخش تخصصی است</b> — یک کاسب حرفه‌ای برای هر دسته (خودرو، موبایل، لپ‌تاپ، لوازم) بر اساس تحقیق بازار ایران ۱۴۰۳ درصدها را پر کرده.<br>
+    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.<br>
+    <b>مثال:</b> خودرو ۱۰۰ کیلومتر vs صفر — صفر ۳٪ گران‌تر است، پس ۱۰۰km با قیمت مناسب هنوز شکار محسوب می‌شود. خودرو دوررنگ حتی با ۱۴٪ افت، اگر ۲۵٪ زیر میانه باشد باز شکار است.<br>
+    اگر بلد نیستید دست نزنید. اگر کاسبید، درصدها را سفت‌تر کنید و آپشن جدید اضافه کنید.
+  </div>
+  <p class="hint" style="margin:10px 0 14px;line-height:1.9">
+    شکارچی یک <b>آنالیزور قیمت</b> است: میانهٔ همان کلمه/شهر + افت وضعیت (رنگ، شاسی، کارکرد، باتری، رجیستری...) = ارزش منصفانه. سپس تخفیف نسبت به منصفانه → مناسب / خیلی‌مناسب / مشکوک.<br>
+    جای‌خالی (سال، کارکرد، شاسی) → مدل سوال می‌پرسد (چت/پیامک) → از پاسخ دوباره امتیاز می‌دهد.
+  </p>
   <div class="row">
     <button class="btn ok" type="button" onclick="hunterAdvShow()">متوجه شدم — ادامه</button>
     <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-warn').close()">انصراف</button>
   </div>
 </dialog>
-<dialog id="hunter-adv-dlg" style="width:min(560px,94vw)">
-  <h3>تنظیمات پیشرفته شکارچی</h3>
+<dialog id="hunter-adv-dlg" style="width:min(720px,96vw)">
+  <h3>تنظیمات پیشرفته شکارچی — آنالیزور قیمت</h3>
   <p class="hint" id="hunter-adv-family" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود.</div>
+  <div class="warn-box" id="hunter-adv-research" style="display:none"></div>
+  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود — فقط شماره پیدا می‌کند.</div>
   <div class="grid g2">
-    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده)</div>
+    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده) — پیش‌فرض کاسب ۱۲٪</div>
       <input id="hadv-good" type="number" min="1" max="40" dir="ltr"></div>
-    <div><div class="lbl">آستانه خیلی مناسب (٪)</div>
+    <div><div class="lbl">آستانه خیلی مناسب (٪) — پیش‌فرض کاسب ۲۲٪</div>
       <input id="hadv-great" type="number" min="2" max="50" dir="ltr"></div>
-    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪)</div>
+    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪) — پیش‌فرض ۴۸٪</div>
       <input id="hadv-sus" type="number" min="20" max="90" dir="ltr"></div>
+    <div><div class="lbl">کارکرد نرمال در سال (km) — خودرو</div>
+      <input id="hadv-kmpy" type="number" min="5000" max="50000" dir="ltr"></div>
   </div>
   <div class="checkline">
     <input type="checkbox" id="hadv-dealer">
-    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ را حتماً بپرس بعد تصمیم بگیر</label>
+    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ/سال/کارکرد را حتماً بپرس بعد تصمیم بگیر (استعلام با مدل)</label>
   </div>
-  <div id="hunter-adv-fields"></div>
-  <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره درصدها</button>
+  <div style="margin-top:12px"><h3 style="font-size:14px">درصد افت وضعیت — بر اساس تحقیق بازار (منفی = ارزان‌تر حساب شود)</h3>
+    <div class="hint">مثال: پراید ۱۰۰km vs صفر — صفر +۳٪ گران‌تر، پس ۱۰۰km هنوز شکار است. دوررنگ -۱۴٪ ولی اگر ۲۵٪ زیر میانه باشد باز شکار است. موبایل باتری زیر ۸۰٪ -۱۱٪، بدون رجیستر -۱۶٪.</div>
+  </div>
+  <div id="hunter-adv-fields" style="max-height:320px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:8px"></div>
+
+  <div style="margin-top:16px; border-top:1px dashed var(--line); padding-top:12px">
+    <h3 style="font-size:14px">➕ افزودن آپشن جدید (سفارشی)</h3>
+    <div class="hint">می‌توانید آپشن جدید اضافه کنید — مثلاً «کف‌خواب»، «باتری تعویض»، «گلس شکسته». کلمه کلیدی در متن آگهی پیدا شود → درصد افت اعمال می‌شود.</div>
+    <div class="grid g2" style="margin-top:8px">
+      <div><div class="lbl">نام آپشن (کلید انگلیسی)</div><input id="hadv-new-key" placeholder="مثلا tire_worn" dir="ltr"></div>
+      <div><div class="lbl">برچسب فارسی</div><input id="hadv-new-label" placeholder="لاستیک ساییده"></div>
+      <div><div class="lbl">درصد افت (منفی = ارزان‌تر)</div><input id="hadv-new-pct" type="number" step="0.5" dir="ltr" placeholder="-5"></div>
+      <div><div class="lbl">سوال از فروشنده (اختیاری)</div><input id="hadv-new-q" placeholder="لاستیک‌ها چند درصد است؟"></div>
+    </div>
+    <div><div class="lbl">کلمات کلیدی در متن آگهی (با کاما جدا)</div><input id="hadv-new-words" placeholder="لاستیک ساییده, لاستیک 20 درصد, بدون لاستیک"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn sm ok" type="button" onclick="hunterAdvAddCustom()">➕ افزودن به لیست</button>
+    </div>
+    <div id="hunter-adv-custom-list" style="margin-top:10px"></div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره همه (درصدها + آپشن‌های جدید)</button>
     <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-dlg').close()">بستن</button>
   </div>
 </dialog>
@@ -1383,6 +1413,7 @@ async function hunterAdvOpen(kwId, keyword, category){
   const w = $('hunter-adv-warn');
   if (w && !w.open) w.showModal();
 }
+let _hunterCustomAdjs = [];
 async function hunterAdvShow(){
   const w = $('hunter-adv-warn'); if (w && w.open) w.close();
   const kw = window._hunterAdvKw || '';
@@ -1391,47 +1422,112 @@ async function hunterAdvShow(){
     const r = await api('/api/hunter-profile?keyword='+encodeURIComponent(kw)+'&category='+encodeURIComponent(cat));
     const p = r.profile || {};
     if($('hunter-adv-family')) $('hunter-adv-family').textContent =
-      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.hint||'')));
+      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.warning||p.hint||'')));
+    if($('hunter-adv-research')) {
+      const rn = p.research_note||'';
+      $('hunter-adv-research').style.display = rn ? 'block':'none';
+      $('hunter-adv-research').textContent = rn ? ('🔬 تحقیق بازار: '+rn) : '';
+    }
     if($('hunter-adv-estate')) $('hunter-adv-estate').style.display = p.hunter===false ? 'block':'none';
-    if($('hadv-good')) $('hadv-good').value = p.good_pct||8;
-    if($('hadv-great')) $('hadv-great').value = p.great_pct||15;
-    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||55;
+    if($('hadv-good')) $('hadv-good').value = p.good_pct||10;
+    if($('hadv-great')) $('hadv-great').value = p.great_pct||18;
+    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||48;
     if($('hadv-dealer')) $('hadv-dealer').checked = !!p.dealer_mode;
+    if($('hadv-kmpy')) $('hadv-kmpy').value = p.km_per_year||20000;
     const box = $('hunter-adv-fields');
     if(box){
       box.innerHTML = (p.adjustments||[]).map(a=>`
-        <div class="lbl">${esc(a.label)} (٪ افت، منفی یعنی ارزان‌تر حساب شود)</div>
-        <input data-hadv-key="${esc(a.key)}" type="number" step="0.5" dir="ltr" value="${a.pct}">
+        <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--line)">
+          <div style="flex:1">
+            <div class="lbl" style="margin:0 0 2px">${esc(a.label)} ${a.custom?'<span class=\"tag warn\">سفارشی</span>':''} <small style="color:var(--mut)">(${esc(a.key)})</small>
+              ${a.research?`<span class="q">؟<span class="qtip">${esc(a.research)}</span></span>`:''}
+            </div>
+            <div class="hint" style="font-size:11px">${esc((a.words||[]).slice(0,4).join('، '))}${(a.words||[]).length>4?'…':''}</div>
+          </div>
+          <input data-hadv-key="${esc(a.key)}" data-hadv-custom="${a.custom?'1':'0'}" type="number" step="0.5" dir="ltr" value="${a.pct}" style="max-width:90px">
+        </div>
       `).join('') || '<div class="hint">درصدی برای این دسته نیست</div>';
     }
+    // custom list reset
+    _hunterCustomAdjs = (p.adjustments||[]).filter(a=>a.custom).map(a=>({
+      key: a.key, label: a.label, pct: a.pct, words: (a.words||[]).join(', '), question: a.question||'', research: a.research||'سفارشی'
+    }));
+    hunterAdvRenderCustom();
     const dlg = $('hunter-adv-dlg');
     if (dlg && !dlg.open) dlg.showModal();
   }catch(e){ toast('❌ '+e.message, false); }
 }
+function hunterAdvRenderCustom(){
+  const box = $('hunter-adv-custom-list');
+  if(!box) return;
+  if(!_hunterCustomAdjs.length){ box.innerHTML='<div class=\"hint\">هنوز آپشن سفارشی اضافه نشده</div>'; return; }
+  box.innerHTML = _hunterCustomAdjs.map((c,i)=>`
+    <div class="row" style="justify-content:space-between; border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:4px 0">
+      <span><b>${esc(c.label)}</b> <small>(${esc(c.key)})</small> — ${c.pct}% — <small>${esc(c.words)}</small></span>
+      <button class="btn sm err" type="button" onclick="hunterAdvRemoveCustom(${i})">حذف</button>
+    </div>
+  `).join('');
+}
+function hunterAdvAddCustom(){
+  const key = ($('hadv-new-key')||{}).value.trim();
+  const label = ($('hadv-new-label')||{}).value.trim();
+  const pct = parseFloat(($('hadv-new-pct')||{}).value);
+  const q = ($('hadv-new-q')||{}).value.trim();
+  const words = ($('hadv-new-words')||{}).value.trim();
+  if(!label){ toast('برچسب فارسی را وارد کنید', false); return; }
+  if(isNaN(pct)){ toast('درصد افت را وارد کنید (مثلا -5)', false); return; }
+  const finalKey = key || label.replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF_]/g,'').slice(0,24) || 'custom_'+Date.now();
+  _hunterCustomAdjs.push({key: finalKey, label, pct, words, question: q||label+'؟', research:'سفارشی کاربر'});
+  $('hadv-new-key').value=''; $('hadv-new-label').value=''; $('hadv-new-pct').value=''; $('hadv-new-q').value=''; $('hadv-new-words').value='';
+  hunterAdvRenderCustom();
+  toast('آپشن سفارشی اضافه شد — ذخیره را بزنید');
+}
+function hunterAdvRemoveCustom(i){
+  _hunterCustomAdjs.splice(i,1);
+  hunterAdvRenderCustom();
+}
 async function hunterAdvSave(){
   const adjustments = {};
+  const adjustments_list = [];
   document.querySelectorAll('[data-hadv-key]').forEach(el=>{
     const n = parseFloat(el.value);
-    if(!isNaN(n)) adjustments[el.getAttribute('data-hadv-key')] = n;
+    const k = el.getAttribute('data-hadv-key');
+    if(!isNaN(n)){
+      adjustments[k] = n;
+      // برای custom هم لیست کامل می‌سازیم
+      if(el.getAttribute('data-hadv-custom')==='1'){
+        // پیدا کن از _hunterCustomAdjs یا از ورودی
+        const found = _hunterCustomAdjs.find(c=>c.key===k);
+        if(found) adjustments_list.push(found);
+        else adjustments_list.push({key:k, pct:n});
+      }
+    }
+  });
+  // اضافه کردن custom های جدید که هنوز در DOM نیستند
+  _hunterCustomAdjs.forEach(c=>{
+    if(!(c.key in adjustments)) adjustments[c.key]=c.pct;
+    if(!adjustments_list.find(x=>x.key===c.key)) adjustments_list.push(c);
   });
   const values = {
-    good_pct: parseFloat(($('hadv-good')||{}).value)||8,
-    great_pct: parseFloat(($('hadv-great')||{}).value)||15,
-    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||55,
+    good_pct: parseFloat(($('hadv-good')||{}).value)||10,
+    great_pct: parseFloat(($('hadv-great')||{}).value)||18,
+    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||48,
+    km_per_year: parseFloat(($('hadv-kmpy')||{}).value)||20000,
     dealer_mode: !!($('hadv-dealer')&&$('hadv-dealer').checked),
     adjustments,
+    custom_adjustments: _hunterCustomAdjs,
   };
   window._hunterAdv = values;
   if (_hunterAdvKwId){
     try{
       const r = await api('/api/keywords/'+_hunterAdvKwId+'/hunter-adv',
         {method:'POST', body: JSON.stringify({values})});
-      toast(r.message||'ذخیره شد');
+      toast(r.message||'ذخیره شد — آنالیزور با درصدهای جدید کار می‌کند');
     }catch(e){ toast('❌ '+e.message, false); return; }
   } else {
-    toast('درصدها برای پایش بعدی ذخیره شد — افزودن را بزنید');
+    toast('درصدها + آپشن‌های سفارشی برای پایش بعدی ذخیره شد — افزودن را بزنید');
   }
-  if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی آمادهٔ افزودن است';
+  if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی + آپشن جدید آمادهٔ افزودن است';
   const dlg = $('hunter-adv-dlg'); if (dlg && dlg.open) dlg.close();
 }
 
