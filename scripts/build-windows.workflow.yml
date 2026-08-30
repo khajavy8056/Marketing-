@@ -1,0 +1,44 @@
+name: Build Windows EXE
+
+# ساخت خودکار نسخه قابل اجرای ویندوز و انتشار در Releases
+on:
+  push:
+    tags: ['v*']        # با هر تگ نسخه (مثل v1.0.0) build و release می‌شود
+  workflow_dispatch:     # اجرای دستی از تب Actions
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pyinstaller
+
+      - name: Run tests (شبیه‌ساز دیوار)
+        run: python -m unittest discover tests
+
+      - name: Build EXE
+        run: |
+          pyinstaller --name DivarLead --onefile --noconfirm `
+            --collect-submodules uvicorn `
+            --add-data "marketing_divar/web/static;marketing_divar/web/static" `
+            main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DivarLead-windows
+          path: dist/DivarLead.exe
+
+      - name: Create GitHub Release (فقط برای تگ‌ها)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/DivarLead.exe
+          generate_release_notes: true

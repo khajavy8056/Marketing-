@@ -1,0 +1,14 @@
+# داده‌های شخصی و سشن‌ها هرگز به گیت نمی‌روند
+data/
+*.db
+*.sqlite3
+__pycache__/
+*.pyc
+.venv/
+logs/
+.env
+config.json
+installer/install-log.txt
+*.gguf
+nlu-model/
+nlu-download/
