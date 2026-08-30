@@ -844,6 +844,104 @@ class Monitor:
             finally:
                 con.close()
 
+    def drain_week_old(self, max_items: int = 12) -> Dict[str, int]:
+        """هفت روز گذشته — آگهی‌هایی که شکار خوب بودند ولی پیام نرفته را دوباره چک کن.
+
+        اگر chat_status و sms_status هنوز sent نیست و negotiation_status تمام نشده،
+        دوباره مذاکره/استعلام را شروع کن. این برای آگهی‌هایی است که هفته پیش پیدا شدند
+        ولی کاربر پیام نداده یا سیستم نرسیده.
+        """
+        con = connect(self.db_path)
+        stats = {"checked": 0, "negotiated": 0, "inquired": 0, "skipped": 0}
+        try:
+            try:
+                # آگهی‌های 7 روز اخیر که شکار خوب/عالی هستند ولی پیام نرفته
+                rows = con.execute(
+                    "SELECT * FROM leads WHERE "
+                    "hunter_level IN ('good','great','pending') "
+                    "AND COALESCE(phone_status,'') != 'removed' "
+                    "AND ("
+                    "  (hunter_level IN ('good','great') AND COALESCE(negotiation_status,'') NOT IN ('negotiated','vip','refused','gone')) "
+                    "  OR (hunter_level='pending' AND COALESCE(inquiry_status,'') NOT IN ('sent','gone'))"
+                    ") "
+                    "AND ("
+                    "  datetime(first_seen_at) >= datetime('now','-7 days') "
+                    "  OR datetime(published_at) >= datetime('now','-7 days') "
+                    "  OR first_seen_at IS NULL"
+                    ") "
+                    "ORDER BY hunter_level DESC, id DESC LIMIT ?",
+                    (max_items,),
+                ).fetchall()
+            except Exception as e:
+                # fallback بدون datetime
+                try:
+                    rows = con.execute(
+                        "SELECT * FROM leads WHERE hunter_level IN ('good','great','pending') "
+                        "AND COALESCE(phone_status,'') != 'removed' "
+                        "ORDER BY id DESC LIMIT ?",
+                        (max_items,),
+                    ).fetchall()
+                except Exception:
+                    rows = []
+        finally:
+            con.close()
+
+        for row in rows:
+            if self.stop_event.is_set():
+                break
+            stats["checked"] += 1
+            con2 = connect(self.db_path)
+            try:
+                # چک کن پیام قبلا نرفته
+                sms_st = str(row["sms_status"] if "sms_status" in row.keys() else "" or "")
+                chat_st = str(row["chat_status"] if "chat_status" in row.keys() else "" or "")
+                neg_st = str(row["negotiation_status"] if "negotiation_status" in row.keys() else "" or "")
+                inq_st = str(row["inquiry_status"] if "inquiry_status" in row.keys() else "" or "")
+                hl = str(row["hunter_level"] if "hunter_level" in row.keys() else "" or "")
+
+                # اگر قبلا پیام رفته، رد کن مگر مذاکره نیمه‌کاره باشد
+                if hl in ("good", "great"):
+                    if sms_st == "sent" or chat_st == "sent":
+                        # اگر negotiation هنوز شروع نشده، یعنی پیام عادی رفته ولی مذاکره نه -> دوباره مذاکره
+                        if neg_st in ("", "negotiating", "negotiating_opener", "negotiating_offer"):
+                            pass
+                        else:
+                            stats["skipped"] += 1
+                            continue
+                    phone = ""
+                    try:
+                        if "phone_status" in row.keys() and row["phone_status"] == "found":
+                            phone = row["phone"] or ""
+                    except:
+                        pass
+                    self._maybe_hunter_negotiate(con2, row, phone=phone)
+                    stats["negotiated"] += 1
+                    self._ev("info", f"🔄 هفته گذشته — مذاکره مجدد: {str(row['title'] if 'title' in row.keys() else '')[:40]}")
+                    _emit_event("hunter_week_recheck", {
+                        "token": row["token"] if "token" in row.keys() else "",
+                        "title": str(row["title"] if "title" in row.keys() else "")[:80],
+                        "level": hl,
+                        "action": "negotiate",
+                    })
+                elif hl == "pending":
+                    if inq_st == "sent":
+                        stats["skipped"] += 1
+                        continue
+                    phone = ""
+                    try:
+                        if "phone_status" in row.keys() and row["phone_status"] == "found":
+                            phone = row["phone"] or ""
+                    except:
+                        pass
+                    self._maybe_hunter_inquire(con2, row, phone=phone)
+                    stats["inquired"] += 1
+                    self._ev("info", f"🔄 هفته گذشته — استعلام مجدد: {str(row['title'] if 'title' in row.keys() else '')[:40]}")
+            except Exception as e:
+                self._ev("warning", f"هفته گذشته چک: {e}")
+            finally:
+                con2.close()
+        return stats
+
     def _maybe_sms(self, con, row, phone: str) -> None:
         """اگر گزینهٔ خودکار روشن باشد، همان لحظه از ملی‌پیامک پیامک می‌زند."""
         if not phone:
@@ -1373,3 +1471,63 @@ class Monitor:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+
+def recheck_week_old_leads(db_path: str, max_items: int = 20) -> Dict[str, Any]:
+    """تابع مستقل برای API — بدون نیاز به Monitor فعال."""
+    from .db import connect as _connect
+    con = _connect(db_path)
+    checked = []
+    try:
+        try:
+            rows = con.execute(
+                "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+                "hunter_confidence,negotiation_status,inquiry_status,sms_status,chat_status,url,phone,city,platform,first_seen_at "
+                "FROM leads WHERE hunter_level IN ('good','great','pending') "
+                "AND COALESCE(phone_status,'') != 'removed' "
+                "AND datetime(first_seen_at) >= datetime('now','-7 days') "
+                "ORDER BY id DESC LIMIT ?",
+                (max_items,),
+            ).fetchall()
+        except Exception:
+            rows = con.execute(
+                "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+                "hunter_confidence,negotiation_status,inquiry_status,sms_status,chat_status,url,phone,city,platform,first_seen_at "
+                "FROM leads WHERE hunter_level IN ('good','great','pending') "
+                "ORDER BY id DESC LIMIT ?",
+                (max_items,),
+            ).fetchall()
+        for r in rows:
+            d = dict(r)
+            # آیا پیام نرفته؟
+            sms_sent = (d.get("sms_status") or "") == "sent"
+            chat_sent = (d.get("chat_status") or "") == "sent"
+            neg = d.get("negotiation_status") or ""
+            inq = d.get("inquiry_status") or ""
+            needs_action = False
+            action = ""
+            if d.get("hunter_level") in ("good", "great"):
+                if not sms_sent and not chat_sent:
+                    needs_action = True
+                    action = "negotiate"
+                elif neg in ("", "negotiating", "negotiating_opener", "negotiating_offer"):
+                    needs_action = True
+                    action = "negotiate_retry"
+            elif d.get("hunter_level") == "pending":
+                if inq not in ("sent", "gone"):
+                    needs_action = True
+                    action = "inquire"
+            d["needs_action"] = needs_action
+            d["suggested_action"] = action
+            checked.append(d)
+    finally:
+        con.close()
+    # آمار
+    need = [x for x in checked if x.get("needs_action")]
+    return {
+        "total_week": len(checked),
+        "needs_action": len(need),
+        "items": checked,
+        "summary": f"هفته گذشته {len(checked)} شکار، {len(need)} تا نیاز به پیام/مذاکره دارد",
+    }
+

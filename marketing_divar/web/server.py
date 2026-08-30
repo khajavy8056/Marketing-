@@ -805,6 +805,30 @@ def hunter_vip_list(limit: int = 50):
         con.close()
 
 
+@app.get("/api/hunter/recheck-week")
+def hunter_recheck_week(limit: int = 20):
+    """هفته گذشته — شکارهایی که پیام نرفته یا مذاکره نیمه‌کاره است."""
+    from ..monitor import recheck_week_old_leads
+    res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 100))
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/recheck-week/run")
+def hunter_recheck_week_run(limit: int = 12):
+    """اجرای مذاکره/استعلام برای آگهی‌های هفته گذشته که پیام نرفته."""
+    mon = _state.get("monitor")
+    if mon:
+        stats = mon.drain_week_old(max_items=min(limit, 30))
+        return {"ok": True, "ran": True, "stats": stats, "message": f"{stats.get('negotiated',0)} مذاکره و {stats.get('inquired',0)} استعلام ارسال شد"}
+    else:
+        # بدون مانیتور — فقط لیست را برگردان، ارسال دستی از طریق negotiate/inquire
+        from ..monitor import recheck_week_old_leads
+        res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 30))
+        need = [x for x in res.get("items", []) if x.get("needs_action")]
+        return {"ok": True, "ran": False, "needs_action": len(need), "items": need,
+                "message": f"مانیتور خاموش است — {len(need)} مورد نیاز به اقدام دستی دارد. مانیتور را روشن کن یا دکمه مذاکره را بزن"}
+
+
 # --------------------------------------------------- AI شکارچی — تنظیمات با کمک AI --
 class HunterAIChatReq(BaseModel):
     message: str = ""

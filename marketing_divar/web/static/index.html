@@ -175,6 +175,23 @@
   .remain-bar{height:12px;background:#e3e8f0;border-radius:99px;overflow:hidden;margin:10px 0 6px}
   .remain-bar > i{display:block;height:100%;background:linear-gradient(90deg,#1976d2,#2e9e5b);width:0}
   html[data-theme="dark"] .remain-bar{background:#243040}
+
+  /* ── شکارچی FAB — هشدار شناور پایین چپ ── */
+  #hunter-fab{position:fixed; bottom:22px; left:22px; z-index:200; display:flex; flex-direction:column; gap:10px; max-width:360px; pointer-events:none}
+  #hunter-fab > *{pointer-events:auto}
+  #hunter-fab-btn{width:62px; height:62px; border-radius:50%; background:linear-gradient(135deg,#6b3fa0,#1976d2); color:#fff; border:none; font-size:28px; cursor:pointer; box-shadow:0 10px 28px rgba(0,0,0,.28); display:flex; align-items:center; justify-content:center; position:relative; transition:.2s}
+  #hunter-fab-btn:hover{transform:scale(1.07); box-shadow:0 14px 32px rgba(0,0,0,.32)}
+  #hunter-fab-btn .badge{position:absolute; top:-5px; right:-5px; background:#e11d48; color:#fff; border-radius:99px; font-size:11px; padding:2px 7px; min-width:20px; text-align:center; font-weight:700; border:2px solid #fff}
+  #hunter-fab-btn.pulse{animation:hfabPulse 1.6s infinite}
+  @keyframes hfabPulse{0%{box-shadow:0 0 0 0 rgba(107,63,160,.6)}70%{box-shadow:0 0 0 14px rgba(107,63,160,0)}100%{box-shadow:0 0 0 0 rgba(107,63,160,0)}}
+  .hunter-toast{background:#1e2a3a; color:#fff; padding:14px 16px; border-radius:14px; font-size:13px; line-height:1.85; box-shadow:0 12px 32px rgba(0,0,0,.32); border:1px solid rgba(255,255,255,.08); animation:slideIn .32s ease; max-width:340px}
+  .hunter-toast.vip{background:linear-gradient(135deg,#2a1a4a,#1a3a5a); border-color:rgba(142,91,217,.35)}
+  .hunter-toast.week{background:#2a2416; border-color:#5a4a22; color:#e8c97a}
+  .hunter-toast b{color:#fff}
+  .hunter-toast .row{margin-top:10px}
+  @keyframes slideIn{from{transform:translateY(18px); opacity:0} to{transform:translateY(0); opacity:1}}
+  html[data-theme="dark"] .hunter-toast{background:#121a26}
+  html[data-theme="dark"] .hunter-toast.vip{background:linear-gradient(135deg,#1e1430,#142a44)}
 </style>
 </head>
 <body class="booting gated">
@@ -750,6 +767,12 @@
     <button class="btn gray" type="button" onclick="document.getElementById('cap-dlg').close()">بعداً</button>
   </div>
 </dialog>
+
+<!-- ── شکارچی شناور — هشدارهای باحال پایین چپ ── -->
+<div id="hunter-fab" aria-live="polite">
+  <div id="hunter-toasts" style="display:flex; flex-direction:column; gap:10px"></div>
+  <button id="hunter-fab-btn" title="شکارچی" onclick="hunterFabClick()">🎯<span class="badge" id="hunter-fab-badge" style="display:none">0</span></button>
+</div>
 
 <div id="notify-stack" aria-live="polite"></div>
 
@@ -2109,10 +2132,98 @@ async function aiApply(){
     kwLoad();
   }catch(e){ toast('❌ '+e.message,false); }
 }
+
+/* ───────── شکارچی FAB — هشدار شناور باحال ───────── */
+let _hunterSeen = new Set();
+let _hunterBadge = 0;
+function hunterFabClick(){
+  // برو تب شکارچی
+  document.querySelectorAll('nav button, .tab').forEach(x=>x.classList.remove('active'));
+  const btn = document.querySelector('nav button[data-tab=\"hunter-ai\"]');
+  if(btn) btn.classList.add('active');
+  const tab = $('tab-hunter-ai'); if(tab) tab.classList.add('active');
+  // اگر VIP داریم برو سرنخ‌ها
+  const toasts = $('hunter-toasts'); if(toasts) toasts.innerHTML='';
+  _hunterBadge=0; updateHunterBadge();
+}
+function updateHunterBadge(){
+  const b=$('hunter-fab-badge'); if(!b) return;
+  if(_hunterBadge>0){ b.textContent=String(_hunterBadge); b.style.display='block'; $('hunter-fab-btn').classList.add('pulse'); }
+  else { b.style.display='none'; $('hunter-fab-btn').classList.remove('pulse'); }
+}
+function showHunterToast(item, kind){
+  const box=$('hunter-toasts'); if(!box) return;
+  const div=document.createElement('div');
+  const isVip = kind==='vip';
+  div.className='hunter-toast '+(isVip?'vip':'week');
+  const title = item.title||'آگهی جدید';
+  const price = item.price ? (item.price.toLocaleString()+' تومان') : '';
+  const disc = item.hunter_discount_pct ? (item.hunter_discount_pct+'% زیر قیمت') : '';
+  const city = item.city||'';
+  let msg='';
+  if(isVip){
+    const msgs=[
+      `یه شکار خفن پیدا کردم! 😍<br><b>${esc(title.slice(0,60))}</b><br>${price} · ${disc} · ${esc(city)}<br>بذار مخشو بزنم ببینم می‌تونم با قیمت خودمون بخرم؟ 🔥`,
+      `داداش ببین چی گیر آوردم! 🎯<br><b>${esc(title.slice(0,60))}</b><br>${disc} ارزون‌تر از بازار سالمه! برم مذاکره؟ 😎`,
+      `لعنتی چقدر سفته! 🚀<br><b>${esc(title.slice(0,60))}</b><br>${price} — ${disc}<br>می‌زنم بهش؟`,
+    ];
+    msg = msgs[Math.floor(Math.random()*msgs.length)];
+  } else {
+    msg = `یادته هفته پیش اینو دیدیم؟ 🤔<br><b>${esc(title.slice(0,60))}</b><br>هنوز پیام نرفته بهش! بذار یه سر بزنم ببینم هنوز هست؟`;
+  }
+  div.innerHTML = `${msg}<div class=\"row\"><button class=\"btn sm ok\" onclick=\"hunterToastAction('${esc(item.token)}','go')\">بزن بریم 💬</button><button class=\"btn sm gray\" onclick=\"this.closest('.hunter-toast').remove()\">بعداً</button><a class=\"btn sm gray\" href=\"${esc(item.url||'')}\" target=\"_blank\" style=\"text-decoration:none\">مشاهده ↗</a></div>`;
+  box.prepend(div);
+  // auto remove after 14s
+  setTimeout(()=>{ try{ div.remove(); }catch(e){} }, 16000);
+  _hunterBadge++; updateHunterBadge();
+  playAlert(isVip?'vip':'help');
+}
+async function hunterToastAction(token, act){
+  // حذف توست
+  const box=$('hunter-toasts'); if(box) box.innerHTML='';
+  _hunterBadge=0; updateHunterBadge();
+  if(act==='go'){
+    try{
+      const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+      toast(r.message||'مذاکره ارسال شد');
+    }catch(e){ toast('❌ '+e.message,false); }
+  }
+}
+async function pollHunterFab(){
+  try{
+    const vip = await api('/api/hunter/vip?limit=10');
+    const items = vip.vip||[];
+    for(const it of items){
+      if(!_hunterSeen.has(it.token)){
+        _hunterSeen.add(it.token);
+        // فقط اگر جدید باشد و کمتر از 2 دقیقه پیش دیده شده؟ فعلا همه جدید را نشان بده اگر اولین بار نیست
+        if(_hunterSeen.size>1) showHunterToast(it, 'vip');
+      }
+    }
+    // محدود نگه دار
+    if(_hunterSeen.size>200){ _hunterSeen = new Set([..._hunterSeen].slice(-100)); }
+  }catch(e){}
+  try{
+    const wk = await api('/api/hunter/recheck-week?limit=8');
+    const need = (wk.items||[]).filter(x=>x.needs_action);
+    if(need.length>0){
+      // فقط یکی را نشان بده هر 30 ثانیه
+      const one = need[0];
+      if(!one._shownWeek){
+        one._shownWeek=true;
+        showHunterToast(one, 'week');
+      }
+    }
+  }catch(e){}
+}
+
 // Enter to send
 document.addEventListener('DOMContentLoaded', ()=>{
   const inp = $('ai-chat-input');
   if(inp) inp.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); aiSend(); }});
+  // شروع polling شکارچی FAB
+  setTimeout(pollHunterFab, 4000);
+  setInterval(pollHunterFab, 10000);
 });
 // auto load when tab clicked — handled via nav onclick wrapper below
 const _origTabClick = null;
