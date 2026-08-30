@@ -147,6 +147,87 @@ def cmd_accounts(args: argparse.Namespace) -> None:
         print(f"⛔ اکانت {args.name} غیرفعال شد")
 
 
+def cmd_hunter_analyze(args: argparse.Namespace) -> None:
+    from .db import connect
+    from .hunter_analyzer import evaluate_professional, collect_samples_detailed, default_profile
+    from .hunter_profile import default_profile as dp
+    con = connect()
+    try:
+        # اگر token داده شده
+        if args.token:
+            row = con.execute("SELECT * FROM leads WHERE token=?", (args.token,)).fetchone()
+            if not row:
+                print(f"توکن {args.token} پیدا نشد")
+                return
+            d = dict(row)
+            keyword = d.get("keyword") or ""
+            city = d.get("city") or ""
+            price = int(d.get("price") or 0)
+            samples = collect_samples_detailed(con, keyword, city, limit=80)
+            profile = dp(d.get("category") or "", keyword)
+            # اگر تنظیمات سفارشی در DB هست
+            try:
+                import json
+                adv = d.get("hunter_adv") or con.execute("SELECT hunter_adv FROM keywords WHERE id=?", (d.get("keyword_id") or 0,)).fetchone()
+                # ساده
+            except Exception:
+                pass
+            res = evaluate_professional(price, samples, profile, extra=d, text=f"{d.get('title','')} {d.get('description','')}", enable_web_price=args.web)
+            print(f"عنوان: {d.get('title')}")
+            print(f"قیمت: {price:,} تومان")
+            print(f"بازار سالم: {res.get('healthy_median',0):,} (خام {res.get('raw_median',0):,})")
+            print(f"منصفانه: {res.get('fair',0):,}  تخفیف: {res.get('discount_pct')}%  سطح: {res.get('level')}")
+            print(f"افت: {res.get('adj_pct')}% (پرچم {res.get('adj_flags_pct')}% + کارکرد {res.get('adj_mileage_pct')}% + سال {res.get('adj_year_pct')}%)")
+            print(f"پرچم‌ها: {res.get('flags')}")
+            print(f"اطمینان: {res.get('confidence')}  نمونه: {res.get('sample_count')}  p10={res.get('market',{}).get('p10',0):,}")
+            if res.get("pending"):
+                print(f"در انتظار: {res.get('missing')} → سوال: {res.get('questions')}")
+            if res.get("web_price"):
+                print(f"قیمت وب: {res.get('web_price'):,} منبع: {res.get('web_price_source')}")
+        else:
+            # تحلیل کل hunter
+            rows = con.execute("SELECT token, title, price, keyword, city FROM leads WHERE hunter_level IN ('good','great','pending','suspicious') ORDER BY id DESC LIMIT ?", (args.limit,)).fetchall()
+            for r in rows:
+                d = dict(r)
+                samples = collect_samples_detailed(con, d.get("keyword") or "", d.get("city") or "", limit=50)
+                profile = dp("", d.get("keyword") or "")
+                res = evaluate_professional(int(d.get("price") or 0), samples, profile, extra=d, text=d.get("title") or "", enable_web_price=args.web)
+                print(f"{d['token'][:8]} | {d['title'][:40]:<40} | {d['price']:>12,} | {res.get('level'):<10} | {res.get('discount_pct')}% | conf {res.get('confidence')}")
+    finally:
+        con.close()
+
+
+def cmd_hunter_negotiate(args: argparse.Namespace) -> None:
+    from .db import connect
+    from .hunter_negotiator import negotiate_next
+    con = connect()
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (args.token,)).fetchone()
+        if not row:
+            print(f"توکن {args.token} پیدا نشد")
+            return
+        d = dict(row)
+        res = negotiate_next(d, con)
+        print(f"مذاکره: {res}")
+        con.commit()
+    finally:
+        con.close()
+
+
+def cmd_hunter_vip(args: argparse.Namespace) -> None:
+    from .db import connect
+    con = connect()
+    try:
+        q = "SELECT token, title, price, hunter_level, hunter_discount_pct, hunter_fair_price, hunter_market_median, hunter_confidence, negotiated_price, negotiation_status FROM leads WHERE hunter_level IN ('good','great') ORDER BY hunter_discount_pct DESC LIMIT ?"
+        rows = con.execute(q, (args.limit,)).fetchall()
+        print(f"{'TOKEN':<10} {'TITLE':<40} {'PRICE':>12} {'LEVEL':<8} {'DISC%':>6} {'FAIR':>12} {'CONF':>5} {'NEG':>12} {'STATUS'}")
+        for r in rows:
+            d = dict(r)
+            print(f"{d['token'][:8]:<10} {d['title'][:38]:<40} {d['price'] or 0:>12,} {d['hunter_level'] or '':<8} {d['hunter_discount_pct'] or 0:>6} {d['hunter_fair_price'] or 0:>12,} {d['hunter_confidence'] or 0:>5} {d['negotiated_price'] or 0:>12,} {d['negotiation_status'] or ''}")
+    finally:
+        con.close()
+
+
 def cmd_monitor(args: argparse.Namespace) -> None:
     from .config import load_config
     cfg = load_config()
@@ -229,6 +310,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("status", choices=["new", "contacted", "replied",
                                       "converted", "ignored", "removed"])
     p.set_defaults(func=cmd_mark)
+
+    p = sub.add_parser("hunter", help="تحلیل حرفه‌ای شکارچی (میانه سالم + تخفیف واقعی)")
+    p.add_argument("--token", help="توکن یک آگهی خاص")
+    p.add_argument("--limit", type=int, default=20, help="تعداد برای لیست کلی")
+    p.add_argument("--web", action="store_true", help="قیمت وب را هم امتحان کن (اختیاری)")
+    p.set_defaults(func=cmd_hunter_analyze)
+
+    p = sub.add_parser("hunter-negotiate", help="شروع/ادامه مذاکره شکارچی برای یک توکن")
+    p.add_argument("token", help="توکن آگهی")
+    p.set_defaults(func=cmd_hunter_negotiate)
+
+    p = sub.add_parser("hunter-vip", help="لیست VIP حرفه‌ای (خوب/عالی)")
+    p.add_argument("--limit", type=int, default=30)
+    p.set_defaults(func=cmd_hunter_vip)
     return ap
 
 

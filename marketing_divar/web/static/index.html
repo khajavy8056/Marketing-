@@ -440,8 +440,9 @@
         <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter')">شکارچی</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter_pending')">در انتظار شکارچی</button>
+        <button class="btn sm ok" onclick="leadsLoad('hunter')">🎯 شکارچی</button>
+        <button class="btn sm warn" onclick="leadsLoad('hunter_pending')">⏳ در انتظار شکارچی</button>
+        <button class="btn sm" onclick="hunterVipLoad()">⭐ VIP حرفه‌ای</button>
         <button class="btn sm gray" onclick="leadsLoad('defect')">معیوب</button>
         <button class="btn sm gray" onclick="leadsLoad('replied')">پاسخ‌ها</button>
         <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
@@ -1570,6 +1571,64 @@ async function chatMarkSent(){
     leadsLoad();
   }
 }
+async function hunterVipLoad(){
+  try{
+    const s = await api('/api/hunter/vip?limit=100');
+    const rows = s.vip||[];
+    $('leads-empty').style.display = rows.length?'none':'block';
+    $('leads-body').innerHTML = rows.map(l=>{
+      const levelTag = l.hunter_level==='great' ? '<span class="tag ok">⭐ خیلی مناسب</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ مناسب</span>' : '<span class="tag warn">'+esc(l.hunter_level||'')+'</span>');
+      const fair = l.hunter_fair_price ? (l.hunter_fair_price.toLocaleString()+' تومان') : '—';
+      const market = l.hunter_market_median ? (l.hunter_market_median.toLocaleString()) : '—';
+      const disc = l.hunter_discount_pct ? (l.hunter_discount_pct+'%') : '—';
+      const conf = l.hunter_confidence ? (Math.round(l.hunter_confidence*100)+'%') : '—';
+      const neg = l.negotiated_price ? ('<br><small>بعد مذاکره: '+l.negotiated_price.toLocaleString()+'</small>') : '';
+      const negSt = l.negotiation_status ? ('<span class="tag chat">'+esc(l.negotiation_status)+'</span>') : '';
+      return `<tr>
+        <td>${esc(l.title)}<br>${levelTag} ${negSt}<br><small>منصفانه: ${fair} | بازار سالم: ${market} | تخفیف: ${disc} | اطمینان: ${conf}</small>${neg}</td>
+        <td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
+        <td>${levelTag}</td>
+        <td><button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊 تحلیل</button> <button class="btn sm" onclick="hunterNegotiate('${esc(l.token)}')">💬 مذاکره</button></td>
+        <td>${esc(l.city||'')}</td>
+        <td>${esc(l.platform||'')}</td>
+        <td>${esc(l.url? (new Date().toLocaleString()) : '')}</td>
+        <td><a href="${esc(l.url||'')}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
+    }).join('');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterAnalyze(token){
+  try{
+    const r = await api('/api/hunter/analyze/'+encodeURIComponent(token));
+    const a = r.analysis||{};
+    const hist = r.negotiation_history||[];
+    let html = `<b>${esc(r.lead.title||'')}</b><br>`;
+    html += `قیمت: ${(a.price||0).toLocaleString()} تومان<br>`;
+    html += `بازار سالم: ${(a.healthy_median||a.median||0).toLocaleString()} تومان<br>`;
+    html += `منصفانه: ${(a.fair||0).toLocaleString()} تومان<br>`;
+    html += `تخفیف: ${a.discount_pct||0}%<br>`;
+    html += `سطح: ${esc(a.level||'')} (raw: ${esc(a.raw_level||'')})<br>`;
+    html += `اطمینان: ${a.confidence||0}<br>`;
+    html += `افت: ${a.adj_pct||0}% (پرچم ${a.adj_flags_pct||0}% + کارکرد ${a.adj_mileage_pct||0}% + سال ${a.adj_year_pct||0}%)<br>`;
+    html += `پرچم‌ها: ${esc(Object.keys(a.flags||{}).filter(k=>a.flags[k]).join('، ')||'سالم')}<br>`;
+    html += `جای خالی: ${esc((a.missing||[]).join('، ')||'—')}<br>`;
+    if(a.questions) html += `<div class="warn-box">${esc(a.questions)}</div>`;
+    if(hist.length) html += `<div class="hint" style="margin-top:8px">مذاکره: ${esc(hist.map(h=> (h.role==='seller'?'فروشنده':'من')+': '+h.text).join(' | ').slice(0,300))}</div>`;
+    // نمایش در دیالوگ ساده
+    const dlg = document.createElement('dialog');
+    dlg.style.width='min(600px,96vw)';
+    dlg.innerHTML = `<h3>📊 تحلیل حرفه‌ای شکارچی</h3><div style="margin:12px 0; line-height:2; font-size:13px">${html}</div><div class="row"><button class="btn gray" onclick="this.closest('dialog').close()">بستن</button></div>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.addEventListener('close', ()=>dlg.remove());
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterNegotiate(token){
+  try{
+    const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+    toast(r.message||'مذاکره ارسال شد');
+    leadsLoad('hunter');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 async function leadsLoad(filter){
   leadsFilter=filter||leadsFilter;
   try{ const s=await api('/api/leads?filter='+leadsFilter);
@@ -1582,6 +1641,7 @@ async function leadsLoad(filter){
                   legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
                   removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
+      const hunterTag = l.hunter_level ? (l.hunter_level==='great' ? '<span class="tag ok">⭐ عالی</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ خوب</span>' : (l.hunter_level==='pending' ? '<span class="tag warn">⏳ در انتظار</span>' : '<span class="tag gray">'+esc(l.hunter_level)+'</span>'))) : '';
       const chatBtn = l.phone_status==='hidden'
         ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>
            <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
@@ -1590,7 +1650,8 @@ async function leadsLoad(filter){
           : (l.phone_status==='error'
             ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
             : (l.chat_status||'—')));
-      return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
+      const hunterBtn = l.hunter_level ? `<button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊</button>` : '';
+      return `<tr><td>${esc(l.title)} ${hunterTag} ${hunterBtn}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
         <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>
         <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">${tt('مشاهده ↗','view ↗')}</a></td></tr>`;
