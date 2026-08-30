@@ -300,13 +300,14 @@ def apply_to_lead(con, token: str, result: Dict[str, Any],
 
 
 def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
-    """اسلات پروفایل از پاسخ فروشنده + امتیاز دوباره شکارچی."""
+    """اسلات پروفایل از پاسخ فروشنده + امتیاز دوباره شکارچی حرفه‌ای + مذاکره."""
     try:
         row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
         if not row:
             return
-        from .hunter import collect_samples, evaluate
+        from .hunter import collect_samples_detailed, evaluate
         from .hunter_profile import default_profile, fill_from_reply, merge_overrides
+
         keyword = row["keyword"] if "keyword" in row.keys() else ""
         adv: Dict[str, Any] = {}
         cat = ""
@@ -324,55 +325,207 @@ def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
         prof = merge_overrides(default_profile(cat, keyword), adv)
         text = result.get("raw") or ""
         filled = fill_from_reply(text, prof)
-        chassis = filled.get("chassis") or (
-            row["chassis"] if "chassis" in row.keys() else "")
-        paint = filled.get("paint") or (
-            row["paint"] if "paint" in row.keys() else "")
-        year = filled.get("year") or (
-            row["car_year"] if "car_year" in row.keys() else 0)
-        km = filled.get("mileage_km") or (
-            row["mileage_km"] if "mileage_km" in row.keys() else 0)
-        price = filled.get("price_toman") or (
-            row["price"] if "price" in row.keys() else 0)
+        chassis = filled.get("chassis") or (row["chassis"] if "chassis" in row.keys() else "")
+        paint = filled.get("paint") or (row["paint"] if "paint" in row.keys() else "")
+        year = filled.get("year") or (row["car_year"] if "car_year" in row.keys() else 0)
+        km = filled.get("mileage_km") or (row["mileage_km"] if "mileage_km" in row.keys() else 0)
+        price = filled.get("price_toman") or (row["price"] if "price" in row.keys() else 0)
+
         extra = {
             "title": row["title"] if "title" in row.keys() else "",
-            "chassis": chassis, "paint": paint,
+            "subtitle": row["subtitle"] if "subtitle" in row.keys() else "",
+            "description": row["description"] if "description" in row.keys() else "",
+            "chassis": chassis,
+            "paint": paint,
             "hunter_flags": filled.get("flags") or {},
-            "category": cat, "keyword": keyword,
+            "category": cat,
+            "keyword": keyword,
             "is_defect": bool(row["is_defect"]) if "is_defect" in row.keys() else False,
             "is_placeholder": False,
             "is_buyer": bool(row["is_buyer"]) if "is_buyer" in row.keys() else False,
+            "year": year,
+            "car_year": year,
+            "mileage_km": km,
         }
         city = row["city"] if "city" in row.keys() else ""
         plat = row["platform"] if "platform" in row.keys() else "divar"
-        samples = collect_samples(con, keyword, city, plat)
+
+        # نمونه‌های دقیق برای آنالیزور حرفه‌ای
+        try:
+            samples = collect_samples_detailed(con, keyword, city, plat)
+        except Exception:
+            from .hunter import collect_samples
+
+            samples = collect_samples(con, keyword, city, plat)
+
         sc = evaluate(int(price or 0), samples, extra=extra, profile=prof, text=text)
         level = sc.get("level") or ""
         if result.get("intent") == "defect_admit":
             level = ""
+
+        # --- مذاکره: اگر پاسخ جدید قیمت دارد، تاریخچه مذاکره را به‌روز کن ---
+        negotiation_status = ""
+        negotiated_price = 0
+        negotiation_history: List[Dict[str, Any]] = []
+        try:
+            raw_hist = row["negotiation_history"] if "negotiation_history" in row.keys() else ""
+            if raw_hist:
+                negotiation_history = json.loads(raw_hist)
+        except Exception:
+            negotiation_history = []
+
+        # پاسخ فروشنده را به تاریخچه اضافه کن
+        if text:
+            negotiation_history.append({"role": "seller", "text": text[:500], "price": price})
+
+        # اگر قیمت جدید اعلام شده، negotiated_price را به‌روز کن
+        if result.get("slots", {}).get("price_toman"):
+            try:
+                negotiated_price = int(result["slots"]["price_toman"])
+            except Exception:
+                negotiated_price = int(price or 0)
+        else:
+            # اگر قبلاً negotiated_price داشت
+            try:
+                negotiated_price = int(row["negotiated_price"] if "negotiated_price" in row.keys() else 0)
+            except Exception:
+                negotiated_price = 0
+
+        # تصمیم مذاکره
+        try:
+            from .hunter_negotiator import (
+                analyze_negotiation_reply,
+                build_vip_payload,
+                should_continue_negotiation,
+                should_start_negotiation,
+            )
+
+            # اگر شکار good/great است و هنوز مذاکره نکرده‌ایم → شروع مذاکره
+            if should_start_negotiation(sc) and not negotiation_history:
+                # فقط اگر قبلاً inquiry جواب داده شده
+                negotiation_status = "negotiating"
+            elif negotiation_history:
+                # تحلیل ادامه
+                cont, stage = should_continue_negotiation(negotiation_history, sc)
+                if not cont:
+                    if stage == "negotiated":
+                        negotiation_status = "negotiated"
+                    elif stage == "refused":
+                        negotiation_status = "refused"
+                    else:
+                        negotiation_status = "negotiated" if level in ("good", "great") else "pending"
+                else:
+                    negotiation_status = "negotiating"
+
+            # اگر مذاکره تمام و شکار است → VIP
+            if negotiation_status in ("negotiated", "negotiating") and level in ("good", "great"):
+                # اگر توافق شده یا حتی در حال مذاکره ولی قیمت خوب است، VIP
+                if sc.get("confidence", 0) >= 0.5:
+                    # VIP payload
+                    vip_payload = build_vip_payload(
+                        token=token,
+                        title=str(row["title"] if "title" in row.keys() else ""),
+                        original_price=int(row["price"] if "price" in row.keys() else price or 0),
+                        negotiated_price=negotiated_price or None,
+                        fair_price=int(sc.get("fair") or 0),
+                        healthy_median=int(sc.get("healthy_median") or sc.get("median") or 0),
+                        discount_pct=sc.get("discount_pct"),
+                        level=level,
+                        flags=sc.get("flags") or {},
+                        confidence=float(sc.get("confidence") or 0),
+                        market=sc.get("market") or {},
+                        negotiation_history=negotiation_history,
+                        url=str(row["url"] if "url" in row.keys() else ""),
+                        phone=str(row["phone"] if "phone" in row.keys() else ""),
+                        city=str(city),
+                    )
+                    try:
+                        from .events import emit
+
+                        emit("hunter_vip", vip_payload)
+                        emit("hunter_negotiated", vip_payload)
+                    except Exception:
+                        pass
+                    # اگر negotiated_price داریم و بهتر از قیمت اصلی است، قیمت را به‌روز کن
+                    if negotiated_price and negotiated_price > 0:
+                        try:
+                            con.execute(
+                                "UPDATE leads SET negotiated_price=?, negotiation_status='vip', vip=1 WHERE token=?",
+                                (negotiated_price, token),
+                            )
+                        except Exception:
+                            pass
+        except Exception as e:
+            # مذاکره خطا → نادیده
+            pass
+
+        # ذخیره نهایی
         try:
             con.execute(
                 "UPDATE leads SET chassis=?, paint=?, car_year=?, mileage_km=?, "
                 "hunter_level=?, hunter_adj_pct=?, hunter_questions=?, "
+                "hunter_confidence=?, hunter_fair_price=?, hunter_discount_pct=?, hunter_market_median=?, "
+                "negotiation_history=?, negotiated_price=?, "
                 "inquiry_status=CASE WHEN inquiry_status IN ('pending','sent') "
                 "THEN 'answered' ELSE inquiry_status END WHERE token=?",
-                (str(chassis or ""), str(paint or ""), int(year or 0), int(km or 0),
-                 level, float(sc.get("adj_pct") or 0),
-                 str(sc.get("questions") or "")[:400], token))
+                (
+                    str(chassis or ""),
+                    str(paint or ""),
+                    int(year or 0),
+                    int(km or 0),
+                    level,
+                    float(sc.get("adj_pct") or 0),
+                    str(sc.get("questions") or "")[:400],
+                    float(sc.get("confidence") or 0),
+                    int(sc.get("fair") or 0),
+                    float(sc.get("discount_pct") or 0),
+                    int(sc.get("healthy_median") or sc.get("median") or 0),
+                    json.dumps(negotiation_history, ensure_ascii=False)[:4000],
+                    int(negotiated_price or 0),
+                    token,
+                ),
+            )
         except Exception:
-            con.execute(
-                "UPDATE leads SET chassis=?, paint=? WHERE token=?",
-                (str(chassis or ""), str(paint or ""), token))
+            try:
+                con.execute(
+                    "UPDATE leads SET chassis=?, paint=?, car_year=?, mileage_km=?, "
+                    "hunter_level=?, hunter_adj_pct=?, hunter_questions=? WHERE token=?",
+                    (
+                        str(chassis or ""),
+                        str(paint or ""),
+                        int(year or 0),
+                        int(km or 0),
+                        level,
+                        float(sc.get("adj_pct") or 0),
+                        str(sc.get("questions") or "")[:400],
+                        token,
+                    ),
+                )
+            except Exception:
+                con.execute(
+                    "UPDATE leads SET chassis=?, paint=? WHERE token=?",
+                    (str(chassis or ""), str(paint or ""), token),
+                )
+
         # رویداد شکارچی
         try:
             from .events import emit
-            emit("hunter_evaluated", {
-                "token": token,
-                "level": level,
-                "price": price,
-                "chassis": chassis,
-                "paint": paint,
-            })
+
+            emit(
+                "hunter_evaluated",
+                {
+                    "token": token,
+                    "level": level,
+                    "price": price,
+                    "fair": sc.get("fair"),
+                    "healthy_median": sc.get("healthy_median"),
+                    "discount_pct": sc.get("discount_pct"),
+                    "confidence": sc.get("confidence"),
+                    "chassis": chassis,
+                    "paint": paint,
+                    "negotiation_status": negotiation_status,
+                },
+            )
         except Exception:
             pass
     except Exception:

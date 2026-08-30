@@ -709,6 +709,102 @@ def keywords_hunter_adv(kw_id: int, req: HunterAdvUpdate):
     return {"ok": True, "message": "تنظیمات پیشرفته شکارچی ذخیره شد"}
 
 
+@app.get("/api/hunter/analyze/{token}")
+def hunter_analyze_token(token: str):
+    """آنالیز حرفه‌ای یک آگهی — بازار سالم + اطمینان + مذاکره."""
+    from ..hunter import collect_samples_detailed, evaluate
+    from ..hunter_profile import default_profile, merge_overrides
+    import json as _json
+
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        kw = row["keyword"] if "keyword" in row.keys() else ""
+        city = row["city"] if "city" in row.keys() else ""
+        plat = row["platform"] if "platform" in row.keys() else "divar"
+        cat = ""
+        adv = {}
+        try:
+            kwrow = con.execute("SELECT category, hunter_adv FROM keywords WHERE keyword=?", (kw,)).fetchone()
+            if kwrow:
+                cat = kwrow["category"] or ""
+                raw = kwrow["hunter_adv"] or ""
+                if raw:
+                    adv = _json.loads(raw)
+        except Exception:
+            pass
+        prof = merge_overrides(default_profile(cat, kw), adv)
+        extra = dict(row)
+        extra["keyword"] = kw
+        extra["category"] = cat
+        blob = " ".join(str(row[k] or "") for k in ("title", "subtitle", "description", "inspect_summary") if k in row.keys())
+        samples = collect_samples_detailed(con, kw, city, plat, limit=80)
+        sc = evaluate(int(row["price"] if "price" in row.keys() else 0), samples, extra=extra, profile=prof, text=blob)
+        # مذاکره
+        history = []
+        try:
+            raw_hist = row["negotiation_history"] if "negotiation_history" in row.keys() else ""
+            if raw_hist:
+                history = _json.loads(raw_hist)
+        except Exception:
+            history = []
+        return {"ok": True, "analysis": sc, "negotiation_history": history, "lead": dict(row)}
+    finally:
+        con.close()
+
+
+@app.post("/api/hunter/negotiate/{token}")
+def hunter_negotiate_trigger(token: str):
+    """شروع/ادامه مذاکره دستی برای یک آگهی شکار."""
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        # اگر مانیتور در حال اجراست، از متدش استفاده کن، وگرنه فقط رویداد بزن
+        mon = _state.get("monitor")
+        if mon:
+            try:
+                mon._maybe_hunter_negotiate(con, row, phone=row["phone"] if "phone" in row.keys() else "")
+                return {"ok": True, "message": "مذاکره ارسال شد"}
+            except Exception as e:
+                raise HTTPException(400, str(e))
+        else:
+            # بدون مانیتور — فقط تحلیل مذاکره را برگردان
+            from ..hunter_negotiator import generate_negotiation_message
+
+            context = {
+                "price": int(row["price"] if "price" in row.keys() else 0),
+                "fair": int(row["hunter_fair_price"] if "hunter_fair_price" in row.keys() else 0),
+                "healthy_median": int(row["hunter_market_median"] if "hunter_market_median" in row.keys() else 0),
+                "discount_pct": float(row["hunter_discount_pct"] if "hunter_discount_pct" in row.keys() else 0),
+                "title": str(row["title"] if "title" in row.keys() else ""),
+                "level": str(row["hunter_level"] if "hunter_level" in row.keys() else ""),
+            }
+            msg = generate_negotiation_message(context, [], stage="opener")
+            return {"ok": True, "message": msg, "text": msg}
+    finally:
+        con.close()
+
+
+@app.get("/api/hunter/vip")
+def hunter_vip_list(limit: int = 50):
+    """لیست شکارهای ویژه — VIP آلارم‌ها."""
+    con = connect(DB_PATH)
+    try:
+        rows = con.execute(
+            "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+            "hunter_confidence,negotiated_price,negotiation_status,url,phone,city,platform "
+            "FROM leads WHERE hunter_level IN ('good','great') ORDER BY id DESC LIMIT ?",
+            (min(limit, 200),),
+        ).fetchall()
+        return {"ok": True, "vip": [dict(r) for r in rows]}
+    finally:
+        con.close()
+
+
 # ------------------------------------------------------------- API پیام‌ها --
 @app.get("/api/templates")
 def templates_get():

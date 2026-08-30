@@ -359,6 +359,70 @@ class NluEngine:
             return rl._min["phone"] == 45 and cb.max_consecutive == 3
         check("مانیتور — RateLimiter + CircuitBreaker + چرخش اکانت", monitor_test)
 
+        # 23) آنالیزور حرفه‌ای — بازار سالم + IQR + اطمینان
+        def analyzer_pro_test():
+            from .hunter_analyzer import compute_market_stats, evaluate_professional, normalize_to_healthy
+            prof = {"family": "vehicle", "good_pct": 10, "great_pct": 18, "suspicious_pct": 48,
+                    "km_per_year": 20000, "year_depreciation_per_year": 5,
+                    "adjustments": [
+                        {"key": "paint_full", "label": "دوررنگ", "pct": -14, "words": ["دوررنگ", "دور رنگ"]},
+                        {"key": "chassis_hit", "label": "شاسی ضربه", "pct": -20, "words": ["شاسی ضربه"]},
+                    ],
+                    "slots": []}
+            samples = [
+                {"price": 300_000_000, "title": "پراید بی رنگ سالم"},
+                {"price": 310_000_000, "title": "پراید سالم"},
+                {"price": 320_000_000, "title": "پراید بی رنگ"},
+                {"price": 200_000_000, "title": "پراید دوررنگ"},  # باید نرمال شود به ~232M
+                {"price": 330_000_000, "title": "پراید سالم"},
+            ]
+            stats = compute_market_stats(samples, prof)
+            # healthy_median باید نزدیک 315M باشد (چون دوررنگ نرمال شده)
+            ok1 = stats["healthy_median"] > 300_000_000 and stats["warm"]
+            # ارزیابی حرفه‌ای
+            ev = evaluate_professional(250_000_000, samples, profile=prof, text="پراید بی رنگ شاسی سالم کارکرد 100 کیلومتر", extra={"title": "پراید", "mileage_km": 100, "year": 1402})
+            ok2 = ev["level"] in ("good", "great", "market") and ev["confidence"] > 0.4
+            # نرمال‌سازی: 200M با افت 14% → سالم معادل 200/0.86 ≈ 232,558,139
+            healthy_eq = normalize_to_healthy(200_000_000, -14)
+            ok3 = abs(healthy_eq - 232_558_139) < 5000
+            return ok1 and ok2 and ok3
+        check("آنالیزور حرفه‌ای — بازار سالم + IQR + اطمینان + نرمال‌سازی", analyzer_pro_test)
+
+        # 24) مذاکره‌گر — پیام انسانی + تحلیل پاسخ
+        def negotiator_test():
+            from .hunter_negotiator import (
+                generate_inquiry_message,
+                generate_negotiation_message,
+                analyze_negotiation_reply,
+                should_start_negotiation,
+                build_vip_payload,
+            )
+            prof = {"family": "vehicle", "slots": [{"key": "year", "label": "سال", "question": "مدل چند است؟", "ask": True}],
+                    "adjustments": []}
+            msg = generate_inquiry_message(prof, ["year"], title="پراید 1399")
+            ok1 = "پراید" in msg or "سال" in msg or "مدل" in msg
+            ctx = {"price": 250_000_000, "fair": 300_000_000, "healthy_median": 320_000_000, "discount_pct": 16, "title": "پراید 1399", "level": "great"}
+            neg_msg = generate_negotiation_message(ctx, [], stage="opener")
+            ok2 = len(neg_msg) > 20
+            reply = analyze_negotiation_reply("باشه قبوله 240 میلیون")
+            ok3 = reply["agreed"] or reply["new_price"] == 240_000_000
+            ev = {"level": "great", "discount_pct": 16, "confidence": 0.7, "warm": True}
+            ok4 = should_start_negotiation(ev)
+            vip = build_vip_payload("tok", "پراید", 300_000_000, 250_000_000, 320_000_000, 340_000_000, 21, "great", {}, 0.8, {}, [], url="", phone="", city="تهران")
+            ok5 = vip["is_vip"] and vip["final_price"] == 250_000_000
+            return ok1 and ok2 and ok3 and ok4 and ok5
+        check("مذاکره‌گر — استعلام انسانی + چانه + تحلیل + VIP", negotiator_test)
+
+        # 25) اینترنت و قیمت — آمادگی برای web search
+        def price_knowledge_test():
+            try:
+                from .hunter_analyzer import identify_product
+                prod = identify_product("پراید 111 مدل 99 کارکرد 80 هزار", category="light", keyword="پراید")
+                return prod.get("year") == 1399 or prod.get("model") == "پراید" or prod.get("brand") == ""
+            except Exception:
+                return False
+        check("شناسایی محصول — برند/مدل/سال از متن", price_knowledge_test)
+
         passed = sum(1 for r in results if r["ok"])
         total = len(results)
         return {

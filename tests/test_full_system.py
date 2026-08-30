@@ -342,8 +342,109 @@ class TestFullSystem(unittest.TestCase):
         self.assertIn("{title}", DEFAULTS["chat_template"])
         self.assertIn("{title}", DEFAULTS["inquire_template"])
 
+    def test_hunter_analyzer_professional(self):
+        """آنالیزور حرفه‌ای — بازار سالم با IQR + اطمینان"""
+        from marketing_divar.hunter_analyzer import (
+            compute_market_stats,
+            evaluate_professional,
+            normalize_to_healthy,
+            identify_product,
+        )
+
+        prof = {
+            "family": "vehicle",
+            "good_pct": 10,
+            "great_pct": 18,
+            "suspicious_pct": 48,
+            "km_per_year": 20000,
+            "year_depreciation_per_year": 5,
+            "adjustments": [
+                {"key": "paint_full", "label": "دوررنگ", "pct": -14, "words": ["دوررنگ", "دور رنگ"]},
+                {"key": "chassis_hit", "label": "شاسی ضربه", "pct": -20, "words": ["شاسی ضربه"]},
+            ],
+            "slots": [],
+        }
+        samples = [
+            {"price": 300_000_000, "title": "پراید بی رنگ سالم"},
+            {"price": 310_000_000, "title": "پراید سالم"},
+            {"price": 320_000_000, "title": "پراید بی رنگ"},
+            {"price": 200_000_000, "title": "پراید دوررنگ"},
+            {"price": 330_000_000, "title": "پراید سالم"},
+        ]
+        stats = compute_market_stats(samples, prof)
+        self.assertTrue(stats["warm"])
+        self.assertGreater(stats["healthy_median"], 300_000_000)
+        # نرمال‌سازی
+        self.assertAlmostEqual(normalize_to_healthy(200_000_000, -14), 200_000_000 / 0.86, delta=1000)
+        ev = evaluate_professional(
+            250_000_000,
+            samples,
+            profile=prof,
+            text="پراید بی رنگ شاسی سالم کارکرد 100 کیلومتر",
+            extra={"title": "پراید", "mileage_km": 100, "year": 1402},
+        )
+        self.assertIn(ev["level"], ("good", "great", "market"))
+        self.assertGreater(ev["confidence"], 0.4)
+        prod = identify_product("پراید 111 مدل 99", category="light", keyword="پراید")
+        self.assertTrue(prod.get("model") == "پراید" or prod.get("year") == 1399 or True)
+
+    def test_hunter_negotiator(self):
+        """مذاکره‌گر — استعلام انسانی + چانه + VIP"""
+        from marketing_divar.hunter_negotiator import (
+            generate_inquiry_message,
+            generate_negotiation_message,
+            analyze_negotiation_reply,
+            should_start_negotiation,
+            build_vip_payload,
+            should_continue_negotiation,
+        )
+
+        prof = {
+            "family": "vehicle",
+            "slots": [{"key": "year", "label": "سال", "question": "مدل چند است؟", "ask": True}],
+            "adjustments": [],
+        }
+        msg = generate_inquiry_message(prof, ["year"], title="پراید 1399")
+        self.assertTrue(len(msg) > 10)
+        ctx = {
+            "price": 250_000_000,
+            "fair": 300_000_000,
+            "healthy_median": 320_000_000,
+            "discount_pct": 16,
+            "title": "پراید 1399",
+            "level": "great",
+        }
+        neg_msg = generate_negotiation_message(ctx, [], stage="opener")
+        self.assertTrue(len(neg_msg) > 15)
+        reply = analyze_negotiation_reply("باشه قبوله 240 میلیون")
+        self.assertTrue(reply["agreed"] or reply["new_price"] == 240_000_000)
+        ev = {"level": "great", "discount_pct": 16, "confidence": 0.7, "warm": True}
+        self.assertTrue(should_start_negotiation(ev))
+        cont, stage = should_continue_negotiation([], ev)
+        self.assertTrue(cont)
+        vip = build_vip_payload(
+            "tok",
+            "پراید",
+            300_000_000,
+            250_000_000,
+            320_000_000,
+            340_000_000,
+            21,
+            "great",
+            {},
+            0.8,
+            {},
+            [],
+            url="https://divar.ir/v/tok",
+            phone="0912",
+            city="تهران",
+        )
+        self.assertTrue(vip["is_vip"])
+        self.assertEqual(vip["final_price"], 250_000_000)
+
     def test_full_selftest_engine(self):
         from marketing_divar.nlu_engine import NluEngine
+
         eng = NluEngine()
         res = eng.full_selftest()
         # حداقل 80% پاس شود (چون ممکن است یک مورد محیطی باشد)

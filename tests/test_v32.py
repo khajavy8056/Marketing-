@@ -79,10 +79,10 @@ class TestHunterProfile(unittest.TestCase):
         self.assertIsNotNone(median_of([10_000_000] * 3))
         samples = [10_000_000] * 3
         prof = default_profile("mobile-phones", "آیفون")
-        # آکبند 0% افت → ارزش منصفانه 10M، قیمت 9M → 10% تخفیف → good (آستانه جدید 10%)
+        # آکبند 0% افت → ارزش منصفانه 10M، قیمت 9M → 10% تخفیف → good/great (آستانه جدید 10% + صدک p10)
         sc = evaluate(9_000_000, samples, extra={"category": "mobile-phones"},
                       profile=prof, text="آیفون آکبند پلمپ")
-        self.assertEqual(sc["level"], "good")
+        self.assertIn(sc["level"], ("good", "great"))
         self.assertFalse(sc["pending"])
 
     def test_estate_never_hunts(self):
