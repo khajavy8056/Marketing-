@@ -865,11 +865,65 @@ def nlu_status():
 
 
 @app.post("/api/nlu/install")
-def nlu_install():
+def nlu_install(small: bool = False):
     from ..nlu_model import start_install_async
-    st = start_install_async()
+    st = start_install_async(small=small)
     log("info", "دانلود مدل محلی درک متن شروع شد")
     return {"ok": True, "message": "دانلود مدل محلی شروع شد — کنار برنامه نصب می‌شود", **st}
+
+
+@app.post("/api/nlu/install-dummy")
+def nlu_install_dummy():
+    """نصب مدل تستی 10MB برای تست صفر تا صد بدون دانلود 1.5GB — fallback هوشمند فعال."""
+    from ..nlu_model import ensure_dummy_model_for_test, status as nlu_st
+    try:
+        ensure_dummy_model_for_test()
+        log("success", "مدل تستی نصب شد — fallback هوشمند فعال")
+        return {"ok": True, "message": "مدل تستی نصب شد — سیستم کامل با fallback هوشمند کار می‌کند", **nlu_st()}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/nlu/memory")
+def nlu_memory():
+    from ..nlu_memory import get_memory, get_stats
+    return {"memory": get_memory(), "stats": get_stats()}
+
+
+@app.get("/api/nlu/events")
+def nlu_events(limit: int = 50):
+    from ..events import recent
+    return {"events": recent(limit)}
+
+
+@app.get("/api/nlu/engine")
+def nlu_engine_status():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.status()
+
+
+@app.post("/api/nlu/selftest")
+def nlu_selftest():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    res = eng.full_selftest()
+    log("success" if res.get("ok") else "warning", f"تست صفر تا صد: {res.get('summary')}")
+    return res
+
+
+class NluAnalyzeReq(BaseModel):
+    text: str = ""
+    keyword: str = ""
+    category: str = ""
+    platform: str = "divar"
+
+
+@app.post("/api/nlu/analyze")
+def nlu_analyze(req: NluAnalyzeReq):
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.analyze_reply(req.text, keyword=req.keyword, category=req.category, platform=req.platform)
 
 
 # ------------------------------------------------------------ API مانیتور --

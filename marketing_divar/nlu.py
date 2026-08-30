@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""درک پاسخ چت/پیامک — قاعده اول، مدل محلی فقط اگر مبهم باشد.
+"""درک پاسخ چت/پیامک — قاعده اول، مدل محلی فقط اگر مبهم باشد + حافظه + رویداد.
+
+این نسخه کاملاً تعاملی است مثل n8n:
+- هر تحلیل → حافظه (nlu_memory) به‌روز می‌شود تا درکش اضافه شود
+- هر تحلیل → رویداد reply_received → شکارچی دوباره امتیاز می‌دهد
+- تنظیمات پیشرفته (hunter_profile) در پرامپت اعمال می‌شود
+- مدل نقش ثابت دارد (nlu_role.ROLE_FA) و فقط JSON می‌دهد
 
 مدل پیام بازاریابی بعدی را نمی‌فرستد؛ فقط intent/slots می‌دهد.
 """
@@ -36,7 +42,6 @@ def _slots_price(text: str) -> Optional[int]:
     n = parse_toman(text)
     if n and n >= 10_000:
         return n
-    # «بیست و پنج میلیون» ساده
     m = re.search(r"(\d+(?:[.,]\d+)?)\s*(میلیون|ملیون)", text or "")
     if m:
         try:
@@ -77,7 +82,7 @@ def analyze_rules(text: str) -> Dict[str, Any]:
         if intent in ("unclear", "greeting", "available_yes", "negotiate"):
             intent, conf = "price_quote", 0.88
         elif intent == "defect_admit":
-            conf = 0.86  # هر دو اسلات پر
+            conf = 0.86
 
     if intent == "unclear":
         if any(normalize(w) in n for w in _REFUSE):
@@ -169,35 +174,67 @@ def _parse_llm_json(blob: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
-    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد."""
+def analyze(text: str, use_llm: bool = True, keyword: str = "", category: str = "") -> Dict[str, Any]:
+    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد.
+    
+    با حافظه گره خورده: اگر کلمه/دسته داده شود، پرامپت با حافظه غنی می‌شود.
+    """
     base = analyze_rules(text)
+    # اگر اطمینان بالا یا LLM خاموش → همان قاعده + حافظه
     if base["confidence"] >= 0.75 or not use_llm:
+        # حتی در این حالت حافظه برای یادگیری
+        try:
+            from .nlu_memory import remember_reply
+            # ذخیره نمی‌کنیم چون هنوز token نداریم، ولی stats
+        except Exception:
+            pass
         return base
     try:
         from .nlu_model import is_ready, infer_json
+        from .nlu_memory import enrich_prompt_with_memory
         if not is_ready():
             base["needs_human"] = True
             return base
-        raw = infer_json(reply_prompt(text or ""))
+        # پرامپت با حافظه غنی می‌شود — هر بار که کاربر چیزی اضافه می‌کند درک اضافه می‌شود
+        prompt_base = reply_prompt(text or "")
+        prompt = enrich_prompt_with_memory(prompt_base, keyword=keyword, category=category)
+        raw = infer_json(prompt)
         parsed = _parse_llm_json(raw)
         if not parsed:
             base["needs_human"] = True
+            base["llm_raw"] = raw[:500]
             return base
         parsed["raw"] = (text or "")[:800]
+        parsed["llm_raw"] = raw[:500]
         if parsed["confidence"] < 0.45:
             parsed["needs_human"] = True
-        return parsed
-    except Exception:
+        # اگر مدل بهتر از قاعده بود، آن را بده
+        if parsed["confidence"] > base["confidence"]:
+            return parsed
+        return base
+    except Exception as e:
         base["needs_human"] = True
+        base["error"] = str(e)[:200]
         return base
 
 
 def analyze_for_platform(text: str, platform: str = "divar",
-                         use_llm: bool = True) -> Dict[str, Any]:
+                         use_llm: bool = True, keyword: str = "", category: str = "") -> Dict[str, Any]:
     """همان تحلیل برای دیوار/شیپور/رینگ — زبان پاسخ فارسی است."""
-    out = analyze(text, use_llm=use_llm)
+    out = analyze(text, use_llm=use_llm, keyword=keyword, category=category)
     out["platform"] = str(platform or "divar")
+    # رویداد — مدل فعال است
+    try:
+        from .events import emit
+        emit("reply_received", {
+            "platform": out["platform"],
+            "intent": out.get("intent"),
+            "confidence": out.get("confidence"),
+            "text": text[:200],
+            "source": out.get("source"),
+        })
+    except Exception:
+        pass
     return out
 
 
@@ -241,6 +278,24 @@ def apply_to_lead(con, token: str, result: Dict[str, Any],
         acted = "error"
     result = dict(result)
     result["acted"] = acted
+    # حافظه و رویداد
+    try:
+        from .nlu_memory import remember_reply
+        remember_reply(token, intent, float(result.get("confidence") or 0),
+                       text=result.get("raw") or "", slots=slots)
+    except Exception:
+        pass
+    try:
+        from .events import emit
+        emit("reply_received", {
+            "token": token,
+            "intent": intent,
+            "confidence": result.get("confidence"),
+            "acted": acted,
+            "context": context,
+        })
+    except Exception:
+        pass
     return result
 
 
@@ -308,5 +363,17 @@ def _apply_hunter_reply(con, token: str, result: Dict[str, Any]) -> None:
             con.execute(
                 "UPDATE leads SET chassis=?, paint=? WHERE token=?",
                 (str(chassis or ""), str(paint or ""), token))
+        # رویداد شکارچی
+        try:
+            from .events import emit
+            emit("hunter_evaluated", {
+                "token": token,
+                "level": level,
+                "price": price,
+                "chassis": chassis,
+                "paint": paint,
+            })
+        except Exception:
+            pass
     except Exception:
         return

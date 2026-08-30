@@ -31,6 +31,22 @@ from .notifier import notify
 from .rate import RateLimiter
 
 
+def _emit_event(kind: str, payload: Dict[str, Any]) -> None:
+    try:
+        from .events import emit
+        emit(kind, payload)
+    except Exception:
+        pass
+
+
+def _remember_listing(token: str, title: str, category: str = "", keyword: str = "", platform: str = "divar") -> None:
+    try:
+        from .nlu_memory import remember_listing
+        remember_listing(token, title, category=category, keyword=keyword, platform=platform)
+    except Exception:
+        pass
+
+
 class CommandListener(threading.Thread):
     """شنیدن فرمان‌های اپراتور در پس‌زمینه (بدون قفل‌کردن حلقه اصلی)."""
 
@@ -331,6 +347,15 @@ class Monitor:
                 pass
         post["hunter_level"] = level
         post["hunter_questions"] = sc.get("questions") or ""
+        if level == "pending" or sc.get("pending"):
+            _emit_event("hunter_pending", {
+                "token": token,
+                "title": str(post.get("title") or "")[:80],
+                "keyword": kw,
+                "category": cat,
+                "questions": sc.get("questions") or "",
+                "platform": plat,
+            })
 
     def _row_get(self, row, key, default=""):
         try:
@@ -390,6 +415,12 @@ class Monitor:
                             bump_quota(con, "sms")
                             con.commit()
                             self._ev("success", "استعلام شکارچی پیامک شد")
+                            _emit_event("inquiry_sent", {
+                                "token": token,
+                                "channel": "sms",
+                                "phone": lead.get("phone") or "",
+                                "questions": questions,
+                            })
                             return
             except Exception as e:
                 self._ev("warning", f"استعلام پیامک: {e}")
@@ -425,6 +456,12 @@ class Monitor:
                 bump_quota(con, "chats")
                 con.commit()
                 self._ev("success", "استعلام شکارچی در چت ارسال شد")
+                _emit_event("inquiry_sent", {
+                    "token": token,
+                    "channel": "chat",
+                    "account": name,
+                    "questions": questions,
+                })
             elif r.get("status") == "removed":
                 con.execute(
                     "UPDATE leads SET phone_status='removed', inquiry_status='gone' "
@@ -516,6 +553,7 @@ class Monitor:
                     except Exception:
                         pass
                 self._ev("success", f"پیامک خودکار ارسال شد → {phone}")
+                _emit_event("sms_sent", {"token": token, "phone": phone, "title": str(row["title"] or "")[:80] if "title" in row.keys() else ""})
                 print(f"  📩 پیامک خودکار: {phone}")
                 qn = quota_today(con)
                 self._tg(f"پیامک ارسال شد\nشماره: {phone}\n"
@@ -603,6 +641,7 @@ class Monitor:
             if r.get("ok"):
                 bump_quota(con, "chats")
                 self._ev("success", "💬 چت خودکار ارسال شد (%s)" % account_name)
+                _emit_event("chat_sent", {"token": token, "account": account_name, "thread_id": r.get("thread_id") or "", "title": str(lead.get("title") or "")[:80]})
             else:
                 self._ev("warning", "چت خودکار ناموفق — اپراتور: %s" % r.get("message"))
         except Exception as e:
@@ -773,6 +812,13 @@ class Monitor:
                 log_operation(con, token=row["token"], account=name,
                               operation="contact", result=status,
                               error=str(e), started_at=started)
+                _emit_event("captcha_hit", {
+                    "account": name,
+                    "token": row["token"],
+                    "status": e.status if hasattr(e, "status") else 403,
+                    "error": str(e)[:200],
+                    "url": (row["url"] if "url" in row.keys() else "") or "",
+                })
                 return "wait"
             except Exception as e:
                 con.execute(
@@ -815,8 +861,26 @@ class Monitor:
             self._acct_errors[name] = 0
             if st == "found":
                 self._ev("success", f"📞 شماره پیدا شد: {row['title'][:40]} → {res['phone']}")
+                _emit_event("contact_found", {
+                    "token": row["token"],
+                    "phone": res.get("phone") or "",
+                    "account": name,
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                    "price": row["price"] if "price" in row.keys() else 0,
+                })
+                try:
+                    _remember_listing(row["token"], str(row["title"] or ""), category=str(row["category"] if "category" in row.keys() else ""), keyword=str(row["keyword"] if "keyword" in row.keys() else ""), platform=str(row["platform"] if "platform" in row.keys() else "divar"))
+                except Exception:
+                    pass
             elif st == "hidden":
                 self._ev("info", f"💬 فقط چت (دیوار صریحاً مخفی کرد): {row['title'][:40]}")
+                _emit_event("chat_only", {
+                    "token": row["token"],
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                    "account": name,
+                })
             self.mgr.record_use(self.db_path, name)
             con.commit()
             if st == "found":
@@ -854,6 +918,11 @@ class Monitor:
                     self._ev("warning", f"چت خودکار: {e}")
             elif st == "removed":
                 print(f"  × {row['title'][:32]} حذف شده")
+                _emit_event("contact_removed", {
+                    "token": row["token"],
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                })
             return "done"
         finally:
             con.close()
