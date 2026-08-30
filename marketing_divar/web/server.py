@@ -866,16 +866,13 @@ def hunter_ai_apply(req: HunterAIApplyReq):
     # اگر شهر نداده، از تنظیمات قبلی یا None (همه ایران)
     if cities is None:
         try:
-            from ... import store as _store
-            # شهرهای آخرین پایش فعال
-            specs = _store.keywords_active_specs(DB_PATH)
+            specs = store.keywords_active_specs(DB_PATH)
             if specs and specs[0].get("cities"):
                 cities = specs[0].get("cities")
         except Exception:
             cities = None
 
     added = 0
-    from ..pricing import million_to_toman
     for kw in cfg.get("keywords", []):
         keyword = kw.get("keyword") or kw.get("model") or ""
         category = kw.get("category") or "mobile-phones"
