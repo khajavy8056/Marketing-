@@ -173,7 +173,27 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
         post["price"] = price or 0
         if not post.get("published_at"):
             post["published_at"] = post.get("bottom") or ""
-        return upsert_lead(con, post, keyword or "دسته", city)
+        is_new = upsert_lead(con, post, keyword or "دسته", city)
+        if is_new:
+            try:
+                from .events import emit
+                from .nlu_memory import remember_listing
+                emit("listing_found", {
+                    "token": post.get("token") or "",
+                    "title": post.get("title") or "",
+                    "category": post.get("category") or "",
+                    "price": price or 0,
+                    "keyword": keyword,
+                    "platform": post.get("platform") or "divar",
+                    "hunter_level": post.get("hunter_level") or "",
+                    "is_defect": bool(post.get("is_defect")),
+                })
+                remember_listing(post.get("token") or "", post.get("category") or "",
+                                 hunter_level=post.get("hunter_level") or "", price=int(price or 0),
+                                 is_defect=bool(post.get("is_defect")))
+            except Exception:
+                pass
+        return is_new
 
     if not (keyword or "").strip():
         hits = [keyword or "دسته"]
@@ -206,4 +226,24 @@ def consider_new_lead(con, client, post: Dict[str, Any], keyword: str,
     post["price"] = price or 0
     if not post.get("published_at"):
         post["published_at"] = post.get("bottom") or ""
-    return upsert_lead(con, post, keyword, city)
+    is_new = upsert_lead(con, post, keyword, city)
+    if is_new:
+        try:
+            from .events import emit
+            from .nlu_memory import remember_listing
+            emit("listing_found", {
+                "token": post.get("token") or "",
+                "title": post.get("title") or "",
+                "category": post.get("category") or "",
+                "price": price or 0,
+                "keyword": keyword,
+                "platform": post.get("platform") or "divar",
+                "hunter_level": post.get("hunter_level") or "",
+                "is_defect": bool(post.get("is_defect")),
+            })
+            remember_listing(post.get("token") or "", post.get("category") or "",
+                             hunter_level=post.get("hunter_level") or "", price=int(price or 0),
+                             is_defect=bool(post.get("is_defect")))
+        except Exception:
+            pass
+    return is_new
