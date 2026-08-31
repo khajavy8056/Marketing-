@@ -25,7 +25,7 @@ APP_NAME_EN = "Divar Marketing"
 APP_NAME_FA = "مارکتینگ دیوار — تیرا"
 AI_NAME = "تیرا"
 PORT = 8642
-VERSION = "3.4.3-tira-responsive"
+VERSION = "3.4.4-tira-fix"
 CREATE_NO_WINDOW = 0x08000000
 
 

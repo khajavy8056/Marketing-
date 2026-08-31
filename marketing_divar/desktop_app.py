@@ -20,7 +20,7 @@ from .paths import apply_runtime_paths, user_data_dir
 from .brand import APP_NAME_EN, APP_NAME_FA, PORT
 
 APP_TITLE = f"🧠 تیرا - دستیار شکار حرفه‌ای | {APP_NAME_FA}"
-VERSION = "3.4.3-tira-responsive"
+VERSION = "3.4.4-tira-fix"
 
 
 def _ensure_runtime() -> Path:
