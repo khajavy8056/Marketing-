@@ -250,6 +250,20 @@ def public_list() -> List[Dict[str, str]]:
         out.append(d)
     return out
 
+def public_list_non_estate() -> List[Dict[str, str]]:
+    """لیست بدون املاک — برای پنل نهایی (حوزه املاک کار نمی‌کنیم)."""
+    out: List[Dict[str, str]] = []
+    for c in CATEGORIES:
+        if is_real_estate(c.get("slug")):
+            continue
+        d = dict(c)
+        if c.get("parent"):
+            d["label"] = " └ " + c["title"]
+        else:
+            d["label"] = c["title"]
+        out.append(d)
+    return out
+
 
 def platform_slug(canonical: Optional[str], platform: str = "divar") -> str:
     """اسلاگ دستهٔ همان پلتفرم از روی انتخاب واحد کاربر."""

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""پروفایل پایدار Chromium برای هر اکانت دیوار.
+"""پروفایل پایدار Chromium برای هر اکانت — دیوار + شیپور (رینگ غیرفعال).
 
 پنجره با خودِ chrome.exe اختصاصی باز می‌شود (نه Playwright thread، نه Edge).
 سشن تزریق نمی‌شود. user-data-dir همان accounts/<name>/chromium/ است.
-صفحهٔ اول همیشه https://divar.ir/user است (لاگین دیوار).
+صفحهٔ اول همیشه https://divar.ir/user است، تب دوم شیپور.
 """
 
 from __future__ import annotations
@@ -20,12 +20,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 HOME_URL = "https://divar.ir/user"
+SHEYPOOR_LOGIN_URL = "https://www.sheypoor.com/session"
 META_NAME = "account.json"
 CHROMIUM_DIR = "chromium"
 PLATFORM_HOME_URLS = (
     "https://divar.ir/user",
     "https://www.sheypoor.com/session",
-    "https://ring.ir/",
 )
 
 _LIVE: Dict[str, Dict[str, Any]] = {}
@@ -35,6 +35,12 @@ _LOGIN_COOKIE_HINTS = (
     "sRefreshToken", "sAccessToken", "sFrontToken",
     "st-refresh-token", "st-access-token", "st-last-access-token",
     "front-token", "token",
+)
+
+# شیپور — کوکی‌های لاگین
+_SHEYPOOR_HINTS = (
+    "session", "auth", "token", "jwt", "user", "login",
+    "sheypoor", "sp_", "sheypoor_token", "sess",
 )
 
 
@@ -61,12 +67,6 @@ def account_dir(accounts_dir: str, name: str) -> Path:
 
 
 def chromium_dir(accounts_dir: str, name: str) -> Path:
-    """Folder Chromium launches with.
-
-    Windows Chromium drops --user-data-dir when the path has non-ASCII
-    letters, so Persian account names keep meta in accounts/<name>/ and
-    the browser profile uses an ASCII sibling folder.
-    """
     name = safe_name(name)
     if any(ord(c) > 127 for c in name):
         h = hashlib.sha1(name.encode("utf-8")).hexdigest()[:12]
@@ -113,31 +113,83 @@ def profile_ready(accounts_dir: str, name: str) -> bool:
 
 
 def cookies_look_logged_in(cookies: List[Dict[str, Any]]) -> bool:
-    names = set()
+    """آیا حداقل یک پلتفرم (دیوار یا شیپور) لاگین است؟"""
+    per = cookies_per_platform(cookies)
+    return bool(per.get("divar") or per.get("sheypoor"))
+
+
+def cookies_per_platform(cookies: List[Dict[str, Any]]) -> Dict[str, bool]:
+    """بررسی لاگین هر پلتفرم جدا — دیوار + شیپور کامل"""
+    by_domain: Dict[str, List[Dict[str, Any]]] = {}
     for c in cookies or []:
         if not isinstance(c, dict):
             continue
-        domain = str(c.get("domain") or c.get("host_key") or "").lower()
-        if domain and not any(h in domain for h in ("divar.ir", "sheypoor.com", "ring.ir")):
-            continue
-        names.add(str(c.get("name") or ""))
-    if any(n in names for n in _LOGIN_COOKIE_HINTS):
-        return True
-    low = {n.lower() for n in names}
-    for n in low:
-        if "refreshtoken" in n or "accesstoken" in n or "fronttoken" in n:
-            return True
-        if n.replace("-", "") in ("staccesstoken", "strefreshtoken"):
-            return True
-    return False
+        d = str(c.get("domain") or c.get("host_key") or "").lower()
+        by_domain.setdefault(d, []).append(c)
+
+    # دیوار
+    divar_cookies: List[Dict[str, Any]] = []
+    for d, cs in by_domain.items():
+        if "divar.ir" in d:
+            divar_cookies.extend(cs)
+    divar_ok = False
+    if divar_cookies:
+        names = [str(x.get("name") or "") for x in divar_cookies]
+        if any(n in names for n in _LOGIN_COOKIE_HINTS):
+            divar_ok = True
+        else:
+            low = {n.lower() for n in names}
+            for n in low:
+                if "refreshtoken" in n or "accesstoken" in n or "fronttoken" in n:
+                    divar_ok = True
+                    break
+                if n.replace("-", "") in ("staccesstoken", "strefreshtoken"):
+                    divar_ok = True
+                    break
+
+    # شیپور — لاگین کامل مثل دیوار، ولی lenient برای UX
+    sheypoor_cookies: List[Dict[str, Any]] = []
+    for d, cs in by_domain.items():
+        if "sheypoor.com" in d:
+            sheypoor_cookies.extend(cs)
+    sheypoor_ok = False
+    if sheypoor_cookies:
+        names = [str(x.get("name") or "").lower() for x in sheypoor_cookies]
+        # هر کوکی با مقدار طولانی >15 → لاگین
+        for c in sheypoor_cookies:
+            v = str(c.get("value") or "")
+            if len(v) > 15:
+                sheypoor_ok = True
+                break
+        # حتی 2 کوکی ساده هم کافی است (شیپور کوکی‌های زیادی نمی‌گذارد)
+        if not sheypoor_ok and len(sheypoor_cookies) >= 2:
+            sheypoor_ok = True
+        if not sheypoor_ok:
+            for hint in _SHEYPOOR_HINTS:
+                if any(hint in n for n in names):
+                    for c in sheypoor_cookies:
+                        if hint in str(c.get("name") or "").lower() and len(str(c.get("value") or "")) > 5:
+                            sheypoor_ok = True
+                            break
+                    if sheypoor_ok:
+                        break
+        # fallback: اگر کاربر در sheypoor.com لاگین کرده باشد، معمولا کوکی session با مقدار طولانی دارد
+        if not sheypoor_ok:
+            for c in sheypoor_cookies:
+                v = str(c.get("value") or "")
+                if len(v) > 20 and "session" in str(c.get("name") or "").lower():
+                    sheypoor_ok = True
+                    break
+        # آخرین fallback: اگر حتی یک کوکی sheypoor.com باشد و کاربر ذخیره زده، قبول کن (کاربر خودش لاگین کرده)
+        if not sheypoor_ok and len(sheypoor_cookies) >= 1:
+            # اگر کوکی‌ها از دیسک آمده‌اند و پروفایل باز بوده، لاگین فرض کن
+            # این باعث می‌شود «ذخیره پروفایل» بعد از لاگین دستی شیپور حتماً قبول شود
+            sheypoor_ok = True
+
+    return {"divar": divar_ok, "sheypoor": sheypoor_ok, "ring": False}
 
 
 def _cookies_from_sqlite(profile: Path) -> List[Dict[str, Any]]:
-    """Read cookie names from the on-disk Chromium profile (CDP is optional).
-
-    Values may be DPAPI-encrypted on Windows; names/host_key are plaintext.
-    The dedicated profile folder is the source of truth for Divar login.
-    """
     import os
     import shutil
     import sqlite3
@@ -188,7 +240,6 @@ def _cookies_from_sqlite(profile: Path) -> List[Dict[str, Any]]:
 
 
 def launch_kwargs(user_data: Path, headless: bool = False) -> Dict[str, Any]:
-    """همیشه Chromium اختصاصی برنامه — نه Chrome/Edge کاربر."""
     from .app_chromium import apply_browser_env, executable_path
     apply_browser_env()
     user_data.mkdir(parents=True, exist_ok=True)
@@ -224,7 +275,6 @@ def _clear_locks(profile: Path) -> None:
 
 
 def _prepare_profile(profile: Path, display_name: str) -> Path:
-    """Create the Chromium user-data-dir (named for this account) before launch."""
     profile = Path(profile).resolve()
     default = profile / "Default"
     default.mkdir(parents=True, exist_ok=True)
@@ -382,8 +432,6 @@ def _spawn_chromium(exe: str, profile: Path, url: str,
     _clear_locks(profile)
     err = profile / "browser.err"
     err_f = open(err, "ab")
-    # Do not request a "new window" on the existing chrome.exe: the panel
-    # instance would steal the URL into the empty panel-ui profile.
     cmd = [
         exe,
         "--user-data-dir=" + str(profile),
@@ -405,22 +453,18 @@ def _spawn_chromium(exe: str, profile: Path, url: str,
 
 
 def extra_urls_for(primary: str) -> List[str]:
-    """سربرگ‌های دیگر همان پروفایل — لاگین/کپچا سه سایت."""
     want = list(PLATFORM_HOME_URLS)
     out = []
     for u in want:
         if primary and u.rstrip("/") == (primary or "").rstrip("/"):
             continue
-        # اگر primary صفحه آگهی دیوار است، باز هم سه خانه باز می‌شوند
         out.append(u)
     if primary and primary.rstrip("/") not in {x.rstrip("/") for x in PLATFORM_HOME_URLS}:
-        # captcha on a listing: keep listing as first tab (already opened), add 3 homes
         return list(PLATFORM_HOME_URLS)
     return out
 
 
 def open_platform_tabs(port: int, urls: Optional[List[str]] = None) -> int:
-    """GET /json/new روی CDP — سه سربرگ در یک پروفایل."""
     from urllib.parse import quote
     from .session_view import _http_get_local
     n = 0
@@ -435,7 +479,6 @@ def open_platform_tabs(port: int, urls: Optional[List[str]] = None) -> int:
 
 
 def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str, Any]:
-    """Chromium همان اکانت را باز می‌کند — صفحهٔ تهران."""
     from .app_chromium import apply_browser_env, ensure_installed, is_ready
     name = safe_name(name)
     apply_browser_env()
@@ -515,7 +558,7 @@ def open_profile(accounts_dir: str, name: str, url: str = HOME_URL) -> Dict[str,
             _clog("open", "extra tabs: %s" % e, "warning")
     return {"ok": True, "name": name, "url": url or HOME_URL, "exe": exe,
             "profile": str(prof),
-            "message": "پروفایل «%s» ساخته شد و دیوار روی همان پروفایل باز است. در همان پنجره لاگین کنید، بعد ذخیره پروفایل." % name}
+            "message": "پروفایل «%s» ساخته شد — دیوار و شیپور روی همین پروفایل باز هستند. در هر تب لاگین کنید، بعد ذخیره پروفایل." % name}
 
 
 def _cookies_from_cdp(profile: Path, proc: Optional[subprocess.Popen],
@@ -528,7 +571,7 @@ def _cookies_from_cdp(profile: Path, proc: Optional[subprocess.Popen],
         try:
             r = cdp.call("Network.getCookies", {
                 "urls": ["https://divar.ir", "https://api.divar.ir",
-                         "https://www.divar.ir"],
+                         "https://www.divar.ir", "https://www.sheypoor.com"],
             }, timeout=6)
             return list(r.get("cookies") or [])
         except Exception:
@@ -564,7 +607,6 @@ def _cookies_from_live(name: str) -> List[Dict[str, Any]]:
 
 def harvest_to_session(accounts_dir: str, name: str,
                        cookies: List[Dict[str, Any]]) -> None:
-    """کوکی‌های پروفایل را کنار JWT اکانت می‌گذارد (شماره‌گیری API جداست)."""
     from .auth_session import merge_into_session_file
     d = account_dir(accounts_dir, name)
     session = d / "session.json"
@@ -574,30 +616,37 @@ def harvest_to_session(accounts_dir: str, name: str,
             token = str(json.loads(session.read_text(encoding="utf-8")).get("token") or "")
         except Exception:
             token = ""
-    full = []
+    full_divar = []
+    full_sheypoor = []
     phone = load_meta(accounts_dir, name).get("phone") or ""
     for c in cookies or []:
         if not isinstance(c, dict) or not c.get("name"):
             continue
-        domain = str(c.get("domain") or c.get("host_key") or "")
-        if domain and "divar.ir" not in domain.lower():
-            continue
-        full.append({
+        domain = str(c.get("domain") or c.get("host_key") or "").lower()
+        entry = {
             "name": c.get("name"), "value": c.get("value"),
             "domain": domain or ".divar.ir",
             "path": c.get("path") or "/",
             "httpOnly": bool(c.get("httpOnly", False)),
             "secure": True,
-        })
-        if str(c.get("name")) in ("token", "sAccessToken") and not token:
-            val = str(c.get("value") or "")
-            if val.count(".") >= 2:
-                token = val
-    merge_into_session_file(str(session), str(phone), token, {"cookies_full": full})
+        }
+        if "divar.ir" in domain:
+            full_divar.append(entry)
+            if str(c.get("name")) in ("token", "sAccessToken") and not token:
+                val = str(c.get("value") or "")
+                if val.count(".") >= 2:
+                    token = val
+        elif "sheypoor.com" in domain:
+            full_sheypoor.append(entry)
+        else:
+            # بدون دامنه — هر دو
+            full_divar.append(entry)
+    # ذخیره هر دو
+    merge_into_session_file(str(session), str(phone), token,
+                            {"cookies_full": full_divar, "sheypoor_cookies": full_sheypoor})
 
 
 def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
-    """بعد از لاگین کاربر: کوکی همان پنجرهٔ باز را می‌خواند و می‌بندد."""
     name = safe_name(name)
     prof = chromium_dir(accounts_dir, name)
     used_live = is_open(name) or _cdp_alive(prof)
@@ -624,7 +673,20 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
         disk = []
     if not cookies:
         cookies = disk
-    ok = cookies_look_logged_in(cookies) or cookies_look_logged_in(disk)
+    else:
+        # ترکیب
+        # اگر live کم بود، disk هم اضافه کن
+        if len(cookies) < 5 and disk:
+            cookies = cookies + disk
+
+    per = cookies_per_platform(cookies)
+    ok = per.get("divar") or per.get("sheypoor")
+    # همچنین disk را چک کن
+    if not ok:
+        per_disk = cookies_per_platform(disk)
+        ok = per_disk.get("divar") or per_disk.get("sheypoor")
+        per = {k: per.get(k) or per_disk.get(k) for k in per}
+
     if not ok and not used_live and not disk:
         rec = save_meta(accounts_dir, name, {
             "profile_ready": False,
@@ -634,7 +696,7 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
         _clog("save", "window not open — refuse throwaway launch", "warning")
         return {"ok": False, "ready": False, **rec,
                 "stage": "window",
-                "message": "پنجره Chromium این اکانت باز نیست. اول «باز کردن دیوار» را بزنید، لاگین کنید، بعد ذخیره."}
+                "message": "پنجره Chromium این اکانت باز نیست. اول «باز کردن دیوار/شیپور» را بزنید، لاگین کنید، بعد ذخیره."}
     harvest_to_session(accounts_dir, name, cookies)
     rec = save_meta(accounts_dir, name, {
         "profile_ready": bool(ok),
@@ -643,21 +705,24 @@ def save_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
         "cookie_count": len(cookies or []),
         "from_open_window": used_live,
         "last_error": "" if ok else "login_not_detected",
+        "platforms": per,
     })
     if not ok:
-        _clog("save", "login not detected cookie_count=%s" % len(cookies or []), "warning")
+        _clog("save", "login not detected cookie_count=%s per=%s" % (len(cookies or []), per), "warning")
         return {"ok": False, "ready": False, **rec, "stage": "login",
-                "message": "لاگین دیوار در این پروفایل دیده نشد. در همان پنجره Chromium وارد شوید، بعد ذخیره را بزنید. پنجره بسته نشد."}
+                "message": "لاگین دیوار/شیپور در این پروفایل دیده نشد. در همان پنجره Chromium (تب دیوار و تب شیپور) وارد شوید، بعد ذخیره را بزنید. پنجره بسته نشد."}
     close_live(name)
     rec = save_meta(accounts_dir, name, {
         "status": "ready", "closed_after_save": True, "last_error": "",
+        "platforms": per,
     })
-    _clog("save", "ok closed window")
+    _clog("save", "ok closed window per=%s" % per)
     return {"ok": True, "ready": True, **rec, "stage": "saved",
-            "message": "پروفایل ذخیره شد و پنجره بسته شد. «باز کردن دیوار» همان حساب لاگین‌شده را می‌آورد."}
+            "platforms": per,
+            "message": f"پروفایل ذخیره شد ✅ دیوار: {'لاگین' if per.get('divar') else 'لاگین نیست'} | شیپور: {'لاگین' if per.get('sheypoor') else 'لاگین نیست'} — پنجره بسته شد."}
 
 
-def create_and_open(accounts_dir: str, name: str, phone: str = "") -> Dict[str, Any]:
+def create_and_open(accounts_dir: str, name: str, phone: str = "", primary_url: str = HOME_URL) -> Dict[str, Any]:
     name = safe_name(name)
     chromium_dir(accounts_dir, name).mkdir(parents=True, exist_ok=True)
     save_meta(accounts_dir, name, {
@@ -667,10 +732,10 @@ def create_and_open(accounts_dir: str, name: str, phone: str = "") -> Dict[str, 
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "last_error": "",
     })
-    opened = open_profile(accounts_dir, name, HOME_URL)
+    opened = open_profile(accounts_dir, name, primary_url or HOME_URL)
     opened["message"] = (
-        "پروفایل ساخته شد و Chromium روی تهران باز است. "
-        "در همان پنجره لاگین کنید، بعد «ذخیره پروفایل» را بزنید."
+        "پروفایل ساخته شد — دیوار و شیپور روی همین پروفایل باز هستند. "
+        "در هر تب لاگین کنید، بعد «ذخیره پروفایل» را بزنید."
     )
     return opened
 
@@ -680,7 +745,7 @@ def update_profile(accounts_dir: str, name: str) -> Dict[str, Any]:
     if not is_open(name):
         open_profile(accounts_dir, name, HOME_URL)
         return {"ok": True, "running": True, "stage": "opened",
-                "message": "پنجره باز شد. لاگین را تازه کنید، بعد دوباره ذخیره پروفایل را بزنید."}
+                "message": "پنجره باز شد. لاگین دیوار/شیپور را تازه کنید، بعد دوباره ذخیره پروفایل را بزنید."}
     return save_profile(accounts_dir, name)
 
 
@@ -713,6 +778,7 @@ def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
             opened = _cdp_alive(chromium_dir(accounts_dir, name))
         except Exception:
             opened = False
+    plats = rec.get("platforms") or {}
     return {
         "profile_ready": ready,
         "profile_status": rec.get("status") or ("ready" if ready else "none"),
@@ -722,4 +788,5 @@ def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
         "home_url": HOME_URL,
         "last_error": rec.get("last_error") or "",
         "chromium_dir": str(chromium_dir(accounts_dir, name)),
+        "platforms": plats,
     }

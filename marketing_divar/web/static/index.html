@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>مارکتینگ دیوار</title>
+<title>مارکتینگ دیوار - نسخه نهایی تیرا</title>
 <link rel="icon" href="/logo.png">
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <style>
@@ -71,7 +71,6 @@
   .checkline{display:flex; gap:8px; align-items:flex-start; font-size:13.5px; margin:8px 0}
   .checkline input{width:auto; margin-top:3px}
   .hint{font-size:12px; color:var(--mut); line-height:1.9}
-
   .codebox{background:#eef2f8; border:1px solid var(--line); border-radius:8px;
            padding:8px 10px; font-size:12px; direction:ltr; margin-top:6px; min-height:2em}
   html[data-theme="dark"] .codebox{background:#121920}
@@ -129,8 +128,6 @@
   html[data-theme="dark"] .btn.gray{background:#243040; color:var(--txt)}
   html[data-theme="dark"] .btn.gray:hover{background:#2e3c4e}
   html[data-theme="dark"] dialog{background:var(--card); color:var(--txt)}
-
-
   body.gated header, body.gated nav, body.gated main, body.gated footer{visibility:hidden}
   body.booting{overflow:hidden}
   #boot-splash{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
@@ -157,7 +154,6 @@
   @keyframes pingpulse{0%{box-shadow:0 0 0 0 rgba(46,158,91,.55)}70%{box-shadow:0 0 0 8px rgba(46,158,91,0)}100%{box-shadow:0 0 0 0 rgba(46,158,91,0)}}
   html[data-theme="dark"] #link-badge{background:#16351f;color:#6fd99a}
   @media(max-width:640px){ header{padding:14px} main{margin:12px auto} }
-
   #license-gate{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(1200px 800px at 20% -10%,#1b4f8a 0%,#0b1a30 46%,#071018 100%);
     color:#e8eef5;padding:24px}
@@ -175,10 +171,51 @@
   .remain-bar{height:12px;background:#e3e8f0;border-radius:99px;overflow:hidden;margin:10px 0 6px}
   .remain-bar > i{display:block;height:100%;background:linear-gradient(90deg,#1976d2,#2e9e5b);width:0}
   html[data-theme="dark"] .remain-bar{background:#243040}
+  /* تیرا FAB */
+  #hunter-fab{position:fixed; bottom:22px; left:22px; z-index:200; display:flex; flex-direction:column; gap:12px; max-width:380px; pointer-events:none}
+  #hunter-fab > *{pointer-events:auto}
+  #hunter-fab-btn{width:66px; height:66px; border-radius:50%; background:linear-gradient(135deg,#7c3aed,#1976d2,#06b6d4); color:#fff; border:none; font-size:30px; cursor:pointer; box-shadow:0 12px 32px rgba(124,58,237,.35), 0 0 0 4px rgba(124,58,237,.12); display:flex; align-items:center; justify-content:center; position:relative; transition:.25s cubic-bezier(.34,1.56,.64,1)}
+  #hunter-fab-btn:hover{transform:scale(1.12) rotate(6deg); box-shadow:0 16px 40px rgba(124,58,237,.45), 0 0 0 6px rgba(124,58,237,.18)}
+  #hunter-fab-btn .badge{position:absolute; top:-6px; right:-6px; background:linear-gradient(135deg,#e11d48,#f43f5e); color:#fff; border-radius:99px; font-size:11px; padding:3px 8px; min-width:22px; text-align:center; font-weight:800; border:2px solid #fff; box-shadow:0 2px 8px rgba(225,29,72,.4)}
+  #hunter-fab-btn.pulse{animation:hfabPulse 1.6s infinite}
+  #hunter-fab-label{position:absolute; bottom:76px; left:0; background:#1e2a3a; color:#fff; padding:8px 14px; border-radius:12px; font-size:12.5px; line-height:1.6; white-space:nowrap; box-shadow:0 8px 24px rgba(0,0,0,.22); opacity:0; transform:translateY(8px); transition:.25s; pointer-events:none}
+  #hunter-fab:hover #hunter-fab-label{opacity:1; transform:translateY(0)}
+  @keyframes hfabPulse{0%{box-shadow:0 0 0 0 rgba(124,58,237,.6), 0 12px 32px rgba(124,58,237,.35)}70%{box-shadow:0 0 0 16px rgba(124,58,237,0), 0 12px 32px rgba(124,58,237,.35)}100%{box-shadow:0 0 0 0 rgba(124,58,237,0), 0 12px 32px rgba(124,58,237,.35)}}
+  .hunter-toast{background:#1e2a3a; color:#fff; padding:14px 16px; border-radius:16px; font-size:13px; line-height:1.85; box-shadow:0 16px 40px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08); animation:slideIn .38s cubic-bezier(.34,1.56,.64,1); max-width:360px; backdrop-filter:blur(8px)}
+  .hunter-toast.vip{background:linear-gradient(135deg,#2a1a4a,#1e3a5a,#2a1a4a); border-color:rgba(142,91,217,.4); box-shadow:0 16px 40px rgba(107,63,160,.35)}
+  .hunter-toast.week{background:linear-gradient(135deg,#2a2416,#3a2e14); border-color:#5a4a22; color:#e8c97a}
+  .hunter-toast b{color:#fff}
+  .hunter-toast .row{margin-top:10px}
+  .hunter-toast .tira-head{display:flex; gap:8px; align-items:center; margin-bottom:6px}
+  .hunter-toast .tira-avatar{width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#7c3aed,#06b6d4); display:flex; align-items:center; justify-content:center; font-size:16px}
+  .hunter-toast .tira-name{font-weight:800; font-size:12.5px; color:#c4b5fd}
+  @keyframes slideIn{from{transform:translateY(22px) scale(.96); opacity:0} to{transform:translateY(0) scale(1); opacity:1}}
+  html[data-theme="dark"] .hunter-toast{background:#121a26}
+  html[data-theme="dark"] .hunter-toast.vip{background:linear-gradient(135deg,#1e1430,#142a44)}
+  #tira-mini{position:fixed; bottom:100px; left:22px; width:min(420px,92vw); max-height:600px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.28); z-index:201; display:none; flex-direction:column; overflow:hidden; animation:slideIn .32s ease}
+  #tira-mini.open{display:flex}
+  #tira-mini-head{background:linear-gradient(135deg,#7c3aed,#1976d2); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; justify-content:space-between}
+  #tira-mini-head b{font-size:14px}
+  #tira-mini-log{flex:1; overflow-y:auto; padding:12px; max-height:380px; min-height:180px; background:#fafbfd}
+  html[data-theme="dark"] #tira-mini-log{background:#151c24}
+  #tira-mini-input{border-top:1px solid var(--line); padding:10px; display:flex; gap:8px; background:var(--card)}
+  #tira-mini-input input{flex:1}
+  /* شهر آبشاری */
+  .city-dropdown{position:relative}
+  .city-btn{width:100%; text-align:right; background:#fbfcfe; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13.5px; cursor:pointer; display:flex; justify-content:space-between; align-items:center}
+  .city-panel{position:absolute; top:100%; right:0; left:0; margin-top:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.18); z-index:30; max-height:320px; overflow:hidden; display:none}
+  .city-panel.open{display:block}
+  .city-search{padding:8px; border-bottom:1px solid var(--line)}
+  .city-search input{font-size:13px}
+  .city-list{max-height:240px; overflow-y:auto; padding:6px}
+  .city-item{display:flex; gap:8px; align-items:center; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:13px}
+  .city-item:hover{background:#f4f6fb}
+  html[data-theme="dark"] .city-item:hover{background:#1e2833}
+  .city-item input{width:auto}
+  .city-footer{padding:8px; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; font-size:12px}
 </style>
 </head>
 <body class="booting gated">
-
 
 <div id="license-gate" class="hidden" role="dialog" aria-labelledby="gate-title">
   <form class="gate-card" onsubmit="licenseSubmit(event)">
@@ -209,14 +246,12 @@
 </div>
 
 <header>
-  <div>
   <div class="brand">
     <img src="/logo.png" alt="Divar Marketing" width="44" height="44">
     <div>
-    <div class="logo">مارکتینگ دیوار</div>
-    <div class="sub">سیستم هوشمند بازاریابی — دیوار، شیپور، رینگ · ربات چت و درک پاسخ</div>
+      <div class="logo">مارکتینگ دیوار — تیرا نهایی</div>
+      <div class="sub">دیوار + شیپور + شکارچی هوشمند با اینترنت · صندوق پیام‌ها</div>
     </div>
-  </div>
   </div>
   <div class="spacer"></div>
   <button id="theme-btn" onclick="cycleTheme()" title="تم روشن / تیره / خودکار">◐</button>
@@ -227,19 +262,19 @@
 
 <nav>
   <button data-tab="dash" class="active">📊 داشبورد</button>
-  <button data-tab="accounts">👤 اکانت‌ها</button>
-  <button data-tab="keywords">🔑 کلمات کلیدی</button>
-  <button data-tab="messages">✉️ پیام‌ها</button>
+  <button data-tab="accounts">👤 اکانت‌ها (دیوار+شیپور)</button>
+  <button data-tab="keywords">🔑 کلمات کلیدی + شکارچی</button>
+  <button data-tab="messages">✉️ قالب پیام‌ها + تیرا نویس</button>
+  <button data-tab="inbox">📥 صندوق پیام‌ها (اتومات)</button>
   <button data-tab="leads">📋 سرنخ‌ها</button>
-  <button data-tab="robot">🤖 ربات هوشمند</button>
-  <button data-tab="profile">🪪 اشتراک</button>
   <button data-tab="settings">⚙️ تنظیمات</button>
+  <button data-tab="profile">🪪 اشتراک</button>
   <button data-tab="logs">📝 لاگ‌ها</button>
 </nav>
 
 <main>
 
-<!-- ═══════════════════════ داشبورد ═══════════════════════ -->
+<!-- داشبورد -->
 <section id="tab-dash" class="tab active">
   <div class="grid g4">
     <div class="card"><h3>وضعیت مانیتور</h3><div class="kpi" id="k-run">خاموش</div><small class="hint" id="k-run-sub">—</small></div>
@@ -248,27 +283,23 @@
     <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف IP امروز</small></div></div>
     <div class="card"><h3>کل سرنخ‌ها</h3><div class="kpi" id="k-total">0</div><small class="hint">همه آگهی‌های منطبق</small></div>
     <div class="card"><h3>شماره پیدا شده</h3><div class="kpi" id="k-found" style="color:var(--ok)">0</div><small class="hint">Contact Found</small></div>
-    <div class="card"><h3>بدون شماره</h3><div class="kpi" id="k-hidden" style="color:var(--chat)">0</div><small class="hint">فقط چت</small></div>
-    <div class="card"><h3>خطا</h3><div class="kpi" id="k-failed" style="color:var(--err)">0</div><small class="hint">Failed</small></div>
+    <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="k-hunter" style="color:var(--ok)">0</div><small class="hint">شکارهای خیلی مناسب</small></div>
+    <div class="card"><h3>پاسخ‌ها</h3><div class="kpi" id="k-replied" style="color:var(--chat)">0</div><small class="hint">پیام‌های دریافتی</small></div>
   </div>
 
   <div class="card" style="margin-top:14px">
     <h3>کنترل اسکن</h3>
     <div class="checkline">
       <input type="checkbox" id="include-existing">
-      <label for="include-existing"><b>موارد فعلی هم گرفته شوند؟</b> —
-        اگر فعال باشد، آگهی‌های موجودِ الان هم شماره‌گیری می‌شوند؛
-        اگر خاموش باشد، <b>فقط آگهی‌های جدید</b> از این لحظه به بعد گرفته می‌شوند.</label>
+      <label for="include-existing"><b>موارد فعلی هم گرفته شوند؟</b> — اگر خاموش باشد فقط آگهی‌های جدید از الان به بعد.</label>
     </div>
     <div class="checkline">
       <input type="checkbox" id="dash-sms-auto" onchange="smsAutoToggle(this.checked)">
-      <label for="dash-sms-auto"><b>ارسال خودکار پیامک به محض پیدا شدن شماره</b> —
-        متن قالب تب «پیام‌ها» همان لحظه از اکانت ملی‌پیامک شما به همان شخص می‌رود.</label>
+      <label for="dash-sms-auto"><b>ارسال خودکار پیامک به محض پیدا شدن شماره</b></label>
     </div>
     <div class="checkline">
       <input type="checkbox" id="dash-chat-auto" onchange="chatAutoToggle(this.checked)">
-      <label for="dash-chat-auto"><b>ارسال خودکار چت برای آگهی فقط‌چت</b> —
-        قالب با متغیر <code dir="ltr">{title}</code> تا متن‌ها یکسان نباشند (ضد بلاک).</label>
+      <label for="dash-chat-auto"><b>ارسال خودکار چت برای آگهی فقط‌چت</b> — قالب با {title}</label>
     </div>
     <div class="hint" id="dash-sms-hint">برای روشن کردن: در تنظیمات نام کاربری، رمز و خط ملی‌پیامک را ذخیره کنید.</div>
     <div class="row" style="margin-top:10px">
@@ -276,29 +307,25 @@
       <button class="btn gray" id="btn-pause" onclick="monitorPause()" disabled>⏸ مکث</button>
       <button class="btn err" onclick="monitorStop()">⏹ توقف</button>
     </div>
-    <div class="warn-box">💡 <b>سقف هوشمند:</b> پیش‌فرض هر اکانت ۶۰ شماره در روز است.
-      فاصلهٔ شماره‌گیری ۴۵ ثانیه و دورهٔ اسکن ۳۰۰ ثانیه است. بعد از سقف نرم اگر دیوار کپچا ندهد
-      با فاصلهٔ بیشتر ادامه می‌دهد؛ اگر کپچا بخواهد همین‌جا پاپ‌آپ می‌آید. سقف کل IP هنوز ۲۴۰ است.</div>
+    <div class="warn-box">💡 <b>تیرا فعال:</b> قیمت آیفون ۱۳/۱۴/۱۵ و پرو/پرومکس/نات‌اکتیو را از ترب/اینترنت جدا می‌فهمد، مذاکره هوشمند می‌کند، متن پیامک/چت را حرفه‌ای می‌نویسد. از FAB پایین چپ با تیرا صحبت کن.</div>
   </div>
 
   <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>اکانت‌ها</h3><div id="dash-accounts"></div></div>
+    <div class="card"><h3>اکانت‌ها (دیوار+شیپور)</h3><div id="dash-accounts"></div></div>
     <div class="card"><h3>رخدادهای زنده</h3><div class="feed" id="feed"></div></div>
   </div>
 </section>
 
-<!-- ═══════════════════════ اکانت‌ها ═══════════════════════ -->
+<!-- اکانت‌ها — بازطراحی کامل -->
 <section id="tab-accounts" class="tab">
   <div class="card">
-    <h3>افزودن پروفایل Chromium (لاگین واقعی دیوار)</h3>
-    <div class="warn-box">برای هر اکانت یک <b>پروفایل جدا</b> ساخته می‌شود
-      (<code dir="ltr">accounts/نام/chromium</code>). برنامه Chromium اختصاصی خودش را
-      باز می‌کند (نه Chrome/Edge شما) روی
-      <b dir="ltr">divar.ir/user</b>. شما همان‌جا لاگین می‌کنید، بعد
-      <b>ذخیره پروفایل</b> را می‌زنید — پنجره بسته می‌شود و لاگین می‌ماند.
-      کوکی تزریق نمی‌شود.
-      با باز کردن پروفایل، <b>سه تب</b> دیوار / شیپور / رینگ در همان Chromium باز می‌شود
-      تا لاگین و کپچای هر سایت جدا وارد شود.</div>
+    <h3>➕ افزودن اکانت — دیوار + شیپور (هر شماره دو لاگین)</h3>
+    <div class="warn-box">
+      برای هر شماره یک <b>پروفایل Chromium جدا</b> ساخته می‌شود (accounts/نام/chromium). 
+      Chromium اختصاصی برنامه باز می‌شود با <b>دو تب</b>: تب اول دیوار (divar.ir/user)، تب دوم شیپور (sheypoor.com/session).
+      در هر تب لاگین کنید، بعد <b>ذخیره پروفایل</b> را بزنید — پنجره بسته می‌شود و لاگین می‌ماند.<br>
+      دکمه‌های <b>ارسال کد دیوار</b> و <b>ارسال کد شیپور</b> جدا هستند. دیوار via API رسمی، شیپور via Chromium (چون OTP رسمی ندارد).
+    </div>
     <div id="chromium-box" class="warn-box" style="display:none">
       <b>دانلود Chromium اختصاصی</b>
       <div id="chromium-label">0%</div>
@@ -311,127 +338,189 @@
     </div>
     <div class="grid g2">
       <div>
-        <div class="lbl">نام اکانت</div>
-        <input id="acc-name" placeholder="مثلاً محمد تهران 01">
-        <div class="lbl">شماره موبایل (اختیاری — برای توکن API شماره‌گیری)</div>
+        <div class="lbl">نام اکانت (مثلاً محمد 01)</div>
+        <input id="acc-name" placeholder="mohammad-01">
+        <div class="lbl">شماره موبایل (09...)</div>
         <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11">
         <div class="row" style="margin-top:12px">
-          <button class="btn ok" onclick="createProfile()">افزودن پروفایل + باز کردن صفحه لاگین</button>
+          <button class="btn ok" onclick="sendOtp('divar')">📱 ارسال کد دیوار</button>
+          <button class="btn warn" onclick="sendOtp('sheypoor')">🏪 ارسال کد شیپور</button>
         </div>
-        <div class="hint" id="otp-hint" style="margin-top:10px">بعد از لاگین در Chromium، روی کارت «ذخیره پروفایل» را بزنید.</div>
+        <div class="lbl" style="margin-top:12px">کد تایید (دیوار API)</div>
+        <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6">
+        <div class="row" style="margin-top:8px">
+          <button class="btn gray" onclick="confirmOtp()">✅ تأیید کد دیوار</button>
+        </div>
+        <div class="hint" id="otp-hint" style="margin-top:10px">بعد از ارسال کد، لاگین کنید. برای شیپور پروفایل Chromium باز می‌شود.</div>
       </div>
       <div>
-        <div class="lbl">توکن API (اختیاری) — کد پیامک دیوار</div>
-        <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6">
-        <div class="row" style="margin-top:12px">
-          <button class="btn gray" onclick="sendOtp()">ارسال کد API</button>
-          <button class="btn gray" onclick="confirmOtp()">تأیید کد API</button>
+        <div class="lbl">پروفایل Chromium (دو تب دیوار+شیپور)</div>
+        <div class="row">
+          <button class="btn ok" onclick="createProfile('divar')">➕ ایجاد پروفایل (دیوار+شیپور)</button>
         </div>
-        <div class="hint">شماره‌گیری آگهی به JWT نیاز دارد؛ صفحهٔ لاگین‌شده از پروفایل Chromium می‌آید.</div>
+        <div class="hint" style="margin-top:8px">این دکمه یک پروفایل با نام همین اکانت می‌سازد و Chromium را با دو تب باز می‌کند. داخل هر تب لاگین کنید، بعد در لیست اکانت‌ها «ذخیره پروفایل» را بزنید.</div>
+        <div class="warn-box" style="margin-top:12px">
+          <b>نکته کپچا:</b> تشخیص کپچا دقیق شد — فقط وقتی واقعاً پازل arkose/hcaptcha/recaptcha یا 403 با marker کپچا بیاید، اکانت کپچا می‌شود. خطای ساده «شماره در صفحه نبود» دیگر کپچا حساب نمی‌شود.
+        </div>
       </div>
     </div>
   </div>
   <div class="card" style="margin-top:14px">
-    <h3>اکانت‌های ثبت‌شده</h3>
+    <h3>اکانت‌های ثبت‌شده — فقط 3 دکمه نهایی</h3>
+    <div class="hint">بعد از ایجاد پروفایل، دکمه ایجاد محو می‌شود و فقط «باز کردن دیوار»، «باز کردن شیپور»، «حذف کامل اکانت» می‌ماند + «ذخیره پروفایل» فقط وقتی لاگین هنوز ذخیره نشده.</div>
     <div id="accounts-list"></div>
   </div>
 </section>
 
-<!-- ═══════════════════════ کلمات کلیدی ═══════════════════════ -->
+<!-- کلمات کلیدی — بازطراحی -->
 <section id="tab-keywords" class="tab">
   <div class="card">
-    <h3>کلمات کلیدی و دسته‌بندی دیوار</h3>
-    <div class="lbl">دسته‌بندی دیوار (مثل خود سایت)</div>
+    <h3>🔑 کلمات کلیدی + شکارچی هوشمند (بدون املاک)</h3>
+    <div class="hint">دسته‌بندی املاک حذف شد چون حوزه املاک کار نمی‌کنیم. فقط دسته‌های کالا/موبایل/خودرو/لوازم و... . شهرها آبشاری کشویی با تیک است.</div>
+    <div class="lbl">دسته‌بندی (بدون املاک)</div>
     <select id="kw-category">
-      <option value="">همه دسته‌ها</option>
+      <option value="">همه دسته‌ها (غیر املاک)</option>
     </select>
-    <div class="hint">یک درخت دسته برای هر سه سایت. اگر اسلاگ شیپور/رینگ فرق کند
-      برنامه <b>خودکار نگاشت</b> می‌کند. اگر <b>فقط دسته</b> را بگذارید عنوان آگهی فیلتر نمی‌شود.
-      اگر «موارد فعلی هم گرفته شوند» را بزنید چند صفحه از همان دسته برداشته می‌شود.</div>
-    <div class="lbl">کلمه کلیدی (اختیاری) — با کاما جدا کنید</div>
-    <input id="kw-input" placeholder="مثلاً: آیفون، پراید، تدریس خصوصی — می‌تواند خالی باشد">
-    <div class="lbl">شهرها (چندتایی — Ctrl یا Cmd را نگه دارید)</div>
-    <select id="kw-city" multiple size="8">
-      <option value="0">همه ایران</option>
-    </select>
-    <div class="hint">چند شهر با هم قابل انتخاب است. اسلاگ هر سایت از روی همین فهرست نگاشت می‌شود.</div>
+    <div class="lbl">کلمه کلیدی (با کاما جدا کنید — اختیاری اگر دسته انتخاب شده)</div>
+    <input id="kw-input" placeholder="مثلاً: آیفون 13, آیفون 14 پرو, آیفون 15 پرومکس">
+    
+    <div class="lbl">شهرها — کشویی آبشاری با تیک</div>
+    <div class="city-dropdown" id="city-dropdown">
+      <button type="button" class="city-btn" onclick="cityToggle()"><span id="city-btn-label">همه ایران</span><span>▼</span></button>
+      <div class="city-panel" id="city-panel">
+        <div class="city-search"><input id="city-search" placeholder="جستجوی شهر..." oninput="cityFilter()"></div>
+        <div class="city-list" id="city-list"></div>
+        <div class="city-footer"><span id="city-count">0 شهر انتخاب شده</span><div class="row"><button class="btn sm gray" onclick="cityClear()">پاک کردن</button><button class="btn sm ok" onclick="cityToggle()">تأیید</button></div></div>
+      </div>
+    </div>
+
     <div class="grid g2" style="margin-top:8px">
       <div>
-        <div class="lbl">حداقل قیمت (میلیون تومان) — اختیاری</div>
+        <div class="lbl">حداقل قیمت (میلیون تومان)</div>
         <input id="kw-price-min" type="number" min="0" step="0.1" dir="ltr" placeholder="مثلاً 20">
       </div>
       <div>
-        <div class="lbl">حداکثر قیمت (میلیون تومان) — اختیاری</div>
+        <div class="lbl">حداکثر قیمت (میلیون تومان)</div>
         <input id="kw-price-max" type="number" min="0" step="0.1" dir="ltr" placeholder="مثلاً 80">
       </div>
     </div>
     <div class="checkline">
-      <input type="checkbox" id="kw-vip">
-      <label for="kw-vip"><b>هشدار ویژه (VIP)</b> — اگر آگهی در بازه باشد، همان لحظه تلگرام + صف شماره</label>
-    </div>
-    <div class="checkline">
-      <input type="checkbox" id="kw-hunter">
-      <label for="kw-hunter"><b>شکارچی قیمت</b> — قیمت نقدی خیلی پایین نسبت به ارزش تعدیل‌شدهٔ همان دسته (معیوب و توافقی جدا می‌مانند). املاک شکار نمی‌شود.</label>
+      <input type="checkbox" id="kw-hunter" checked>
+      <label for="kw-hunter"><b>🎯 شکارچی قیمت — جایگزین VIP</b> — قیمت نقدی خیلی پایین نسبت به ارزش تعدیل‌شده (معیوب و توافقی جدا). تیرا خودش مذاکره می‌کند.</label>
     </div>
     <div class="row" style="margin-top:8px">
-      <button class="btn gray" type="button" id="kw-hunter-adv-btn" onclick="hunterAdvOpen()">تنظیمات پیشرفته شکارچی</button>
-      <span class="hint" id="kw-hunter-adv-hint">پیش‌فرض نرم است تا دمو چند شکار پیدا کند. اگر کاسب حرفه‌ای هستید درصد افت را سفت کنید.</span>
+      <button class="btn gray" type="button" id="kw-hunter-adv-btn" onclick="hunterAdvOpen()">⚙️ تنظیمات پیشرفته شکارچی</button>
+      <span class="hint" id="kw-hunter-adv-hint">پیش‌فرض نرم است تا دمو چند شکار پیدا کند. تیرا با اینترنت قیمت روز آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو را جدا می‌فهمد.</span>
     </div>
     <div class="row" style="margin-top:12px">
-      <button class="btn" onclick="kwAdd()">➕ افزودن</button>
+      <button class="btn ok" onclick="kwAdd()">➕ افزودن پایش</button>
+      <button class="btn gray" onclick="openTira()">🧠 باز کردن تیرا</button>
     </div>
-    <div class="hint" style="margin-top:8px">هر مورد فعال، دوره‌ای پایش می‌شود.
-      می‌توانید فقط دسته، فقط کلمه، یا هر دو را با هم بگذارید.
-      اگر بازه قیمت بگذارید و قیمت آگهی خوانده نشود، آن آگهی رد می‌شود.</div>
   </div>
   <div class="card" style="margin-top:14px">
-    <h3>فهرست کلمات</h3>
+    <h3>فهرست پایش‌ها</h3>
     <div id="kw-list"></div>
   </div>
 </section>
 
-<!-- ═══════════════════════ پیام‌ها ═══════════════════════ -->
+<!-- پیام‌ها — قالب + تیرا نویس -->
 <section id="tab-messages" class="tab">
   <div class="grid g2">
     <div class="card">
-      <h3>قالب پیام چت (نیمه‌خودکار)</h3>
-      <div class="lbl">متغیرها: <code dir="ltr">{title}</code> عنوان آگهی،
-        <code dir="ltr">{subtitle}</code> توضیح میانی</div>
+      <h3>قالب پیام چت (نیمه‌خودکار) — با کمک تیرا</h3>
+      <div class="lbl">متغیرها: {title} عنوان، {subtitle} توضیح، {city} شهر، {price} قیمت</div>
       <textarea id="tpl-chat"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('chat')">💾 ذخیره قالب چت</button>
+        <button class="btn gray" onclick="tiraHelp('chat')">🧠 تیرا کمک کن بنویسم</button>
       </div>
       <div class="checkline">
         <input type="checkbox" id="msg-chat-auto" onchange="chatAutoToggle(this.checked)">
-        <label for="msg-chat-auto"><b>چت خودکار برای فقط‌چت</b> — قالب باید {title} داشته باشد</label>
+        <label for="msg-chat-auto"><b>چت خودکار برای فقط‌چت</b></label>
       </div>
-      <div class="hint" style="margin-top:8px">اگر چت خودکار روشن باشد، برای آگهی بدون شماره همین قالب
-        با متغیرهای عنوان/شهر/قیمت ارسال می‌شود تا متن‌ها یکسان نباشند. چت حذف‌شده خطا نمی‌اندازد.</div>
     </div>
     <div class="card">
-      <h3>قالب پیامک ملی‌پیامک</h3>
+      <h3>قالب پیامک — با کمک تیرا</h3>
       <textarea id="tpl-sms" placeholder="متن پیامک برای شماره‌های استخراج‌شده…"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('sms')">💾 ذخیره قالب پیامک</button>
+        <button class="btn gray" onclick="tiraHelp('sms')">🧠 تیرا کمک کن بنویسم</button>
       </div>
       <div class="checkline">
         <input type="checkbox" id="msg-sms-auto" onchange="smsAutoToggle(this.checked)">
         <label for="msg-sms-auto"><b>وقتی شماره پیدا شد همین متن را خودکار بفرست</b></label>
       </div>
-      <div class="hint" style="margin-top:8px">با روشن بودن این گزینه، به محض استخراج شمارهٔ آگهی منطبق
-        همین قالب از خط رسمی ملی‌پیامک شما ارسال می‌شود. نیازی به ری‌استارت مانیتور نیست.</div>
     </div>
     <div class="card">
-      <h3>قالب استعلام قیمت (VIP / قیمت نامشخص)</h3>
+      <h3>قالب استعلام قیمت (شکارچی)</h3>
       <textarea id="tpl-inquire" placeholder="سلام، قیمت واقعی «{title}» چقدر است؟"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="tplSave('inquire')">💾 ذخیره قالب استعلام</button>
+        <button class="btn gray" onclick="tiraHelp('inquire')">🧠 تیرا کمک کن</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>🧠 تیرا نویس — کمک در نوشتن متن پیامک/چت حرفه‌ای</h3>
+      <div class="warn-box">
+        تیرا با اینترنت قیمت روز آیفون ۱۳/۱۴/۱۵، پرو، پرومکس، نات‌اکتیو را جدا می‌فهمد، از ترب قیمت می‌گیرد، تعاملی پارامترهای شکار را جمع می‌کند و خودش فیلترهای شکارچی را می‌سازد و مذاکره می‌کند.
+      </div>
+      <div class="lbl">موضوع پیام را بنویس تا تیرا متن حرفه‌ای بسازد</div>
+      <input id="tira-write-topic" placeholder="مثلاً: آیفون 13 تمیز میخوام بخرم، قیمت خوب بده">
+      <div class="row" style="margin-top:8px">
+        <button class="btn ok" onclick="tiraWrite()">✨ تیرا متن بساز</button>
+      </div>
+      <div class="codebox" id="tira-write-out" style="margin-top:10px; min-height:80px; white-space:pre-wrap"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sm gray" onclick="tiraCopyWrite()">📋 کپی</button>
+        <button class="btn sm" onclick="tiraApplyToTemplate()">📥 اعمال به قالب چت</button>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════ سرنخ‌ها ═══════════════════════ -->
+<!-- صندوق پیام‌ها — قبلاً ربات هوشمند -->
+<section id="tab-inbox" class="tab">
+  <div class="grid g4">
+    <div class="card"><h3>هوش محلی</h3><div class="kpi" id="robot-nlu">—</div><small class="hint" id="robot-nlu-sub">مدل روی رایانه شما، بدون API ابری</small></div>
+    <div class="card"><h3>چت خودکار امروز</h3><div class="kpi" id="robot-chats">0</div></div>
+    <div class="card"><h3>پیامک خودکار امروز</h3><div class="kpi" id="robot-sms">0</div></div>
+    <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="robot-hunter" style="color:var(--ok)">0</div></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>📥 صندوق دریافت/ارسال پیام‌های اتومات — مذاکره تیرا + پاسخ‌ها</h3>
+    <div class="hint" id="robot-status-line">وضعیت هوش، چت، صندوق پیامک و پلتفرم‌ها اینجا دیده می‌شود. تیرا خودش مذاکره می‌کند.</div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" type="button" onclick="nluInstall()">⬇️ دانلود مدل محلی</button>
+      <button class="btn gray" type="button" onclick="hunterVipLoad()">⭐ لیست شکارهای VIP</button>
+      <button class="btn gray" type="button" onclick="recheckWeek()">🔄 چک هفته گذشته</button>
+      <button class="btn ok" type="button" onclick="openTira()">🧠 باز کردن تیرا</button>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="robot-chat-auto" onchange="chatAutoToggle(this.checked)">
+      <label for="robot-chat-auto">چت خودکار فقط‌چت</label>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="robot-sms-inbox" checked>
+      <label for="robot-sms-inbox">خواندن صندوق ورودی ملی‌پیامک (نظرسنجی دوره‌ای)</label>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3>آخرین پاسخ‌ها (چت/پیامک) — هر کدام روی یک آگهی</h3>
+      <div id="robot-replies-list" class="feed" style="max-height:360px"></div>
+    </div>
+    <div class="card">
+      <h3>شکارهای VIP حرفه‌ای — آماده مذاکره</h3>
+      <div id="vip-list" class="feed" style="max-height:360px"></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>هفته گذشته — شکارهایی که پیام نرفته</h3>
+    <div id="week-list" class="feed" style="max-height:300px"></div>
+  </div>
+</section>
+
+<!-- سرنخ‌ها -->
 <section id="tab-leads" class="tab">
   <div class="card">
     <div class="row" style="justify-content:space-between">
@@ -440,16 +529,13 @@
         <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter')">شکارچی</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter_pending')">در انتظار شکارچی</button>
-        <button class="btn sm gray" onclick="leadsLoad('defect')">معیوب</button>
+        <button class="btn sm ok" onclick="leadsLoad('hunter')">🎯 شکارچی</button>
+        <button class="btn sm warn" onclick="leadsLoad('hunter_pending')">⏳ در انتظار</button>
+        <button class="btn sm" onclick="hunterVipLoad()">⭐ VIP</button>
         <button class="btn sm gray" onclick="leadsLoad('replied')">پاسخ‌ها</button>
-        <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
-        <a class="btn sm gray" href="/api/export?filter=phone" style="text-decoration:none">⬇️ خروجی اکسل (شماره‌ها)</a>
-        <a class="btn sm gray" href="/api/export?filter=chat" style="text-decoration:none">⬇️ خروجی (چت‌ها)</a>
+        <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت</button>
+        <a class="btn sm gray" href="/api/export?filter=phone" style="text-decoration:none">⬇️ شماره‌ها</a>
         <a class="btn sm gray" href="/api/export?filter=hunter" style="text-decoration:none">⬇️ شکارچی</a>
-        <a class="btn sm gray" href="/api/export?filter=defect" style="text-decoration:none">⬇️ معیوب</a>
-        <a class="btn sm gray" href="/api/export?filter=inquiry" style="text-decoration:none">⬇️ استعلام</a>
       </div>
     </div>
     <div style="overflow-x:auto; margin-top:10px">
@@ -464,41 +550,7 @@
   </div>
 </section>
 
-<!-- ═══════════════════════ ربات هوشمند ═══════════════════════ -->
-<section id="tab-robot" class="tab">
-  <div class="grid g4">
-    <div class="card"><h3>هوش محلی</h3><div class="kpi" id="robot-nlu">—</div><small class="hint" id="robot-nlu-sub">مدل روی رایانه شما، بدون API ابری</small></div>
-    <div class="card"><h3>چت خودکار امروز</h3><div class="kpi" id="robot-chats">0</div></div>
-    <div class="card"><h3>پاسخ خوانده‌شده</h3><div class="kpi" id="robot-replies">0</div></div>
-    <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="robot-hunter" style="color:var(--ok)">0</div></div>
-  </div>
-  <div class="card" style="margin-top:14px">
-    <h3>🤖 ربات در حال کار است</h3>
-    <div class="hint" id="robot-status-line">وضعیت هوش، چت، صندوق پیامک و پلتفرم‌ها اینجا دیده می‌شود.</div>
-    <div class="checkline">
-      <input type="checkbox" id="robot-chat-auto" onchange="chatAutoToggle(this.checked)">
-      <label for="robot-chat-auto">چت خودکار فقط‌چت</label>
-    </div>
-    <div class="checkline">
-      <input type="checkbox" id="robot-sms-inbox" checked>
-      <label for="robot-sms-inbox">خواندن صندوق ورودی ملی‌پیامک (نظرسنجی دوره‌ای، نه وب‌هوک)</label>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button class="btn" type="button" onclick="nluInstall()">⬇️ دانلود مدل محلی (یک‌بار، در پوشه پایدار)</button>
-    </div>
-    <div class="warn-box">مدل از اول برای همین کار ساخته شده: درک پاسخ چت/پیامک همان آگهی،
-      بررسی متن آگهی (قیمت نقد / معیوب / جای‌نگهدار)، خودرو (شاسی، دوررنگ، مدل، کارکرد)
-      و در صورت وجود موتور بینایی محلی بررسی تصویر. معامله نمی‌بندد.
-      هنگام نصب کنار فایل نصبی دانلود و <b>کنار برنامه نصب</b> می‌شود. داخل گیت نیست.</div>
-  </div>
-  <div class="card" style="margin-top:14px">
-    <h3>آخرین پاسخ‌ها (هر کدام روی یک آگهی)</h3>
-    <div id="robot-replies-list" class="feed" style="max-height:360px"></div>
-  </div>
-</section>
-
-
-<!-- ═══════════════════════ اشتراک ═══════════════════════ -->
+<!-- اشتراک -->
 <section id="tab-profile" class="tab">
   <div class="card">
     <h3>اشتراک این برنامه</h3>
@@ -512,35 +564,20 @@
   </div>
 </section>
 
-<!-- ═══════════════════════ تنظیمات ═══════════════════════ -->
+<!-- تنظیمات -->
 <section id="tab-settings" class="tab">
   <div class="grid g2">
     <div class="card">
       <h3>پلتفرم‌های پایش</h3>
-      <div class="checkline"><input type="checkbox" id="set-plat-divar" checked>
-        <label for="set-plat-divar"><b>دیوار</b></label></div>
-      <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked>
-        <label for="set-plat-sheypoor"><b>شیپور</b></label></div>
-      <div class="checkline"><input type="checkbox" id="set-plat-ring" checked>
-        <label for="set-plat-ring"><b>رینگ</b></label></div>
-      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین هر سه در همان پروفایل Chromium با سه تب است.</div>
-    </div>
-    <div class="card">
-      <h3>⭐ هشدار ویژه (VIP)</h3>
-      <div class="checkline">
-        <input type="checkbox" id="set-vip-tg" checked>
-        <label for="set-vip-tg">آگهی‌های تیک‌خوردهٔ ویژه را فوری در تلگرام اعلام کن (و بعد شماره را بگیر)</label>
-      </div>
-      <div class="hint">روی هر پایش در تب کلمات می‌توانید «هشدار ویژه» را بزنید.
-        اگر بازه قیمت هم بگذارید فقط آگهی داخل همان بازه هشدار می‌گیرد.</div>
+      <div class="checkline"><input type="checkbox" id="set-plat-divar" checked><label for="set-plat-divar"><b>دیوار</b></label></div>
+      <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked><label for="set-plat-sheypoor"><b>شیپور — لاگین via Chromium، جستجو و شماره‌گیری فعال</b></label></div>
+      <div class="checkline"><input type="checkbox" id="set-plat-ring"><label for="set-plat-ring"><b>رینگ — غیرفعال پیش‌فرض</b></label></div>
+      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین دیوار+شیپور در همان پروفایل Chromium با دو تب است.</div>
     </div>
     <div class="card">
       <h3>📢 اتصال تلگرام (اعلان‌ها)</h3>
-      <div class="checkline">
-        <input type="checkbox" id="set-tg-on" checked>
-        <label for="set-tg-on"><b>از این پلتفرم استفاده شود</b></label>
-      </div>
-      <div class="lbl">توکن ربات — از <b>@BotFather</b> بگیرید</div>
+      <div class="checkline"><input type="checkbox" id="set-tg-on" checked><label for="set-tg-on"><b>از این پلتفرم استفاده شود</b></label></div>
+      <div class="lbl">توکن ربات — از @BotFather</div>
       <input id="set-tg-token" dir="ltr" placeholder="123456:ABC-DEF...">
       <div class="lbl">شناسه گفتگو (Chat ID)</div>
       <input id="set-tg-chat" dir="ltr" placeholder="مثلاً 123456789">
@@ -548,52 +585,31 @@
       <input id="set-tg-base" dir="ltr" placeholder="خالی = https://api.telegram.org">
       <div class="lbl">پروکسی تلگرام (اختیاری)</div>
       <input id="set-tg-proxy" dir="ltr" placeholder="http://127.0.0.1:1080 یا socks5://...">
-      <div class="hint">API رسمی: <code dir="ltr">https://api.telegram.org/botTOKEN/sendMessage</code>
-        در ایران اغلب فیلتر است — پروکسی یا آدرس سفارشی بگذارید.
-        بعد از گذاشتن شناسه، دکمهٔ زیر را بزنید تا پیام «ارتباط برقرار شد» بیاید.</div>
       <div class="hint" id="tg-status">وضعیت تلگرام: هنوز آزمایش نشده</div>
       <div class="row" style="margin-top:10px">
         <button class="btn sm ok" type="button" onclick="chanTest('telegram')">بررسی اتصال تلگرام</button>
-        <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش به همهٔ کانال‌های تیک‌خورده</button>
+        <button class="btn sm gray" type="button" onclick="tgTest()">ارسال گزارش به همه کانال‌ها</button>
       </div>
     </div>
     <div class="card">
-      <h3>💬 بله (API رسمی tapi.bale.ai)</h3>
-      <div class="checkline">
-        <input type="checkbox" id="set-bale-on" checked>
-        <label for="set-bale-on"><b>از این پلتفرم استفاده شود</b></label>
-      </div>
-      <div class="hint">طبق مستندات بله: در <b>بله</b> به <b dir="ltr">@botfather</b> بروید،
-        بازو بسازید، توکن را بگذارید، بازو را <b>استارت</b> کنید و
-        <b>شناسه گفتگوی خودتان</b> را بگذارید (نه توکن و نه شناسهٔ خود بازو).
-        درخواست‌ها به <code dir="ltr">https://tapi.bale.ai/botTOKEN/METHOD</code> می‌روند.</div>
+      <h3>💬 بله (tapi.bale.ai)</h3>
+      <div class="checkline"><input type="checkbox" id="set-bale-on" checked><label for="set-bale-on"><b>از این پلتفرم استفاده شود</b></label></div>
       <div class="lbl">توکن بازوی بله</div>
       <input id="set-bale-token" dir="ltr" placeholder="123456:abcd…">
       <div class="lbl">شناسه گفتگو بله</div>
       <input id="set-bale-chat" dir="ltr" placeholder="مثلاً 123456789">
       <div class="hint" id="bale-status">وضعیت بله: هنوز ذخیره نشده</div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn sm ok" type="button" onclick="chanTest('bale')">بررسی اتصال بله</button>
-      </div>
+      <div class="row" style="margin-top:10px"><button class="btn sm ok" type="button" onclick="chanTest('bale')">بررسی اتصال بله</button></div>
     </div>
     <div class="card">
-      <h3>🟣 روبیکا (API رسمی botapi.rubika.ir)</h3>
-      <div class="checkline">
-        <input type="checkbox" id="set-rubika-on" checked>
-        <label for="set-rubika-on"><b>از این پلتفرم استفاده شود</b></label>
-      </div>
-      <div class="hint">طبق مستندات روبیکا: در روبیکا <b dir="ltr">@BotFather</b> → ساخت بات.
-        بات را استارت کنید و <b>شناسه گفتگوی خودتان</b> را بگذارید.
-        ارسال: <code dir="ltr">POST https://botapi.rubika.ir/v3/TOKEN/sendMessage</code>
-        دکمه‌های پایین ربات با <code>chat_keypad</code> رسمی می‌آیند.</div>
+      <h3>🟣 روبیکا (botapi.rubika.ir)</h3>
+      <div class="checkline"><input type="checkbox" id="set-rubika-on" checked><label for="set-rubika-on"><b>از این پلتفرم استفاده شود</b></label></div>
       <div class="lbl">توکن بات روبیکا</div>
       <input id="set-rubika-token" dir="ltr" placeholder="توکن BotFather روبیکا">
       <div class="lbl">شناسه گفتگو روبیکا</div>
       <input id="set-rubika-chat" dir="ltr" placeholder="شناسه گفتگو">
       <div class="hint" id="rubika-status">وضعیت روبیکا: هنوز ذخیره نشده</div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn sm ok" type="button" onclick="chanTest('rubika')">بررسی اتصال روبیکا</button>
-      </div>
+      <div class="row" style="margin-top:10px"><button class="btn sm ok" type="button" onclick="chanTest('rubika')">بررسی اتصال روبیکا</button></div>
     </div>
     <div class="card">
       <h3>🛡️ پارامترهای ضد بلاک و سهمیه IP</h3>
@@ -606,30 +622,19 @@
       </div>
       <div class="checkline">
         <input type="checkbox" id="set-adaptive" checked>
-        <label for="set-adaptive">بعد از سقف نرم (۶۰) تا وقتی دیوار کپچا ندهد ادامه بده — اگر کپچا خواست پاپ‌آپ همین پنل</label>
+        <label for="set-adaptive">بعد از سقف نرم (۶۰) تا وقتی دیوار کپچا ندهد ادامه بده</label>
       </div>
-      <div class="warn-box">سقف روزانه IP یعنی چند شماره از <b>همین رایانه / همین اینترنت</b> در روز گرفته شود.
-        زیاد کردن این عدد محدودیت دیوار را دور نمی‌زند — فقط حد نرم‌افزاری خودتان را شل می‌کند و ریسک بلاک را بالا می‌برد.
-        برای ظرفیت بیشتر: رایانه یا اینترنت جدا (IP جدا) با نصب جداگانه همین برنامه.
-        پروکسی یا وی‌پی‌ان اضافه نکنید.</div>
-      <div class="hint">⚠️ مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.</div>
     </div>
     <div class="card">
       <h3>📱 ملی‌پیامک (رسمی)</h3>
       <div class="lbl">سرویس‌دهنده</div>
-      <select id="set-sms-provider">
-        <option value="none">غیرفعال</option>
-        <option value="melipayamak">ملی‌پیامک</option>
-      </select>
+      <select id="set-sms-provider"><option value="none">غیرفعال</option><option value="melipayamak">ملی‌پیامک</option></select>
       <div class="lbl">نام کاربری پنل</div>
       <input id="set-sms-user" dir="ltr" autocomplete="off">
       <div class="lbl">رمز عبور پنل (یا کلید API)</div>
       <input id="set-sms-key" type="password" dir="ltr" autocomplete="off">
       <div class="lbl">روش ارسال</div>
-      <select id="set-sms-mode" onchange="smsModeChanged()">
-        <option value="line">خط اختصاصی</option>
-        <option value="pattern">پترن (خط خدماتی)</option>
-      </select>
+      <select id="set-sms-mode" onchange="smsModeChanged()"><option value="line">خط اختصاصی</option><option value="pattern">پترن (خط خدماتی)</option></select>
       <div id="sms-line-wrap">
         <div class="lbl">شماره خط ارسال</div>
         <input id="set-sms-line" dir="ltr" placeholder="خط اختصاصی ملی‌پیامک">
@@ -638,11 +643,10 @@
         <div class="lbl">کد پترن (bodyId)</div>
         <input id="set-sms-bodyid" dir="ltr" placeholder="کد پترن تأییدشده">
         <div class="lbl">متن پترن</div>
-        <textarea id="set-sms-pattern-text" oninput="patternPreview()"
-          placeholder="کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است."></textarea>
+        <textarea id="set-sms-pattern-text" oninput="patternPreview()" placeholder="کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است."></textarea>
         <div class="row" style="margin-top:8px">
-          <button class="btn sm" type="button" onclick="copyPattern()">📋 کپی متن پترن (فرمت پنل)</button>
-          <button class="btn sm gray" type="button" onclick="fillPatternSample()">نمونهٔ آماده</button>
+          <button class="btn sm" type="button" onclick="copyPattern()">📋 کپی متن پترن</button>
+          <button class="btn sm gray" type="button" onclick="fillPatternSample()">نمونه آماده</button>
         </div>
         <div class="codebox" id="pattern-preview"></div>
         <div class="hint" id="pattern-rules" style="margin-top:6px"></div>
@@ -653,21 +657,19 @@
       <input id="set-sms-limit" type="number" dir="ltr">
       <div class="checkline">
         <input type="checkbox" id="set-sms-auto" onchange="smsAutoToggle(this.checked)">
-        <label for="set-sms-auto">ارسال خودکار به محض پیدا شدن شماره — با همین قالب و همین اکانت ملی‌پیامک</label>
+        <label for="set-sms-auto">ارسال خودکار به محض پیدا شدن شماره</label>
       </div>
-      <div class="hint">ارسال از سیم‌کارت گوشی در ویندوز مسیر رسمی ندارد.
-        اگر خط اختصاصی از ملی‌پیامک بخرید، همان شماره را در «خط ارسال» بگذارید.</div>
       <div class="row" style="margin-top:10px">
         <button class="btn sm gray" type="button" onclick="smsTest('')">بررسی موجودی</button>
         <input id="set-sms-testto" dir="ltr" placeholder="09xxxxxxxxx آزمایش" style="max-width:180px">
         <button class="btn sm" type="button" onclick="smsTest($('set-sms-testto').value)">ارسال آزمایشی</button>
-        <button class="btn sm warn" type="button" onclick="smsDeliveryCheck()">📊 بررسی وضعیت تحویل پیامک‌ها</button>
+        <button class="btn sm warn" type="button" onclick="smsDeliveryCheck()">📊 بررسی تحویل</button>
       </div>
       <div class="hint" id="sms-delivery-hint" style="margin-top:6px"></div>
     </div>
-    <div class="card" style="display:flex; align-items:flex-end">
+    <div class="card" style="display:flex; flex-direction:column; justify-content:flex-end">
       <button class="btn ok" style="width:100%; justify-content:center" onclick="settingsSave()">💾 ذخیره همه تنظیمات</button>
-      <div style="margin-top:14px; padding:12px; border:1px dashed var(--border); border-radius:8px">
+      <div style="margin-top:14px; padding:12px; border:1px dashed var(--line); border-radius:8px">
         <button class="btn" style="width:100%; justify-content:center" id="diag-btn" onclick="runDiag()">🔌 بررسی اتصال کامل</button>
         <div id="diag-out" style="margin-top:10px; font-size:12px; line-height:1.9; white-space:pre-wrap"></div>
       </div>
@@ -675,7 +677,7 @@
   </div>
 </section>
 
-<!-- ═══════════════════════ لاگ‌ها ═══════════════════════ -->
+<!-- لاگ‌ها -->
 <section id="tab-logs" class="tab">
   <div class="card">
     <h3>گزارش رخدادها (همچنین در فایل logs/divar_app.log)</h3>
@@ -685,26 +687,18 @@
 
 </main>
 
-<footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار<br>
-  <div id="link-badge"><span class="dot"></span>
-    <span>متصل به سرور</span>
-    <span dir="ltr">· پینگ <span id="link-ping">—</span> ms</span>
-  </div>
+<footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار — تیرا نهایی v3.5<br>
+  <div id="link-badge"><span class="dot"></span><span>متصل به سرور</span><span dir="ltr">· پینگ <span id="link-ping">—</span> ms</span></div>
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
 
 <dialog id="cap-dlg" style="width:min(920px,96vw)">
   <h3>🧩 پازل دیوار — همین اکانت</h3>
   <p class="hint" id="cap-acc" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="cap-live">صفحه با <b>همین اکانت لاگین‌شده</b> باز می‌شود.
-    پازل را خودتان حل کنید (حل خودکار نداریم) — «نمایش شماره» را بزنید.
-    بعد «کپچا حل شد» را بزنید تا برنامه دوباره امتحان کند.</div>
+  <div class="warn-box" id="cap-live">صفحه با <b>همین اکانت لاگین‌شده</b> باز می‌شود. پازل را خودتان حل کنید.</div>
   <img id="cap-img" alt="" style="display:none;max-width:100%;border-radius:10px;margin:8px 0">
-  <div id="cap-stage">
-    <img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0">
-    <div id="cap-stage-msg">در حال آوردن پازل همین اکانت…</div>
-  </div>
-  <div class="hint">کلیک روی تصویر = کلیک روی دیوار همان اکانت. برای تایپ، روی تصویر کلیک کنید و بنویسید.</div>
+  <div id="cap-stage"><img id="cap-live-frame" alt="پازل دیوار همین اکانت" tabindex="0"><div id="cap-stage-msg">در حال آوردن پازل همین اکانت…</div></div>
+  <div class="hint">کلیک روی تصویر = کلیک روی دیوار همان اکانت.</div>
   <div class="lbl">تأیید حضور (اختیاری): <b id="cap-q" dir="ltr">—</b></div>
   <input id="cap-answer" dir="ltr" inputmode="numeric" placeholder="جواب">
   <div class="row" style="margin-top:14px">
@@ -716,13 +710,35 @@
   </div>
 </dialog>
 
+<!-- تیرا FAB -->
+<div id="hunter-fab" aria-live="polite">
+  <div id="hunter-toasts" style="display:flex; flex-direction:column; gap:12px"></div>
+  <div style="position:relative">
+    <div id="hunter-fab-label">🧠 تیرا اینجاست! قیمت روز آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو را می‌فهمم 🎯</div>
+    <button id="hunter-fab-btn" title="تیرا - دستیار شکار حرفه‌ای" onclick="hunterFabClick()">🧠<span class="badge" id="hunter-fab-badge" style="display:none">0</span></button>
+  </div>
+</div>
+<div id="tira-mini" aria-live="polite">
+  <div id="tira-mini-head"><div style="display:flex; gap:8px; align-items:center"><span style="font-size:20px">🧠</span><div><b>تیرا — دستیار شکار حرفه‌ای</b><div style="font-size:11px; opacity:.85">با اینترنت، قیمت ترب، مذاکره هوشمند</div></div></div><button class="btn sm gray" onclick="tiraMiniClose()" style="padding:4px 10px">✕</button></div>
+  <div id="tira-mini-log" class="feed"></div>
+  <div class="row" style="padding:8px 12px; gap:6px"><button class="btn sm gray" onclick="hunterAdvOpen()">⚙️ تنظیمات شکارچی</button><button class="btn sm ok" onclick="aiApply()">⭐ ست کردن تنظیمات تیرا</button><button class="btn sm gray" onclick="aiReset(); tiraMiniOpen()">🔄 شروع دوباره</button></div>
+  <div id="tira-mini-input"><input id="tira-mini-inp" placeholder="مثلاً: آیفون 12 13 تمیز هر کدوم 3 میلیون سود..."><button class="btn ok sm" onclick="tiraMiniSend()">ارسال</button></div>
+  <div class="hint" style="padding:6px 12px 10px; font-size:11px">تیرا: قیمت روز آیفون 13/13Pro/ProMax/14/14Pro/15 و نات‌اکتیو را از اینترنت می‌گیرد، پارامترهای شکار را تعاملی جمع می‌کند، فیلتر شکارچی را می‌سازد، مذاکره می‌کند، متن پیامک/چت حرفه‌ای می‌نویسد.</div>
+  <div id="ai-config-card" style="display:none; padding:10px; border-top:1px solid var(--line)">
+    <h3 style="font-size:13px">📋 پیش‌نمایش تنظیمات — کارت آماده</h3>
+    <div id="ai-config-summary" class="hint" style="line-height:2"></div>
+    <div style="max-height:200px; overflow:auto; margin-top:8px"><table style="width:100%; font-size:11.5px"><thead><tr><th>مدل</th><th>فروش سالم</th><th>سود</th><th>حد خرید</th><th>شرایط</th></tr></thead><tbody id="ai-config-tbody"></tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn ok sm" type="button" id="ai-apply-btn" onclick="aiApply()">⭐ ست کردن تنظیمات تیرا</button><span class="hint" id="ai-apply-hint"></span></div>
+  </div>
+</div>
+
 <div id="notify-stack" aria-live="polite"></div>
 
 <dialog id="chat-dlg">
   <h3>ارسال پیام چت (نیمه‌خودکار)</h3>
   <p class="hint" id="chat-dlg-title" style="margin:8px 0 10px"></p>
   <textarea id="chat-dlg-msg" style="min-height:140px"></textarea>
-  <div class="hint" style="margin-top:8px">متن کپی می‌شود؛ آگهی در دیوار باز می‌شود؛ شما Paste و ارسال می‌کنید. ارسال انبوه خودکار نداریم.</div>
+  <div class="hint" style="margin-top:8px">متن کپی می‌شود؛ آگهی در دیوار باز می‌شود؛ شما Paste و ارسال می‌کنید.</div>
   <div class="row" style="margin-top:14px">
     <button class="btn" type="button" onclick="chatCopy()">📋 کپی متن</button>
     <button class="btn ok" type="button" onclick="chatOpenAd()">باز کردن آگهی</button>
@@ -731,45 +747,46 @@
   </div>
 </dialog>
 
-
-<dialog id="hunter-adv-warn" style="width:min(480px,92vw)">
-  <h3>تنظیمات تخصصی شکارچی</h3>
-  <p class="hint" style="margin:10px 0 14px;line-height:1.9">این فیلدها را یک کاسب حرفه‌ای برای هر دسته پر کرده (خودرو، موبایل، لپ‌تاپ، لوازم…).
-    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.
-    اگر بلد نیستید دست نزنید. اگر کاسبید، درصد افت را کمی سفت‌تر کنید.</p>
-  <div class="row">
-    <button class="btn ok" type="button" onclick="hunterAdvShow()">متوجه شدم — ادامه</button>
-    <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-warn').close()">انصراف</button>
+<dialog id="hunter-adv-warn" style="width:min(520px,94vw)">
+  <h3>⚠️ تنظیمات تخصصی شکارچی — بخش مهم</h3>
+  <div class="warn-box" style="margin:10px 0">
+    <b>این بخش تخصصی است</b> — یک کاسب حرفه‌ای برای هر دسته بر اساس تحقیق بازار ایران ۱۴۰۳ درصدها را پر کرده.<br>
+    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.<br>
+    اگر بلد نیستید دست نزنید. اگر کاسبید، درصدها را سفت‌تر کنید.
   </div>
+  <div class="row"><button class="btn ok" type="button" onclick="hunterAdvShow()">متوجه شدم — ادامه</button><button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-warn').close()">انصراف</button></div>
 </dialog>
-<dialog id="hunter-adv-dlg" style="width:min(560px,94vw)">
-  <h3>تنظیمات پیشرفته شکارچی</h3>
+<dialog id="hunter-adv-dlg" style="width:min(720px,96vw)">
+  <h3>تنظیمات پیشرفته شکارچی — آنالیزور قیمت</h3>
   <p class="hint" id="hunter-adv-family" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود.</div>
+  <div class="warn-box" id="hunter-adv-research" style="display:none"></div>
+  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود — فقط شماره پیدا می‌کند.</div>
   <div class="grid g2">
-    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده)</div>
-      <input id="hadv-good" type="number" min="1" max="40" dir="ltr"></div>
-    <div><div class="lbl">آستانه خیلی مناسب (٪)</div>
-      <input id="hadv-great" type="number" min="2" max="50" dir="ltr"></div>
-    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪)</div>
-      <input id="hadv-sus" type="number" min="20" max="90" dir="ltr"></div>
+    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده)</div><input id="hadv-good" type="number" min="1" max="40" dir="ltr"></div>
+    <div><div class="lbl">آستانه خیلی مناسب (٪)</div><input id="hadv-great" type="number" min="2" max="50" dir="ltr"></div>
+    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪)</div><input id="hadv-sus" type="number" min="20" max="90" dir="ltr"></div>
+    <div><div class="lbl">کارکرد نرمال در سال (km)</div><input id="hadv-kmpy" type="number" min="5000" max="50000" dir="ltr"></div>
   </div>
-  <div class="checkline">
-    <input type="checkbox" id="hadv-dealer">
-    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ را حتماً بپرس بعد تصمیم بگیر</label>
+  <div class="checkline"><input type="checkbox" id="hadv-dealer"><label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی را حتماً بپرس بعد تصمیم بگیر</label></div>
+  <div id="hunter-adv-fields" style="max-height:320px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:8px"></div>
+  <div style="margin-top:16px; border-top:1px dashed var(--line); padding-top:12px">
+    <h3 style="font-size:14px">➕ افزودن آپشن جدید (سفارشی)</h3>
+    <div class="grid g2" style="margin-top:8px">
+      <div><div class="lbl">نام آپشن (کلید انگلیسی)</div><input id="hadv-new-key" placeholder="مثلا tire_worn" dir="ltr"></div>
+      <div><div class="lbl">برچسب فارسی</div><input id="hadv-new-label" placeholder="لاستیک ساییده"></div>
+      <div><div class="lbl">درصد افت</div><input id="hadv-new-pct" type="number" step="0.5" dir="ltr" placeholder="-5"></div>
+      <div><div class="lbl">سوال از فروشنده</div><input id="hadv-new-q" placeholder="لاستیک‌ها چند درصد است؟"></div>
+    </div>
+    <div><div class="lbl">کلمات کلیدی در متن آگهی (با کاما جدا)</div><input id="hadv-new-words" placeholder="لاستیک ساییده, لاستیک 20 درصد"></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm ok" type="button" onclick="hunterAdvAddCustom()">➕ افزودن به لیست</button></div>
+    <div id="hunter-adv-custom-list" style="margin-top:10px"></div>
   </div>
-  <div id="hunter-adv-fields"></div>
-  <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره درصدها</button>
-    <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-dlg').close()">بستن</button>
-  </div>
+  <div class="row" style="margin-top:16px"><button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره همه</button><button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-dlg').close()">بستن</button></div>
 </dialog>
 
 <div class="toast" id="toast"></div>
 
 <script>
-
-/* ─── صفحه لودینگ نمایشی — روی عملکرد اسکن/API اثر ندارد ─── */
 const BOOT_MS = 240000;
 (function bootSplash(){
   const el = document.getElementById('boot-splash');
@@ -792,10 +809,7 @@ const BOOT_MS = 240000;
   const sub = document.getElementById('boot-sub');
   const t0 = Date.now();
   let lastL = '';
-  function ease(u){
-    /* غیرخطی تا حس واقعی بدهد */
-    return u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2;
-  }
+  function ease(u){ return u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2; }
   function tick(){
     const elapsed = Date.now() - t0;
     const u = Math.min(1, elapsed / BOOT_MS);
@@ -839,9 +853,6 @@ function startLinkPulse(){
   setInterval(pulse, 2600);
 }
 
-
-
-/* ───────────────────────── ورود برنامه (دفترچه CSV) ───────────────────────── */
 let _lic = null;
 function applyLicense(me){
   _lic = me || null;
@@ -857,9 +868,7 @@ function licensePaint(){
   days.textContent = (left===0 || left) ? (left+' روز مانده') : '—';
   const pct = Math.max(0, Math.min(100, me.pct||0));
   if (bar) bar.style.width = pct+'%';
-  if (span) span.textContent = me.expires
-    ? ('تا تاریخ '+me.expires+'  ·  از کل '+(me.span_days||'—')+' روز')
-    : 'مانده از اعتبار';
+  if (span) span.textContent = me.expires ? ('تا تاریخ '+me.expires+'  ·  از کل '+(me.span_days||'—')+' روز') : 'مانده از اعتبار';
 }
 function showGate(msg){
   const g = $('license-gate');
@@ -907,7 +916,6 @@ async function licenseLogout(){
   showGate('خارج شدید — دوباره وارد شوید');
 }
 
-/* ───────────────────────── ابزارهای عمومی ───────────────────────── */
 const $ = id => document.getElementById(id);
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(path, opt = {}) {
@@ -923,7 +931,6 @@ async function act(p, body, method){ try{
   const r = await api(p,{method: method||'POST', body: (method==='GET'?undefined:JSON.stringify(body||{}))});
   toast(r.message||'انجام شد'); return true; }catch(e){ toast('❌ '+e.message, false); return false; } }
 
-/* ───────────────────────── تب‌ها ───────────────────────── */
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button, .tab').forEach(x => x.classList.remove('active'));
   b.classList.add('active'); $('tab-'+b.dataset.tab).classList.add('active');
@@ -931,24 +938,21 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab==='settings') settingsLoad();
   if (b.dataset.tab==='keywords') kwLoad();
   if (b.dataset.tab==='messages') tplLoad();
-  if (b.dataset.tab==='robot') robotLoad();
+  if (b.dataset.tab==='inbox') robotLoad();
   if (b.dataset.tab==='profile') licensePaint();
 });
 
-/* ───────────────────────── داشبورد ───────────────────────── */
 async function refreshStatus(){
   try{
     const s = await api('/api/status');
-    $('run-badge').textContent = s.running ? (s.paused?tt('⏸ مکث','⏸ Paused'):tt('🟢 در حال اجرا','🟢 Running')) : tt('⏸ متوقف','⏸ Stopped');
+    $('run-badge').textContent = s.running ? (s.paused?'⏸ مکث':'🟢 در حال اجرا') : '⏸ متوقف';
     $('run-badge').className = 'on';
-    $('k-run').textContent = s.running ? `دور ${s.tick}` : 'خاموش';
-    $('k-run').textContent = s.running ? (s.paused?tt('مکث','Paused'):`${tt('دور','Round')} ${s.tick}`) : tt('خاموش','Off');
+    $('k-run').textContent = s.running ? (s.paused?'مکث':`دور ${s.tick}`) : 'خاموش';
     $('k-run-sub').textContent = s.started_at ? 'شروع: '+s.started_at : '—';
     $('k-queue').textContent = s.queue;
     $('k-chat').textContent = s.chat_queue;
     const ipLim = s.ip_daily_limit || 240;
-    $('k-today').innerHTML = s.phones_today + `<small>${tt('از سقف IP','of IP quota')} ${ipLim}` +
-      (s.sms_today ? ` · ${tt('پیامک','SMS')} ${s.sms_today}` : '') + `</small>`;
+    $('k-today').innerHTML = s.phones_today + `<small>از سقف IP ${ipLim}` + (s.sms_today ? ` · پیامک ${s.sms_today}` : '') + `</small>`;
     const autoOn = !!s.sms_auto_on_new;
     ['dash-sms-auto','msg-sms-auto','set-sms-auto'].forEach(id=>{
       if ($(id) && document.activeElement !== $(id)) $(id).checked = autoOn;
@@ -958,50 +962,37 @@ async function refreshStatus(){
       if ($(id) && document.activeElement !== $(id)) $(id).checked = chatOn;
     });
     if ($('dash-sms-hint')) {
-      $('dash-sms-hint').textContent = autoOn
-        ? (s.sms_ready ? tt('ارسال خودکار روشن است — به محض شماره، پیامک می‌رود','Auto SMS is ON')
-                       : tt('خودکار روشن است ولی ملی‌پیامک هنوز کامل نیست (کاربری/رمز/خط)','Auto on, Melipayamak incomplete'))
-        : tt('ارسال خودکار خاموش است — تیک بزنید تا همان لحظه پیامک برود','Auto SMS is off');
+      $('dash-sms-hint').textContent = autoOn ? (s.sms_ready ? 'ارسال خودکار روشن است — به محض شماره، پیامک می‌رود' : 'خودکار روشن است ولی ملی‌پیامک هنوز کامل نیست') : 'ارسال خودکار خاموش است';
     }
     const bd = s.breakdown || {};
     if ($('k-total')) $('k-total').textContent = bd.total ?? s.total_leads ?? 0;
     if ($('k-found')) $('k-found').textContent = bd.contact_found ?? s.phones_found ?? 0;
-    if ($('k-hidden')) $('k-hidden').textContent = bd.no_contact ?? s.chat_queue ?? 0;
-    if ($('k-failed')) $('k-failed').textContent = bd.failed ?? 0;
-    if ($('data-dir-hint') && s.data_dir)
-      $('data-dir-hint').textContent = (LANG==='en' ? 'Settings saved in: ' : 'تنظیمات ذخیره می‌شوند در: ') + s.data_dir;
-    if ($('lan-hint') && s.listen) {
-      const lan = (s.listen.lan||[]).join('  ·  ');
-      $('lan-hint').textContent = lan
-        ? (LANG==='en'
-            ? ('On your phone (same Wi-Fi): ' + lan)
-            : ('از موبایل همین وای‌فای: ' + lan))
-        : (LANG==='en'
-            ? ('This computer: ' + (s.listen.local||'http://127.0.0.1:8642'))
-            : ('روی همین رایانه: ' + (s.listen.local||'http://127.0.0.1:8642')));
-    }
+    if ($('k-hunter')) $('k-hunter').textContent = (s.accounts_breakdown ? '' : '') + (bd.total ? '' : '');
+    // hunter count from robot later
+    if ($('data-dir-hint') && s.data_dir) $('data-dir-hint').textContent = 'تنظیمات ذخیره می‌شوند در: ' + s.data_dir;
     $('btn-pause').disabled = !s.running;
     $('btn-pause').textContent = s.paused ? '▶️ ادامه' : '⏸ مکث';
-    // اکانت‌ها در داشبورد
     $('dash-accounts').innerHTML = s.accounts.length ? s.accounts.map(a=>{
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
+      const plats = a.platforms || {};
+      const divarOk = plats.divar ? 'دیوار✅' : 'دیوار❌';
+      const sheyOk = plats.sheypoor ? 'شیپور✅' : 'شیپور❌';
       return `<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line)">
         <span>${ic}</span><b>${esc(a.name)}</b>
         <span class="tag ${m}">${esc(a.status)}</span>
+        <span class="tag ${plats.divar?'ok':'gray'}">${divarOk}</span>
+        <span class="tag ${plats.sheypoor?'ok':'gray'}">${sheyOk}</span>
         <span class="hint">امروز: ${a.phones_today}</span>
-        ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button>
-        <button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>`:''}
+        ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button><button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>`:''}
         ${a.status!=='active'?`<button class="btn sm" onclick="accAction('${a.name}','release')">آزادسازی</button>`:''}
       </div>`;}).join('') : '<div class="empty">اکانتی ثبت نشده — تب اکانت‌ها</div>';
-    // رخدادها
     $('feed').innerHTML = s.logs.slice().reverse().map(l =>
       `<div><time>${esc(l.time)}</time><span class="${l.level}">${esc(l.msg)}</span></div>`).join('')
-      || `<div class="empty">${tt('رخدادی نیست','No events yet')}</div>`;
+      || `<div class="empty">رخدادی نیست</div>`;
     if (s.telegram) showTgStatus(s.telegram);
     showChanStatus(s.channels);
     watchPanelAlerts(s);
-    /* پازل را خودکار باز نکن — فقط دکمهٔ کنار همان اکانت */
   }catch(e){ console.error(e); }
 }
 let _capShown = '';
@@ -1047,7 +1038,7 @@ function bindPuzzleFrame(){
     if (!_capShown) return;
     if (ev.key === 'Tab') return;
     ev.preventDefault();
-    const text = ev.key === 'Enter' ? '\n' : (ev.key.length===1 ? ev.key : '');
+    const text = ev.key === 'Enter' ? '\\n' : (ev.key.length===1 ? ev.key : '');
     if (!text) return;
     api('/api/accounts/puzzle-click',{method:'POST', body: JSON.stringify({name:_capShown, text})}).catch(()=>{});
   });
@@ -1064,15 +1055,14 @@ async function openPuzzle(name){
   _capShown = name;
   const dlg = $('cap-dlg');
   if (dlg && !dlg.open) dlg.showModal();
-  $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + name;
+  $('cap-acc').textContent = 'فقط اکانت '+name;
   if ($('cap-q')) $('cap-q').textContent = '—';
   if ($('cap-answer')) $('cap-answer').value = '';
   try{
     const pend = await api('/api/captcha/pending');
     const one = (pend.pending||[]).find(p=>p.name===name);
     if (one){
-      $('cap-acc').textContent = tt('فقط اکانت ','Only account ') + one.name +
-        (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
+      $('cap-acc').textContent = 'فقط اکانت '+one.name + (one.last_probe_at ? (' — آخرین چک: '+one.last_probe_at) : '');
       if ($('cap-q')) $('cap-q').textContent = one.question || '—';
       if (one.image_url && $('cap-img')){
         $('cap-img').src = one.image_url;
@@ -1093,9 +1083,6 @@ async function openPuzzle(name){
     if (msg) msg.textContent = e.message || 'نتوانست پازل را بیاورد';
     toast('❌ '+e.message, false);
   }
-}
-async function maybeCapPopup(names){
-  /* عمداً خالی: پازل فقط با دکمهٔ کنار اکانت باز می‌شود */
 }
 async function capCleared(name){
   name = name || _capShown;
@@ -1127,7 +1114,7 @@ async function capProbe(){
       _puzzleLaunched = '';
       accRefresh(); refreshStatus();
     } else {
-      toast(r.message||'هنوز پازل می‌خواهد — خودکار چک می‌شود', false);
+      toast(r.message||'هنوز پازل می‌خواهد', false);
     }
   }catch(e){ toast('❌ '+e.message, false); }
 }
@@ -1150,43 +1137,48 @@ async function monitorStart(){
 async function monitorStop(){ if (await act('/api/monitor/stop',{})) setTimeout(refreshStatus,500); }
 async function monitorPause(){ if (await act('/api/monitor/pause',{})) setTimeout(refreshStatus,300); }
 
-/* ───────────────────────── اکانت‌ها ───────────────────────── */
+/* اکانت‌ها — بازطراحی نهایی */
 async function accRefresh(){
-  try{ const s = await api('/api/accounts');
+  try{
+    const s = await api('/api/accounts');
     $('accounts-list').innerHTML = s.accounts.length ? s.accounts.map(a=>{
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ready = !!a.profile_ready;
-      const siteTag = ready
-        ? '<span class="tag ok">پروفایل ذخیره شده</span>'
-        : '<span class="tag warn">Login Required</span>';
-      const saved = a.profile_saved_at ? ('آخرین ذخیره: '+esc(a.profile_saved_at)) : '';
-      const cap = a.status==='captcha' ? `<div class="warn-box" style="width:100%;margin-top:8px">
-          <b>کپچای انسانی — خودتان حل کنید</b><br>
-          «باز کردن دیوار» همین پروفایل لاگین‌شده را می‌آورد.<br>
-          <div class="row" style="margin-top:8px">
-            <button class="btn sm" type="button" onclick="openDivar('${a.name}')">باز کردن دیوار</button>
-            <button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>
-            <button class="btn sm ok" onclick="accAction('${a.name}','release')">آزادسازی ${esc(a.name)}</button>
-          </div>
-        </div>` : '';
+      const plats = a.platforms || {};
+      const divarTag = plats.divar ? '<span class="tag ok">دیوار ✅</span>' : '<span class="tag gray">دیوار ❌</span>';
+      const sheyTag = plats.sheypoor ? '<span class="tag ok">شیپور ✅</span>' : '<span class="tag gray">شیپور ❌</span>';
+      const siteTag = ready ? '<span class="tag ok">پروفایل ذخیره شده</span>' : '<span class="tag warn">نیاز به لاگین</span>';
+      const saved = a.profile_saved_at ? ('ذخیره: '+esc(a.profile_saved_at)) : '';
+      // منطق 3 دکمه نهایی
+      let buttons = '';
+      if (!ready){
+        // اگر پروفایل نیست: ایجاد پروفایل + بعد ذخیره + باز کردن‌ها + حذف
+        buttons = `<button class="btn sm ok" type="button" onclick="createProfile('divar','${esc(a.name)}')">➕ ایجاد پروفایل</button>
+          <button class="btn sm ok" type="button" onclick="saveProfile('${esc(a.name)}')">💾 ذخیره پروفایل</button>
+          <button class="btn sm" type="button" onclick="openDivar('${esc(a.name)}')">🌐 باز کردن دیوار</button>
+          <button class="btn sm warn" type="button" onclick="openSheypoor('${esc(a.name)}')">🏪 باز کردن شیپور</button>
+          <button class="btn sm err" type="button" onclick="deleteProfile('${esc(a.name)}')">🗑️ حذف کامل اکانت</button>`;
+      } else {
+        // پروفایل آماده: فقط باز کردن دیوار/شیپور + حذف کامل + پازل اگر کپچا
+        buttons = `<button class="btn sm" type="button" onclick="openDivar('${esc(a.name)}')">🌐 باز کردن دیوار</button>
+          <button class="btn sm warn" type="button" onclick="openSheypoor('${esc(a.name)}')">🏪 باز کردن شیپور</button>
+          <button class="btn sm err" type="button" onclick="deleteProfile('${esc(a.name)}')">🗑️ حذف کامل اکانت</button>`;
+        if (a.status==='captcha'){
+          buttons += ` <button class="btn sm" type="button" onclick="openPuzzle('${esc(a.name)}')">🧩 پازل</button>
+            <button class="btn sm ok" type="button" onclick="capCleared('${esc(a.name)}')">کپچا حل شد</button>
+            <button class="btn sm gray" type="button" onclick="accAction('${esc(a.name)}','release')">آزادسازی</button>`;
+        }
+      }
       return `<div class="acc"><div>
           <div class="row">
             <b style="font-size:15px">${esc(a.name)}</b>
             <span class="tag ${m}">${esc(a.status)}</span>
-            ${siteTag}
+            ${siteTag} ${divarTag} ${sheyTag}
             ${a.profile_open?'<span class="tag ok">پنجره باز</span>':''}
           </div>
-          <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره پروفایل')}
-            ${a.phones_today?(' · شماره‌های امروز: '+a.phones_today):''}</div>
-        </div><div class="row">
-          <button class="btn sm ok" type="button" onclick="saveProfile('${a.name}')">💾 ذخیره پروفایل</button>
-          <button class="btn sm" type="button" onclick="openDivar('${a.name}')">🌐 باز کردن دیوار</button>
-          <button class="btn sm gray" type="button" onclick="updateProfile('${a.name}')">🔄 به‌روزرسانی Session</button>
-          ${ready?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">پازل همین اکانت</button>`:''}
-          <button class="btn sm err" type="button" onclick="deleteProfile('${a.name}')">🗑 حذف پروفایل</button>
-          ${a.status==='active'?`<button class="btn sm gray" onclick="accAction('${a.name}','disable')">⛔ غیرفعال</button>`:''}
-          ${a.status==='disabled'?`<button class="btn sm" onclick="accAction('${a.name}','enable')">فعال‌سازی</button>`:''}
-        </div>${cap}</div>`;}).join('') : '<div class="empty">هنوز پروفایلی نیست. نام بگذارید و «افزودن پروفایل» را بزنید.</div>';
+          <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره')} ${a.phones_today?(' · امروز: '+a.phones_today):''}</div>
+        </div><div class="row">${buttons}</div></div>`;
+    }).join('') : '<div class="empty">هنوز اکانتی نیست. نام و شماره بگذارید و «ایجاد پروفایل» را بزنید.</div>';
   }catch(e){}
 }
 async function refreshChromium(){
@@ -1216,19 +1208,21 @@ async function installChromium(){
     refreshChromium();
   }catch(e){ toast('❌ '+e.message,false); }
 }
-async function createProfile(){
-  const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
-  if(!name){ toast('نام اکانت را وارد کنید',false); return; }
+async function createProfile(platform, presetName){
+  const nameInput = presetName || $('acc-name').value.trim();
+  const phone = $('acc-phone').value.trim();
+  const plat = platform || 'divar';
+  if(!nameInput){ toast('نام اکانت را وارد کنید',false); return; }
   try{
     const st = await api('/api/chromium/status');
     if(!st.installed){
       await api('/api/chromium/install',{method:'POST',body:'{}'});
       refreshChromium();
-      toast('اول Chromium اختصاصی دانلود و ثبت شود — بعد از Completed دوباره افزودن را بزنید', false);
-      $('otp-hint').textContent = st.error || 'Chromium هنوز Installed نیست (دانلود Chrome کافی نیست)';
+      toast('اول Chromium دانلود و ثبت شود — بعد دوباره ایجاد را بزنید', false);
+      $('otp-hint').textContent = st.error || 'Chromium هنوز Installed نیست';
       return;
     }
-    const r = await api('/api/accounts/profile/create',{method:'POST',body:JSON.stringify({name,phone})});
+    const r = await api('/api/accounts/profile/create',{method:'POST',body:JSON.stringify({name:nameInput, phone, platform: plat})});
     toast(r.message||'Chromium باز شد', !!r.ok);
     $('otp-hint').textContent=r.message||'در پنجره لاگین کنید، بعد ذخیره پروفایل';
     accRefresh();
@@ -1242,70 +1236,111 @@ async function saveProfile(name){
 }
 async function openDivar(name){
   try{
-    const r = await api('/api/accounts/profile/open',{method:'POST',body:JSON.stringify({name})});
+    const r = await api('/api/accounts/profile/open',{method:'POST',body:JSON.stringify({name, platform:'divar'})});
     toast(r.message||'دیوار باز شد');
   }catch(e){ toast('❌ '+e.message,false); }
 }
-async function updateProfile(name){
+async function openSheypoor(name){
   try{
-    const r = await api('/api/accounts/profile/update',{method:'POST',body:JSON.stringify({name})});
-    toast(r.message||'به‌روزرسانی شد', r.ok!==false); accRefresh();
+    const r = await api('/api/accounts/profile/open',{method:'POST',body:JSON.stringify({name, platform:'sheypoor'})});
+    toast(r.message||'شیپور باز شد');
   }catch(e){ toast('❌ '+e.message,false); }
 }
 async function deleteProfile(name){
-  if(!confirm('پروفایل «'+name+'» حذف شود؟')) return;
+  if(!confirm('پروفایل «'+name+'» به طور کامل حذف شود؟ (شامل دیوار+شیپور)')) return;
   try{
     const r = await api('/api/accounts/profile/delete',{method:'POST',body:JSON.stringify({name})});
     toast(r.message||'حذف شد'); accRefresh();
-  }catch(e){ toast('❌ '+e.message,false); }
-}
-async function collectSite(name){
-  try{
-    const r = await api('/api/accounts/collect-site',{method:'POST',body:JSON.stringify({name})});
-    toast(r.message||'صفحهٔ لاگین دیوار باز شد');
-    const t0 = Date.now();
-    const tick = async ()=>{
-      try{
-        const s = await api('/api/accounts/collect-site?name='+encodeURIComponent(name));
-        if(s.verified || s.ok===true){ toast(s.message||'سشن سایت تأیید شد'); accRefresh(); return; }
-        if(s.ok===false && !s.running){ toast('❌ '+(s.message||'جمع‌آوری ناموفق'), false); accRefresh(); return; }
-      }catch(e){}
-      if(Date.now()-t0 < 190000) setTimeout(tick, 2500);
-      else { toast('زمان لاگین سایت تمام شد — دوباره بزنید', false); accRefresh(); }
-    };
-    setTimeout(tick, 2500);
   }catch(e){ toast('❌ '+e.message,false); }
 }
 async function accAction(name, action){
   try{
     const r = await api('/api/accounts/action',{method:'POST',body:JSON.stringify({name, action})});
     toast(r.message||'انجام شد', r.cleared!==false || action!=='release');
-    if (action==='release' && r.cleared===false){
-      /* پازل را خودکار باز نکن — دکمهٔ کنار اکانت */ }
     accRefresh(); refreshStatus();
   }catch(e){ toast('❌ '+e.message,false); }
 }
-async function sendOtp(){
+async function sendOtp(platform){
   const name=$('acc-name').value.trim(), phone=$('acc-phone').value.trim();
+  const plat = platform || 'divar';
   if(!name){ toast('نام اکانت را وارد کنید',false); return; }
-  try{ const r = await api('/api/accounts/otp',{method:'POST',body:JSON.stringify({name,phone})});
-    toast(r.message); $('otp-hint').textContent='کد پیامک شد ✓ — کد را وارد و تأیید کنید'; }
-  catch(e){ toast('❌ '+e.message,false); }
+  if(!phone){ toast('شماره موبایل را وارد کنید',false); return; }
+  try{
+    const r = await api('/api/accounts/otp',{method:'POST',body:JSON.stringify({name,phone, platform: plat})});
+    toast(r.message);
+    $('otp-hint').textContent = plat==='sheypoor' ? 'پروفایل شیپور باز شد — لاگین کنید و ذخیره بزنید' : 'کد دیوار پیامک شد ✓ — کد را وارد و تأیید کنید';
+    accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 async function confirmOtp(){
   const name=$('acc-name').value.trim(), code=$('acc-code').value.trim();
   try{ const r = await api('/api/accounts/confirm',{method:'POST',body:JSON.stringify({name,code})});
-    toast(r.message); $('otp-hint').textContent='لاگین کامل شد ✓'; accRefresh(); }
+    toast(r.message); $('otp-hint').textContent='لاگین دیوار کامل شد ✓ — حالا پروفایل بساز و لاگین سایت را ذخیره کن'; accRefresh(); }
   catch(e){ toast('❌ '+e.message,false); }
 }
 
-/* ───────────────────────── کلمات کلیدی ───────────────────────── */
+/* شهر آبشاری */
+let _allCities = [];
+let _selectedCities = new Set();
+function cityToggle(){
+  const panel = $('city-panel');
+  if (!panel) return;
+  panel.classList.toggle('open');
+}
+function cityFilter(){
+  const q = ($('city-search').value||'').toLowerCase();
+  renderCityList(q);
+}
+function cityClear(){
+  _selectedCities.clear();
+  document.querySelectorAll('#city-list input').forEach(el=>el.checked=false);
+  updateCityLabel();
+}
+function renderCityList(filter){
+  const list = $('city-list');
+  if (!list) return;
+  const q = (filter||'').toLowerCase();
+  const filtered = _allCities.filter(c=> !q || c.title.toLowerCase().includes(q));
+  list.innerHTML = filtered.map(c=>{
+    const checked = _selectedCities.has(c.id) ? 'checked' : '';
+    return `<label class="city-item"><input type="checkbox" value="${c.id}" ${checked} onchange="cityCheck(${c.id}, this.checked)"><span>${esc(c.title)}</span></label>`;
+  }).join('') || '<div class="empty">شهری پیدا نشد</div>';
+}
+function cityCheck(id, on){
+  if (on) _selectedCities.add(id); else _selectedCities.delete(id);
+  updateCityLabel();
+}
+function updateCityLabel(){
+  const label = $('city-btn-label');
+  const count = $('city-count');
+  const n = _selectedCities.size;
+  if (label) label.textContent = n===0 ? 'همه ایران' : `${n} شهر انتخاب شده`;
+  if (count) count.textContent = n===0 ? 'همه ایران' : `${n} شهر انتخاب شده`;
+}
+document.addEventListener('click', (e)=>{
+  const dd = $('city-dropdown');
+  if (!dd) return;
+  if (!dd.contains(e.target)) {
+    const panel = $('city-panel');
+    if (panel) panel.classList.remove('open');
+  }
+});
+
+/* کلمات کلیدی */
 async function catsLoad(){
   try{
     const s = await api('/api/categories');
     const sel = $('kw-category'); if(!sel) return;
     const cur = sel.value;
-    sel.innerHTML = (s.categories||[]).map(c => {
+    // فیلتر املاک حذف
+    const filtered = (s.categories||[]).filter(c=>{
+      const slug = (c.slug||'').toLowerCase();
+      const group = (c.group||'').toLowerCase();
+      // حذف دسته‌های املاک
+      if (slug.includes('real-estate') || slug.includes('apartment') || slug.includes('rent') || slug.includes('buy-apartment') || slug.includes('land') || group.includes('املاک')) return false;
+      return true;
+    });
+    sel.innerHTML = '<option value="">همه دسته‌ها (غیر املاک)</option>' + filtered.map(c => {
       const t = c.label || c.title;
       return `<option value="${esc(c.slug)}">${esc(c.group? (c.group+' — '+t): t)}</option>`;
     }).join('');
@@ -1315,12 +1350,9 @@ async function catsLoad(){
 async function citiesLoad(){
   try{
     const s = await api('/api/cities');
-    const sel = $('kw-city'); if(!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = (s.cities||[]).map(c =>
-      `<option value="${c.id}">${esc(c.title)}</option>`
-    ).join('');
-    if (cur) sel.value = cur;
+    _allCities = s.cities||[];
+    renderCityList('');
+    updateCityLabel();
   }catch(e){}
 }
 function _priceHint(k){
@@ -1336,12 +1368,11 @@ async function kwLoad(){
   try{ const s = await api('/api/keywords');
     $('kw-list').innerHTML = s.keywords.length ? s.keywords.map(k=>`
       <div class="acc"><div class="row">
-        <b>${esc(k.keyword)}</b>
+        <b>${esc(k.keyword||'(بدون کلمه)')}</b>
         ${k.category?`<span class="tag chat">${esc(k.category_title||k.category)}${k.browse?' — کل دسته':''}</span>`:''}
-        ${k.vip?`<span class="tag warn">⭐ ویژه</span>`:''}
         ${k.hunter?`<span class="tag ok">🎯 شکارچی</span>`:''}
-        <span class="tag ${k.active?'ok':'gray'}">${k.active?tt('فعال','active'):tt('غیرفعال','inactive')}</span>
-        <span class="hint">${esc(k.city_title|| (k.cities?k.cities.join('،'):tt('همه کشور','All country')))}</span>
+        <span class="tag ${k.active?'ok':'gray'}">${k.active?'فعال':'غیرفعال'}</span>
+        <span class="hint">${esc(k.city_title|| (k.cities?k.cities.join('،'):'همه کشور'))}</span>
         ${_priceHint(k)?`<span class="hint">${esc(_priceHint(k))}</span>`:''}
       </div><div class="row">
         ${k.hunter?`<button class="btn sm" type="button" onclick="hunterAdvOpen(${k.id},'${esc(k.keyword)}','${esc(k.category||'')}')">تنظیمات پیشرفته</button>`:''}
@@ -1355,26 +1386,19 @@ async function kwAdd(){
   const category=($('kw-category')&&$('kw-category').value)||'';
   if(!kw && !category){toast('کلمه یا دسته‌بندی را انتخاب کنید',false);return;}
   let cities=null;
-  const sel=$('kw-city');
-  if(sel){
-    const ids=[...sel.selectedOptions].map(o=>parseInt(o.value,10)).filter(n=>n>0);
-    if(ids.length) cities=ids;
-  }
+  if (_selectedCities.size>0) cities = Array.from(_selectedCities);
   const price_min=parseFloat(($('kw-price-min')||{}).value)||0;
   const price_max=parseFloat(($('kw-price-max')||{}).value)||0;
-  const vip=!!($('kw-vip')&&$('kw-vip').checked);
   const hunter=!!($('kw-hunter')&&$('kw-hunter').checked);
   const hunter_adv = window._hunterAdv || null;
-  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip, hunter, hunter_adv})) {
+  if (await act('/api/keywords',{keyword:kw, cities, category, price_min, price_max, vip:false, hunter, hunter_adv})) {
     $('kw-input').value=''; if($('kw-price-min'))$('kw-price-min').value='';
-    if($('kw-price-max'))$('kw-price-max').value=''; if($('kw-vip'))$('kw-vip').checked=false;
-    if($('kw-hunter'))$('kw-hunter').checked=false;
+    if($('kw-price-max'))$('kw-price-max').value=''; if($('kw-hunter'))$('kw-hunter').checked=true;
     window._hunterAdv = null;
-    if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent='پیش‌فرض نرم است تا دمو چند شکار پیدا کند.';
+    if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent='شکارچی فعال — تیرا با اینترنت قیمت می‌گیرد';
     kwLoad();
   }
 }
-
 let _hunterAdvKwId = 0;
 async function hunterAdvOpen(kwId, keyword, category){
   _hunterAdvKwId = kwId || 0;
@@ -1383,6 +1407,7 @@ async function hunterAdvOpen(kwId, keyword, category){
   const w = $('hunter-adv-warn');
   if (w && !w.open) w.showModal();
 }
+let _hunterCustomAdjs = [];
 async function hunterAdvShow(){
   const w = $('hunter-adv-warn'); if (w && w.open) w.close();
   const kw = window._hunterAdvKw || '';
@@ -1391,35 +1416,96 @@ async function hunterAdvShow(){
     const r = await api('/api/hunter-profile?keyword='+encodeURIComponent(kw)+'&category='+encodeURIComponent(cat));
     const p = r.profile || {};
     if($('hunter-adv-family')) $('hunter-adv-family').textContent =
-      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.hint||'')));
+      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.warning||p.hint||'')));
+    if($('hunter-adv-research')) {
+      const rn = p.research_note||'';
+      $('hunter-adv-research').style.display = rn ? 'block':'none';
+      $('hunter-adv-research').textContent = rn ? ('🔬 تحقیق بازار: '+rn) : '';
+    }
     if($('hunter-adv-estate')) $('hunter-adv-estate').style.display = p.hunter===false ? 'block':'none';
-    if($('hadv-good')) $('hadv-good').value = p.good_pct||8;
-    if($('hadv-great')) $('hadv-great').value = p.great_pct||15;
-    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||55;
+    if($('hadv-good')) $('hadv-good').value = p.good_pct||10;
+    if($('hadv-great')) $('hadv-great').value = p.great_pct||18;
+    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||48;
     if($('hadv-dealer')) $('hadv-dealer').checked = !!p.dealer_mode;
+    if($('hadv-kmpy')) $('hadv-kmpy').value = p.km_per_year||20000;
     const box = $('hunter-adv-fields');
     if(box){
       box.innerHTML = (p.adjustments||[]).map(a=>`
-        <div class="lbl">${esc(a.label)} (٪ افت، منفی یعنی ارزان‌تر حساب شود)</div>
-        <input data-hadv-key="${esc(a.key)}" type="number" step="0.5" dir="ltr" value="${a.pct}">
+        <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--line)">
+          <div style="flex:1">
+            <div class="lbl" style="margin:0 0 2px">${esc(a.label)} ${a.custom?'<span class="tag warn">سفارشی</span>':''} <small style="color:var(--mut)">(${esc(a.key)})</small>
+              ${a.research?`<span class="q">؟<span class="qtip">${esc(a.research)}</span></span>`:''}
+            </div>
+            <div class="hint" style="font-size:11px">${esc((a.words||[]).slice(0,4).join('، '))}${(a.words||[]).length>4?'…':''}</div>
+          </div>
+          <input data-hadv-key="${esc(a.key)}" data-hadv-custom="${a.custom?'1':'0'}" type="number" step="0.5" dir="ltr" value="${a.pct}" style="max-width:90px">
+        </div>
       `).join('') || '<div class="hint">درصدی برای این دسته نیست</div>';
     }
+    _hunterCustomAdjs = (p.adjustments||[]).filter(a=>a.custom).map(a=>({
+      key: a.key, label: a.label, pct: a.pct, words: (a.words||[]).join(', '), question: a.question||'', research: a.research||'سفارشی'
+    }));
+    hunterAdvRenderCustom();
     const dlg = $('hunter-adv-dlg');
     if (dlg && !dlg.open) dlg.showModal();
   }catch(e){ toast('❌ '+e.message, false); }
 }
+function hunterAdvRenderCustom(){
+  const box = $('hunter-adv-custom-list');
+  if(!box) return;
+  if(!_hunterCustomAdjs.length){ box.innerHTML='<div class="hint">هنوز آپشن سفارشی اضافه نشده</div>'; return; }
+  box.innerHTML = _hunterCustomAdjs.map((c,i)=>`
+    <div class="row" style="justify-content:space-between; border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:4px 0">
+      <span><b>${esc(c.label)}</b> <small>(${esc(c.key)})</small> — ${c.pct}% — <small>${esc(c.words)}</small></span>
+      <button class="btn sm err" type="button" onclick="hunterAdvRemoveCustom(${i})">حذف</button>
+    </div>
+  `).join('');
+}
+function hunterAdvAddCustom(){
+  const key = ($('hadv-new-key')||{}).value.trim();
+  const label = ($('hadv-new-label')||{}).value.trim();
+  const pct = parseFloat(($('hadv-new-pct')||{}).value);
+  const q = ($('hadv-new-q')||{}).value.trim();
+  const words = ($('hadv-new-words')||{}).value.trim();
+  if(!label){ toast('برچسب فارسی را وارد کنید', false); return; }
+  if(isNaN(pct)){ toast('درصد افت را وارد کنید (مثلا -5)', false); return; }
+  const finalKey = key || label.replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF_]/g,'').slice(0,24) || 'custom_'+Date.now();
+  _hunterCustomAdjs.push({key: finalKey, label, pct, words, question: q||label+'؟', research:'سفارشی کاربر'});
+  $('hadv-new-key').value=''; $('hadv-new-label').value=''; $('hadv-new-pct').value=''; $('hadv-new-q').value=''; $('hadv-new-words').value='';
+  hunterAdvRenderCustom();
+  toast('آپشن سفارشی اضافه شد — ذخیره را بزنید');
+}
+function hunterAdvRemoveCustom(i){
+  _hunterCustomAdjs.splice(i,1);
+  hunterAdvRenderCustom();
+}
 async function hunterAdvSave(){
   const adjustments = {};
+  const adjustments_list = [];
   document.querySelectorAll('[data-hadv-key]').forEach(el=>{
     const n = parseFloat(el.value);
-    if(!isNaN(n)) adjustments[el.getAttribute('data-hadv-key')] = n;
+    const k = el.getAttribute('data-hadv-key');
+    if(!isNaN(n)){
+      adjustments[k] = n;
+      if(el.getAttribute('data-hadv-custom')==='1'){
+        const found = _hunterCustomAdjs.find(c=>c.key===k);
+        if(found) adjustments_list.push(found);
+        else adjustments_list.push({key:k, pct:n});
+      }
+    }
+  });
+  _hunterCustomAdjs.forEach(c=>{
+    if(!(c.key in adjustments)) adjustments[c.key]=c.pct;
+    if(!adjustments_list.find(x=>x.key===c.key)) adjustments_list.push(c);
   });
   const values = {
-    good_pct: parseFloat(($('hadv-good')||{}).value)||8,
-    great_pct: parseFloat(($('hadv-great')||{}).value)||15,
-    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||55,
+    good_pct: parseFloat(($('hadv-good')||{}).value)||10,
+    great_pct: parseFloat(($('hadv-great')||{}).value)||18,
+    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||48,
+    km_per_year: parseFloat(($('hadv-kmpy')||{}).value)||20000,
     dealer_mode: !!($('hadv-dealer')&&$('hadv-dealer').checked),
     adjustments,
+    custom_adjustments: _hunterCustomAdjs,
   };
   window._hunterAdv = values;
   if (_hunterAdvKwId){
@@ -1429,16 +1515,15 @@ async function hunterAdvSave(){
       toast(r.message||'ذخیره شد');
     }catch(e){ toast('❌ '+e.message, false); return; }
   } else {
-    toast('درصدها برای پایش بعدی ذخیره شد — افزودن را بزنید');
+    toast('درصدها + آپشن‌های سفارشی برای پایش بعدی ذخیره شد — افزودن را بزنید');
   }
   if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی آمادهٔ افزودن است';
   const dlg = $('hunter-adv-dlg'); if (dlg && dlg.open) dlg.close();
 }
-
 async function kwToggle(id,active){ if(await act(`/api/keywords/${id}/toggle?active=${active}`,{})) kwLoad(); }
 async function kwDel(id){ if(await act(`/api/keywords/${id}`, {}, 'DELETE')) kwLoad(); }
 
-/* ───────────────────────── پیام‌ها ───────────────────────── */
+/* پیام‌ها */
 async function tplLoad(){ try{ const s=await api('/api/templates');
   $('tpl-chat').value=s.chat; $('tpl-sms').value=s.sms;
   if($('tpl-inquire')) $('tpl-inquire').value=s.inquire||''; }catch(e){} }
@@ -1446,7 +1531,7 @@ async function tplSave(ch){
   const text = ch==='chat'?$('tpl-chat').value:(ch==='inquire'?($('tpl-inquire')||{}).value:$('tpl-sms').value);
   await act('/api/templates',{channel:ch, text}); }
 
-/* ───────────────────────── سرنخ‌ها ───────────────────────── */
+/* سرنخ‌ها */
 let leadsFilter='all';
 let chatDraft = null;
 async function openChat(token){
@@ -1474,60 +1559,100 @@ async function chatMarkSent(){
     leadsLoad();
   }
 }
+async function hunterVipLoad(){
+  try{
+    const s = await api('/api/hunter/vip?limit=100');
+    const rows = s.vip||[];
+    const html = rows.map(l=>{
+      const levelTag = l.hunter_level==='great' ? '<span class="tag ok">⭐ خیلی مناسب</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ مناسب</span>' : '<span class="tag warn">'+esc(l.hunter_level||'')+'</span>');
+      const fair = l.hunter_fair_price ? (l.hunter_fair_price.toLocaleString()+' تومان') : '—';
+      const market = l.hunter_market_median ? (l.hunter_market_median.toLocaleString()) : '—';
+      const disc = l.hunter_discount_pct ? (l.hunter_discount_pct+'%') : '—';
+      const conf = l.hunter_confidence ? (Math.round(l.hunter_confidence*100)+'%') : '—';
+      const neg = l.negotiated_price ? ('<br><small>بعد مذاکره: '+l.negotiated_price.toLocaleString()+'</small>') : '';
+      const negSt = l.negotiation_status ? ('<span class="tag chat">'+esc(l.negotiation_status)+'</span>') : '';
+      return `<div style="padding:8px; border-bottom:1px dashed var(--line)"><b>${esc(l.title||'')}</b><br>${levelTag} ${negSt}<br><small>منصفانه: ${fair} | بازار سالم: ${market} | تخفیف: ${disc} | اطمینان: ${conf}</small>${neg}<br><div class="row" style="margin-top:6px"><button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊 تحلیل</button> <button class="btn sm" onclick="hunterNegotiate('${esc(l.token)}')">💬 مذاکره</button> <a href="${esc(l.url||'')}" target="_blank" class="btn sm gray" style="text-decoration:none">مشاهده ↗</a></div></div>`;
+    }).join('') || '<div class="empty">هنوز شکار ویژه‌ای نیست</div>';
+    if ($('vip-list')) $('vip-list').innerHTML = html;
+    // همچنین در leads
+    $('leads-empty').style.display = rows.length?'none':'block';
+    $('leads-body').innerHTML = rows.map(l=>{
+      const levelTag = l.hunter_level==='great' ? '<span class="tag ok">⭐ خیلی مناسب</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ مناسب</span>' : '<span class="tag warn">'+esc(l.hunter_level||'')+'</span>');
+      const fair = l.hunter_fair_price ? (l.hunter_fair_price.toLocaleString()+' تومان') : '—';
+      return `<tr><td>${esc(l.title)}<br>${levelTag}<br><small>منصفانه: ${fair}</small></td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td><td>${levelTag}</td><td><button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊</button> <button class="btn sm" onclick="hunterNegotiate('${esc(l.token)}')">💬</button></td><td>${esc(l.city||'')}</td><td>${esc(l.platform||'')}</td><td>—</td><td><a href="${esc(l.url||'')}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
+    }).join('');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterAnalyze(token){
+  try{
+    const r = await api('/api/hunter/analyze/'+encodeURIComponent(token));
+    const a = r.analysis||{};
+    const hist = r.negotiation_history||[];
+    let html = `<b>${esc(r.lead.title||'')}</b><br>`;
+    html += `قیمت: ${(a.price||0).toLocaleString()} تومان<br>`;
+    html += `بازار سالم: ${(a.healthy_median||a.median||0).toLocaleString()} تومان<br>`;
+    html += `منصفانه: ${(a.fair||0).toLocaleString()} تومان<br>`;
+    html += `تخفیف: ${a.discount_pct||0}%<br>`;
+    html += `سطح: ${esc(a.level||'')} (raw: ${esc(a.raw_level||'')})<br>`;
+    html += `اطمینان: ${a.confidence||0}<br>`;
+    html += `افت: ${a.adj_pct||0}%<br>`;
+    html += `پرچم‌ها: ${esc(Object.keys(a.flags||{}).filter(k=>a.flags[k]).join('، ')||'سالم')}<br>`;
+    html += `جای خالی: ${esc((a.missing||[]).join('، ')||'—')}<br>`;
+    if(a.questions) html += `<div class="warn-box">${esc(a.questions)}</div>`;
+    if(hist.length) html += `<div class="hint" style="margin-top:8px">مذاکره: ${esc(hist.map(h=> (h.role==='seller'?'فروشنده':'من')+': '+h.text).join(' | ').slice(0,300))}</div>`;
+    const dlg = document.createElement('dialog');
+    dlg.style.width='min(600px,96vw)';
+    dlg.innerHTML = `<h3>📊 تحلیل حرفه‌ای شکارچی</h3><div style="margin:12px 0; line-height:2; font-size:13px">${html}</div><div class="row"><button class="btn gray" onclick="this.closest('dialog').close()">بستن</button></div>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.addEventListener('close', ()=>dlg.remove());
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterNegotiate(token){
+  try{
+    const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+    toast(r.message||'مذاکره ارسال شد');
+    leadsLoad('hunter');
+    robotLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 async function leadsLoad(filter){
   leadsFilter=filter||leadsFilter;
   try{ const s=await api('/api/leads?filter='+leadsFilter);
     const rows=s.leads;
     $('leads-empty').style.display = rows.length?'none':'block';
     $('leads-body').innerHTML = rows.map(l=>{
-      const st = {found:`<span class="tag ok">${tt('شماره دارد','Has phone')}</span>`,
-                  hidden:`<span class="tag chat">${tt('فقط چت','Chat only')}</span>`,
-                  pending:`<span class="tag warn">${tt('در صف','Queued')}</span>`,
-                  legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
-                  removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
-                  error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
+      const st = {found:`<span class="tag ok">شماره دارد</span>`, hidden:`<span class="tag chat">فقط چت</span>`, pending:`<span class="tag warn">در صف</span>`, legacy:`<span class="tag gray">قدیمی</span>`, removed:`<span class="tag gray">حذف‌شده</span>`, error:`<span class="tag err">خطا</span>`}[l.phone_status]||l.phone_status;
+      const hunterTag = l.hunter_level ? (l.hunter_level==='great' ? '<span class="tag ok">⭐ عالی</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ خوب</span>' : (l.hunter_level==='pending' ? '<span class="tag warn">⏳ در انتظار</span>' : '<span class="tag gray">'+esc(l.hunter_level)+'</span>'))) : '';
       const chatBtn = l.phone_status==='hidden'
-        ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>
-           <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
-        : (l.phone_status==='found'
-          ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?tt('ارسال شد','Sent'):tt('پیامک','SMS')}</button>`
-          : (l.phone_status==='error'
-            ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
-            : (l.chat_status||'—')));
-      return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
-        <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
-        <td>${esc(l.first_seen_at)}</td>
-        <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">${tt('مشاهده ↗','view ↗')}</a></td></tr>`;
+        ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">چت</button> <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">صف شماره</button>`
+        : (l.phone_status==='found' ? `<button class="btn sm" onclick="sendLeadSms('${esc(l.token)}')">${l.sms_status==='sent'?'ارسال شد':'پیامک'}</button>` : (l.phone_status==='error' ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">صف شماره</button>` : (l.chat_status||'—')));
+      const hunterBtn = l.hunter_level ? `<button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊</button>` : '';
+      return `<tr><td>${esc(l.title)} ${hunterTag} ${hunterBtn}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td><td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td><td>${esc(l.first_seen_at)}</td><td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
     }).join('');
   }catch(e){}
 }
-
-
-/* ───────────── بررسی اتصال کامل ───────────── */
 async function runDiag() {
   const btn = document.getElementById('diag-btn'), out = document.getElementById('diag-out');
   btn.disabled = true;
-  out.textContent = LANG==='fa' ? '⏳ در حال بررسی — چند ثانیه صبر کنید…' : '⏳ Checking, please wait…';
+  out.textContent = '⏳ در حال بررسی — چند ثانیه صبر کنید…';
   try {
     const r = await fetch('/api/diag', {method:'POST'});
     const d = await r.json();
     let html = '';
     for (const st of (d.steps||[])) {
       const mark = st.ok ? '✅' : '❌';
-      const name = LANG==='fa' ? st.fa : st.en;
-      html += `<div>${mark} <b>${name}</b> <span style="opacity:.6">(${st.ms}ms)</span><br>　${st.detail}</div>`;
+      html += `<div>${mark} <b>${st.fa}</b> <span style="opacity:.6">(${st.ms}ms)</span><br>　${st.detail}</div>`;
     }
     if (d.proxy && d.proxy.active) {
-      html += `<div style="color:#e11">⚠️ ${LANG==='fa'?'پروکسی سیستم فعال است':'System proxy is active'}: ${JSON.stringify(d.proxy.system||d.proxy.env)}</div>`;
+      html += `<div style="color:#e11">⚠️ پروکسی سیستم فعال است: ${JSON.stringify(d.proxy.system||d.proxy.env)}</div>`;
     }
     out.innerHTML = html || '—';
   } catch (e) {
-    out.textContent = (LANG==='fa' ? 'خطا در بررسی: ' : 'Diag error: ') + e;
+    out.textContent = 'خطا در بررسی: ' + e;
   }
   btn.disabled = false;
 }
-
-/* ───────────────────────── تنظیمات ───────────────────────── */
 async function settingsLoad(){
   try{ const s=await api('/api/settings');
     $('set-tg-token').value=s.telegram_bot_token||'';
@@ -1548,7 +1673,6 @@ async function settingsLoad(){
     if($('set-sms-args')) $('set-sms-args').value = s.sms_pattern_args||'title,city';
     if($('set-sms-pattern-text')) $('set-sms-pattern-text').value = s.sms_pattern_text||'';
     if (typeof smsModeChanged==='function') smsModeChanged();
-    if($('set-vip-tg')) $('set-vip-tg').checked = s.vip_telegram!==false;
     if($('set-adaptive')) $('set-adaptive').checked = s.adaptive_until_captcha!==false;
     if($('set-tg-on')) $('set-tg-on').checked = s.telegram_enabled!==false;
     if($('set-bale-token')) $('set-bale-token').value = s.bale_bot_token||'';
@@ -1582,7 +1706,6 @@ async function settingsSave(){
     sms_line_number:$('set-sms-line').value.trim(),
     sms_daily_limit:parseInt($('set-sms-limit').value)||40,
     sms_auto_on_new:!!$('set-sms-auto').checked,
-    vip_telegram:!$('set-vip-tg') || !!$('set-vip-tg').checked,
     telegram_enabled:!$('set-tg-on') || !!$('set-tg-on').checked,
     bale_bot_token:$('set-bale-token')?$('set-bale-token').value.trim():'',
     bale_chat_id:$('set-bale-chat')?$('set-bale-chat').value.trim():'',
@@ -1613,25 +1736,21 @@ async function robotLoad(){
     const s = await api('/api/robot');
     const nlu = s.nlu || {};
     if($('robot-nlu')) $('robot-nlu').textContent = nlu.ready ? 'آماده' : (nlu.running ? 'دانلود…' : 'نیاز به مدل');
-    if($('robot-nlu-sub')) $('robot-nlu-sub').textContent = nlu.ready
-      ? ('مدل محلی: '+(nlu.model||''))
-      : (nlu.note || 'دانلود یک‌بار در پوشه پایدار');
+    if($('robot-nlu-sub')) $('robot-nlu-sub').textContent = nlu.ready ? ('مدل محلی: '+(nlu.model||'')) : (nlu.note || 'دانلود یک‌بار در پوشه پایدار');
     if($('robot-chats')) $('robot-chats').textContent = s.chats_today||0;
-    if($('robot-replies')) $('robot-replies').textContent = s.replies||0;
+    if($('robot-sms')) $('robot-sms').textContent = s.sms_today||0;
     if($('robot-hunter')) $('robot-hunter').textContent = s.hunter_great||0;
+    if ($('k-hunter')) $('k-hunter').textContent = s.hunter_great||0;
+    if ($('k-replied')) $('k-replied').textContent = s.replies||0;
     if($('robot-status-line')) $('robot-status-line').textContent =
-      'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')
-      +' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')
-      +' · صندوق پیامک: '+(s.sms_inbox?'روشن':'خاموش')
-      +' · دیوار/شیپور/رینگ: '+(s.platforms&&s.platforms.divar?'✓':'—')
-      +'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—')
-      +'/'+(s.platforms&&s.platforms.ring?'✓':'—');
+      'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')+' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')+' · صندوق: '+(s.sms_inbox?'روشن':'خاموش')+' · دیوار/شیپور/رینگ: '+(s.platforms&&s.platforms.divar?'✓':'—')+'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—')+'/'+(s.platforms&&s.platforms.ring?'✓':'—');
     if($('robot-chat-auto')) $('robot-chat-auto').checked = !!s.chat_auto;
     const rr = await api('/api/replies');
-    const list = (rr.replies||[]).map(x=>
-      `<div><time>${esc(x.received_at||'')}</time> <b>${esc(x.channel||'')}</b>
-       · ${esc(x.intent||x.nlu_intent||'')} · ${esc((x.body||'').slice(0,80))}</div>`).join('');
+    const list = (rr.replies||[]).map(x=>`<div><time>${esc(x.received_at||'')}</time> <b>${esc(x.channel||'')}</b> · ${esc(x.intent||x.nlu_intent||'')} · ${esc((x.body||'').slice(0,80))}</div>`).join('');
     if($('robot-replies-list')) $('robot-replies-list').innerHTML = list || '<div class="empty">هنوز پاسخی ثبت نشده</div>';
+    // VIP
+    hunterVipLoad();
+    recheckWeek();
   }catch(e){}
 }
 async function nluInstall(){
@@ -1655,7 +1774,6 @@ async function sendLeadSms(token){
     leadsLoad();
   }catch(e){ toast('❌ '+e.message,false); }
 }
-
 function smsModeChanged(){
   const mode = ($('set-sms-mode')||{}).value || 'line';
   const lineWrap = $('sms-line-wrap'), patWrap = $('sms-pattern-wrap');
@@ -1703,14 +1821,13 @@ async function copyPattern(){
   let done=false;
   try{ await navigator.clipboard.writeText(out); done=true; }
   catch(e){ done=copyTextFallback(out); }
-  toast(done ? 'متن پترن (فرمت پنل) کپی شد ✓ — در پنل ملی‌پیامک ثبت کنید'
-             : 'کپی خودکار نشد — متنِ کادر خاکستری بالا را دستی کپی کنید', done);
+  toast(done ? 'متن پترن کپی شد ✓' : 'کپی خودکار نشد — دستی کپی کنید', done);
 }
 function fillPatternSample(){
   const ta=$('set-sms-pattern-text'); if(!ta) return;
   ta.value='کاربر گرامی، در خصوص آگهی «{title}» در {city} درخواست تماس ثبت شده است. در صورت تمایل پاسخگو باشید.';
   patternPreview();
-  toast('نمونهٔ آماده گذاشته شد — متغیرها: {title} و {city}');
+  toast('نمونهٔ آماده گذاشته شد');
 }
 async function smsDeliveryCheck(){
   try{
@@ -1730,21 +1847,15 @@ async function smsTest(to){
 function showTgStatus(tg){
   const el = $('tg-status');
   if (!el || !tg) return;
-  el.textContent = (tg.configured
-    ? (tg.ok ? ('تلگرام وصل: '+(tg.path||'')) : (tg.message||'تلگرام قطع است'))
-    : 'تلگرام پیکربندی نشده — پنل بدون ربات کار می‌کند');
+  el.textContent = (tg.configured ? (tg.ok ? ('تلگرام وصل: '+(tg.path||'')) : (tg.message||'تلگرام قطع است')) : 'تلگرام پیکربندی نشده');
 }
 function showChanStatus(ch){
   if (!ch) return;
   if (ch.telegram) showTgStatus(ch.telegram);
   const b = $('bale-status');
-  if (b && ch.bale) b.textContent = ch.bale.configured
-    ? (ch.bale.ok ? 'بله وصل شد' : (ch.bale.message||'بله قطع است'))
-    : 'بله پیکربندی نشده — توکن را از @botfather در بله بگیرید';
+  if (b && ch.bale) b.textContent = ch.bale.configured ? (ch.bale.ok ? 'بله وصل شد' : (ch.bale.message||'بله قطع است')) : 'بله پیکربندی نشده';
   const r = $('rubika-status');
-  if (r && ch.rubika) r.textContent = ch.rubika.configured
-    ? (ch.rubika.ok ? 'روبیکا وصل شد' : (ch.rubika.message||'روبیکا قطع است'))
-    : 'روبیکا پیکربندی نشده — توکن را از @BotFather در روبیکا بگیرید';
+  if (r && ch.rubika) r.textContent = ch.rubika.configured ? (ch.rubika.ok ? 'روبیکا وصل شد' : (ch.rubika.message||'روبیکا قطع است')) : 'روبیکا پیکربندی نشده';
 }
 function playAlert(kind){
   try{
@@ -1778,12 +1889,9 @@ function watchPanelAlerts(s){
   const phones = s.phones_found ?? ((s.breakdown||{}).contact_found) ?? 0;
   const vip = s.vip_found ?? 0;
   const cap = (s.captcha_needed||[])[0] || '';
-  if (_seenPhones !== null && phones > _seenPhones)
-    pushNote('soft', 'شماره جدید', 'یک شماره تازه پیدا شد');
-  if (_seenVip !== null && vip > _seenVip)
-    pushNote('vip', 'هشدار ویژه', 'آگهی VIP منطبق شد');
-  if (cap && cap !== _seenCap)
-    pushNote('help', 'اکانت نیاز به واکنش', 'پازل/آزادسازی: '+cap);
+  if (_seenPhones !== null && phones > _seenPhones) pushNote('soft', 'شماره جدید', 'یک شماره تازه پیدا شد');
+  if (_seenVip !== null && vip > _seenVip) pushNote('vip', 'هشدار ویژه', 'آگهی VIP منطبق شد');
+  if (cap && cap !== _seenCap) pushNote('help', 'اکانت نیاز به واکنش', 'پازل/آزادسازی: '+cap);
   _seenPhones = phones; _seenVip = vip; _seenCap = cap;
 }
 async function chanTest(channel){
@@ -1794,10 +1902,7 @@ async function chanTest(channel){
   };
   const m = map[channel]; if(!m) return;
   const onEl = $(m.on);
-  if (onEl && !onEl.checked){
-    toast('اول تیک «از این پلتفرم استفاده شود» را بزنید', false);
-    return;
-  }
+  if (onEl && !onEl.checked){ toast('اول تیک «از این پلتفرم استفاده شود» را بزنید', false); return; }
   try{
     const r = await api('/api/channels/test',{method:'POST', body: JSON.stringify({
       channel,
@@ -1814,8 +1919,7 @@ async function tgTest(){
     const r = await api('/api/telegram/test',{method:'POST',body:'{}'});
     if (r.telegram) showTgStatus(r.telegram);
     if (r.channels) showChanStatus(r.channels);
-    toast(r.ok ? (r.telegram && r.telegram.ok ? 'گزارش به کانال‌ها فرستاده شد' : 'پیش‌نمایش آماده')
-               : (r.telegram && r.telegram.message) || 'تلگرام نرسید — بله/روبیکا را هم امتحان کنید', !!r.ok);
+    toast(r.ok ? 'گزارش به کانال‌ها فرستاده شد' : (r.telegram && r.telegram.message) || 'تلگرام نرسید', !!r.ok);
   }catch(e){ toast('❌ '+e.message,false); }
 }
 async function requeueHidden(){
@@ -1823,6 +1927,221 @@ async function requeueHidden(){
 }
 async function requeueOne(token){
   if (await act('/api/leads/requeue',{token})) leadsLoad();
+}
+
+/* تیرا — دستیار شکار */
+const TIRA_NAME = "تیرا";
+let _aiSid = localStorage.getItem('ai_sid') || ('ai-'+Date.now());
+localStorage.setItem('ai_sid', _aiSid);
+let _aiConfig = null;
+function aiRenderLog(msgs){
+  const box = $('tira-mini-log'); if(!box) return;
+  box.innerHTML = (msgs||[]).map(m=>{
+    const who = m.role==='user' ? '🧑 شما' : `🧠 ${TIRA_NAME}`;
+    const cls = m.role==='user' ? 'tag gray' : 'tag ok';
+    return `<div style="padding:7px; border-bottom:1px dashed var(--line)"><span class="${cls}">${who}</span> <span style="margin-right:6px">${esc(m.text||'')}</span></div>`;
+  }).join('') || `<div class="empty">${TIRA_NAME} اینجاست! قیمت روز آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو را می‌فهمم 🎯</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+function aiRenderConfig(cfg){
+  _aiConfig = cfg;
+  const card = $('ai-config-card');
+  if(!cfg || !cfg.items || !cfg.items.length){ if(card) card.style.display='none'; return; }
+  if(card) card.style.display='block';
+  const sum = $('ai-config-summary');
+  if(sum){
+    const q = cfg.quantity ? `تعداد هدف: ${cfg.quantity} · ` : '';
+    const cond = cfg.conditions ? `شرایط: ${esc((cfg.conditions||[]).join('، '))}` : '';
+    sum.innerHTML = `${q}${cond}<br>وضعیت: ${esc(cfg.state||'')}`.trim();
+  }
+  const tb = $('ai-config-tbody');
+  if(tb){
+    tb.innerHTML = cfg.items.map(it=>{
+      const maxBuy = it.max_buy ? it.max_buy.toLocaleString() : '—';
+      const sell = it.healthy_sell_price ? it.healthy_sell_price.toLocaleString() : '—';
+      const prof = it.desired_profit ? it.desired_profit.toLocaleString() : '—';
+      return `<tr><td>${esc(it.model)}</td><td dir="ltr">${sell}</td><td dir="ltr">${prof}</td><td dir="ltr"><b>${maxBuy}</b></td><td>${esc((it.conditions||[]).join('، ')||cfg.conditions||'')}</td></tr>`;
+    }).join('');
+  }
+}
+async function aiLoad(){
+  try{
+    const r = await api('/api/hunter/ai-start',{method:'POST', body: JSON.stringify({session_id:_aiSid})});
+    aiRenderLog(r.messages);
+    if(r.config && r.config.items && r.config.items.length) aiRenderConfig(r.config);
+  }catch(e){}
+}
+async function aiSend(){
+  // legacy - now uses mini
+  tiraMiniSend();
+}
+async function aiReset(){
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, reset:true, message:''})});
+    aiRenderLog(r.messages); aiRenderConfig(null);
+    toast('گفتگو از اول شروع شد');
+  }catch(e){}
+}
+async function aiApply(){
+  if(!_aiConfig || !_aiConfig.items || !_aiConfig.items.length){ toast('اول با تیرا صحبت کن تا تنظیمات آماده شود', false); return; }
+  let city_ids = null;
+  if(_selectedCities.size>0) city_ids = Array.from(_selectedCities);
+  try{
+    const r = await api('/api/hunter/ai-apply',{method:'POST', body: JSON.stringify({session_id:_aiSid, config:_aiConfig, city_ids})});
+    if($('ai-apply-hint')) $('ai-apply-hint').textContent = r.message||'';
+    toast(r.message||'تنظیمات ست شد', !!r.ok);
+    kwLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+function openTira(){ tiraMiniOpen(); }
+function tiraMiniOpen(){
+  const mini=$('tira-mini'); if(mini) mini.classList.add('open');
+  aiLoad();
+}
+function tiraMiniClose(){
+  const mini=$('tira-mini'); if(mini) mini.classList.remove('open');
+}
+async function tiraMiniSend(){
+  const inp=$('tira-mini-inp'); if(!inp) return;
+  const txt=inp.value.trim(); if(!txt) return;
+  inp.value='';
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message:txt})});
+    aiRenderLog(r.messages);
+    if(r.config) aiRenderConfig(r.config);
+    if(r.done) toast(`${TIRA_NAME}: تنظیمات آماده است — دکمه ست کردن را بزن`);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+let _hunterSeen = new Set();
+let _hunterBadge = 0;
+function hunterFabClick(){
+  const mini=$('tira-mini');
+  if(mini && !mini.classList.contains('open')){
+    tiraMiniOpen();
+    _hunterBadge=0; updateHunterBadge();
+    return;
+  }
+  tiraMiniClose();
+}
+function updateHunterBadge(){
+  const b=$('hunter-fab-badge'); if(!b) return;
+  if(_hunterBadge>0){ b.textContent=String(_hunterBadge); b.style.display='block'; $('hunter-fab-btn').classList.add('pulse'); }
+  else { b.style.display='none'; $('hunter-fab-btn').classList.remove('pulse'); }
+}
+function showHunterToast(item, kind){
+  const box=$('hunter-toasts'); if(!box) return;
+  const div=document.createElement('div');
+  const isVip = kind==='vip';
+  div.className='hunter-toast '+(isVip?'vip':'week');
+  const title = item.title||'آگهی جدید';
+  const price = item.price ? (item.price.toLocaleString()+' تومان') : '';
+  const disc = item.hunter_discount_pct ? (item.hunter_discount_pct+'% زیر قیمت') : '';
+  const city = item.city||'';
+  let msg='';
+  if(isVip){
+    msg = `<div class="tira-head"><div class="tira-avatar">🧠</div><div class="tira-name">${TIRA_NAME} — دستیار شکار</div></div>یه شکار خفن پیدا کردم! 😍<br><b>${esc(title.slice(0,60))}</b><br>${price} · ${disc} · ${esc(city)}<br>برم مذاکره کنم؟ 🔥`;
+  } else {
+    msg = `<div class="tira-head"><div class="tira-avatar">🧠</div><div class="tira-name">${TIRA_NAME}</div></div>یادته هفته پیش اینو دیدیم؟ 🤔<br><b>${esc(title.slice(0,60))}</b><br>هنوز پیام نرفته!`;
+  }
+  div.innerHTML = `${msg}<div class="row"><button class="btn sm ok" onclick="hunterToastAction('${esc(item.token)}','go')">بزن بریم 💬</button><button class="btn sm gray" onclick="this.closest('.hunter-toast').remove()">بعداً</button><a class="btn sm gray" href="${esc(item.url||'')}" target="_blank" style="text-decoration:none">مشاهده ↗</a></div>`;
+  box.prepend(div);
+  setTimeout(()=>{ try{ div.remove(); }catch(e){} }, 18000);
+  _hunterBadge++; updateHunterBadge();
+  playAlert(isVip?'vip':'help');
+}
+async function hunterToastAction(token, act){
+  const box=$('hunter-toasts'); if(box) box.innerHTML='';
+  _hunterBadge=0; updateHunterBadge();
+  if(act==='go'){
+    try{
+      const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+      toast(r.message||'مذاکره ارسال شد');
+    }catch(e){ toast('❌ '+e.message,false); }
+  }
+}
+async function pollHunterFab(){
+  try{
+    const vip = await api('/api/hunter/vip?limit=10');
+    const items = vip.vip||[];
+    for(const it of items){
+      if(!_hunterSeen.has(it.token)){
+        _hunterSeen.add(it.token);
+        if(_hunterSeen.size>1) showHunterToast(it, 'vip');
+      }
+    }
+    if(_hunterSeen.size>200){ _hunterSeen = new Set([..._hunterSeen].slice(-100)); }
+  }catch(e){}
+  try{
+    const wk = await api('/api/hunter/recheck-week?limit=8');
+    const need = (wk.items||[]).filter(x=>x.needs_action);
+    if(need.length>0){
+      const one = need[0];
+      if(!one._shownWeek){
+        one._shownWeek=true;
+        showHunterToast(one, 'week');
+      }
+    }
+  }catch(e){}
+}
+async function recheckWeek(){
+  try{
+    const r = await api('/api/hunter/recheck-week?limit=20');
+    const list = $('week-list');
+    if (!list) return;
+    const items = r.items||[];
+    list.innerHTML = items.map(it=>{
+      const need = it.needs_action ? '<span class="tag warn">نیاز به اقدام</span>' : '<span class="tag gray">انجام شده</span>';
+      return `<div style="padding:8px; border-bottom:1px dashed var(--line)"><b>${esc(it.title||'')}</b> ${need}<br><small>${esc(it.city||'')} · ${it.price?it.price.toLocaleString()+' تومان':''} · ${esc(it.hunter_level||'')}</small><br><div class="row" style="margin-top:6px"><button class="btn sm ok" onclick="hunterNegotiate('${esc(it.token)}')">💬 مذاکره</button><a href="${esc(it.url||'')}" target="_blank" class="btn sm gray" style="text-decoration:none">مشاهده ↗</a></div></div>`;
+    }).join('') || '<div class="empty">موردی نیست</div>';
+    if (r.summary) toast(r.summary);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
+/* تیرا نویس */
+async function tiraHelp(channel){
+  const topic = channel==='chat' ? ($('tpl-chat').value||'') : (channel==='sms' ? ($('tpl-sms').value||'') : ($('tpl-inquire').value||''));
+  $('tira-write-topic').value = topic.slice(0,100);
+  openTira();
+  // خودکار درخواست کمک
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message: 'کمک کن یه متن '+channel+' حرفه‌ای برای این بنویسم: '+topic})});
+    aiRenderLog(r.messages);
+    if(r.config) aiRenderConfig(r.config);
+  }catch(e){}
+}
+async function tiraWrite(){
+  const topic = ($('tira-write-topic').value||'').trim();
+  if (!topic){ toast('موضوع را بنویس', false); return; }
+  // از API تیرا برای تولید متن استفاده کن
+  try{
+    // اول قیمت اینترنت را هم بگیر اگر آیفون بود
+    let extra = '';
+    if (/آیفون|iphone/i.test(topic)){
+      try{
+        const priceRes = await api('/api/tira/price?query='+encodeURIComponent(topic));
+        if (priceRes && priceRes.ok && priceRes.prices){
+          extra = '\\n\\nقیمت بازار (ترب/اینترنت): ' + priceRes.prices.map(p=>`${p.model}: ${p.price.toLocaleString()} تومان`).join('، ');
+        }
+      }catch(e){}
+    }
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message: 'یه متن پیامک/چت حرفه‌ای و دوستانه و متقاعدکننده برای این بنویس، کوتاه و با احترام: '+topic+extra})});
+    aiRenderLog(r.messages);
+    const last = (r.messages||[]).filter(m=>m.role==='assistant').slice(-1)[0];
+    if (last){
+      $('tira-write-out').textContent = last.text || '';
+    }
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+function tiraCopyWrite(){
+  const txt = $('tira-write-out').textContent||'';
+  if (!txt){ toast('متنی نیست', false); return; }
+  navigator.clipboard.writeText(txt).then(()=>toast('کپی شد')).catch(()=>toast('کپی دستی', false));
+}
+function tiraApplyToTemplate(){
+  const txt = $('tira-write-out').textContent||'';
+  if (!txt){ toast('متنی نیست', false); return; }
+  $('tpl-chat').value = txt;
+  toast('به قالب چت اعمال شد — ذخیره را بزن');
 }
 
 function resolveTheme(){
@@ -1848,14 +2167,12 @@ function cycleTheme(){
 }
 applyTheme();
 async function quitApp(){
-  if (!confirm(tt('برنامه کامل بسته شود؟','Close the whole app?'))) return;
+  if (!confirm('برنامه کامل بسته شود؟')) return;
   try { await api('/api/shutdown',{method:'POST', body:'{}'}); }
   catch(e){}
-  toast(tt('در حال بستن برنامه…','Closing…'));
+  toast('در حال بستن برنامه…');
   setTimeout(()=>{ try{ window.close(); }catch(e){} }, 500);
 }
-
-/* ───────────────────────── حلقه تازه‌سازی ───────────────────────── */
 (function(){
   const dlg = $('cap-dlg');
   if (dlg) dlg.addEventListener('close', ()=>{
@@ -1864,70 +2181,25 @@ async function quitApp(){
   });
 })();
 refreshStatus(); accRefresh(); kwLoad(); tplLoad(); settingsLoad();
-setInterval(()=>{ refreshStatus();
+setInterval(()=>{
+  refreshStatus();
   if(document.querySelector('#tab-leads.active')) leadsLoad();
   if(document.querySelector('#tab-accounts.active')) accRefresh();
-  if(document.querySelector('#tab-robot.active')) robotLoad();
+  if(document.querySelector('#tab-inbox.active')) robotLoad();
 }, 4000);
-</script>
-
-<script>
-/* ─────────── دو زبانه (فارسی/English) — جابه‌جایی کامل رابط ─────────── */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const miniInp = $('tira-mini-inp');
+  if(miniInp) miniInp.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); tiraMiniSend(); }});
+  setTimeout(pollHunterFab, 4000);
+  setInterval(pollHunterFab, 10000);
+  // شهرها
+  citiesLoad();
+});
 const FA_EN = {
-  "سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار":"Smart system to collect leads & phone numbers from Divar ads",
+  "سیستم هوشمند جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار":"Smart system to collect leads",
   "داشبورد":"Dashboard","اکانت‌ها":"Accounts","کلمات کلیدی":"Keywords","پیام‌ها":"Messages",
   "کل سرنخ‌ها":"Total leads","شماره پیدا شده":"Contact found","بدون شماره":"No contact","خطا":"Failed",
   "سرنخ‌ها":"Leads","تنظیمات":"Settings","بررسی اتصال کامل":"Full connection check","لاگ‌ها":"Logs",
-  "وضعیت مانیتور":"Monitor status","در صف شماره‌گیری":"Phone queue",
-  "لیست چت (فقط چت)":"Chat list (chat-only)","شماره‌های امروز":"Numbers today",
-  "سرنخ‌های منتظر شماره":"Leads waiting for their number",
-  "آگهی‌های بدون شماره → پیام چت":"Ads without number → chat message",
-  "کنترل اسکن":"Scan control","شروع اسکن":"Start scan","مکث":"Pause","توقف":"Stop",
-  "موارد فعلی هم گرفته شوند؟":"Also fetch existing ads?",
-  "اگر فعال باشد، آگهی‌های موجودِ الان هم شماره‌گیری می‌شوند؛":"If checked, current existing ads will also be fetched;",
-  "فقط آگهی‌های جدید":"only new ads","از این لحظه به بعد گرفته می‌شوند.":"will be fetched from now on.",
-  "نکته ضد بلاک:":"Anti-block note:",
-  "سیستم خودش تاخیرها و سهمیه‌ها را رعایت می‌کند":"The system enforces delays and quotas automatically",
-  "اگر اکانتی کپچا بخورد، بقیه اکانت‌ها بدون توقف ادامه می‌دهند و به شما اعلان می‌رسد؛":"if one account hits a captcha the rest keep working and you get notified;",
-  "در تب اکانت‌ها دکمه «آزادسازی» را بزنید.":"then press Release in the Accounts tab.",
-  "اکانت‌ها":"Accounts","رخدادهای زنده":"Live events",
-  "افزودن اکانت جدید (لاگین با کد پیامکی)":"Add new account (OTP login)","افزودن پروفایل Chromium (لاگین واقعی دیوار)":"Add Chromium profile (real Divar login)","افزودن پروفایل + باز کردن تهران":"Add profile + open Tehran","ذخیره پروفایل":"Save profile","باز کردن دیوار":"Open Divar","پروفایل ذخیره شده":"Profile saved","حذف پروفایل":"Delete profile",
-  "برای هر اکانت یک":"Each account needs a","شماره موبایل واقعی":"real mobile number",
-  "لازم است":" ","دیوار شماره مجازی نمی‌پذیرد)":"Divar does not accept virtual numbers).",
-  "نام اکانت (انگلیسی)":"Account name (English)","شماره موبایل":"Mobile number",
-  "۱) ارسال کد تایید":"1) Send code","جمع‌آوری سشن سایت":"Collect site session","تأییدشده · سشن سایت":"Verified · site session","نیاز به سشن سایت":"Needs site session","کد ۶ رقمی پیامک‌شده":"6-digit code from SMS",
-  "۲) تأیید و لاگین":"2) Confirm & login","اول گام ۱ را بزنید…":"Press step 1 first…",
-  "اکانت‌های ثبت‌شده":"Registered accounts","آزادسازی":"Release",
-  "کلمات کلیدی پایش":"Keywords to monitor",
-  "کلمات کلیدی — با کاما (، یا ,) از هم جدا کنید":"Keywords — separate with comma (Persian or English)",
-  "محدوده جستجو":"Search scope","همه کشور":"All country",
-  "کد شهرها مثل 1,3":"city codes e.g. 1,3","تهران=۱، کرج=۲، مشهد=۳، اصفهان=۴":"Tehran=1 Karaj=2 Mashhad=3 Isfahan=4",
-  "افزودن":"Add","فهرست کلمات":"Keyword list","حذف":"Delete",
-  "هر کلمه کلیدی فعال، به‌صورت دوره‌ای (پیش‌فرض هر ۵ دقیقه)":"Each active keyword is scanned periodically (default every 5 min)",
-  "پایش می‌شود و آگهی جدید همان کلمه وارد صف شماره‌گیری می‌شود.":"and its new ads enter the phone queue.",
-  "قالب پیام چت (نیمه‌خودکار)":"Chat message template (semi-auto)",
-  "قالب پیامک ملی‌پیامک":"Melipayamak SMS template","ذخیره قالب چت":"Save chat template",
-  "ذخیره قالب پیامک":"Save SMS template","عنوان آگهی":"ad title","توضیح میانی":"mid description",
-  "لیست سرنخ‌ها":"Leads list","همه":"All","شماره‌دار":"Has phone","فقط چت":"Chat only",
-  "خروجی اکسل (شماره‌ها)":"Export Excel (numbers)","خروجی (چت‌ها)":"Export (chats)",
-  "عنوان":"Title","شماره":"Phone","وضعیت":"Status","کلمه":"Keyword","شهر":"City","زمان":"Time","لینک":"Link",
-  "هنوز سرنخی ثبت نشده — مانیتور را شروع کنید":"No leads yet — start the monitor",
-  "اتصال تلگرام (اعلان‌ها)":"Telegram connection (notifications)",
-  "توکن ربات — از":"Bot token — from","بگیرید":"get it","شناسه گفتگو (Chat ID)":"Chat ID",
-  "وقتی کپچا بیاید یا اکانتی محدود شود، همان لحظه به تلگرام اعلان می‌گیرید.":"When a captcha appears or an account is limited, you get an instant Telegram alert.",
-  "پارامترهای ضد بلاک":"Anti-block parameters",
-  "فاصله دورهای اسکن (ثانیه)":"Scan interval (sec)","فاصله شماره‌گیری (ثانیه)":"Phone delay (sec)",
-  "سقف روزانه هر اکانت":"Daily limit per account","سقف روزانه کل (IP)":"Daily limit total (IP)",
-  "سرد شدن بعد از بلاک (دقیقه)":"Cooldown after block (min)",
-  "مقادیر پیش‌فرض محافظه‌کارانه‌اند؛ افزایششان ریسک بلاک را بالا می‌برد.":"Defaults are conservative; increasing them raises block risk.",
-  "سرویس پیامک (به‌زودی)":"SMS service (soon)","سرویس‌دهنده":"Provider","کلید API":"API key",
-  "شماره خط ارسال":"Sender line number","غیرفعال (فعلاً)":"Disabled (for now)",
-  "ارسال خودکار پیامک در نسخه بعدی با همین اطلاعات فعال می‌شود.":"Automatic SMS will use these settings in the next version.",
-  "ذخیره همه تنظیمات":"Save all settings",
-  "گزارش رخدادها (همچنین در فایل logs/divar_app.log)":"Event log (also in logs/divar_app.log)",
-  "فعال":"active","غیرفعال":"inactive","مخفی":"hidden",
-  "active":"active","captcha":"captcha","cooldown":"cooldown","relogin":"relogin","disabled":"disabled",
-  "found":"found","pending":"pending","legacy":"legacy","removed":"removed","error":"error"
 };
 const EN_FA = Object.fromEntries(Object.entries(FA_EN).map(([k,v])=>[v,k]));
 let LANG = localStorage.getItem("lang") || "fa";
