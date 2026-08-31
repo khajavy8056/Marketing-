@@ -779,6 +779,11 @@ def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
         except Exception:
             opened = False
     plats = rec.get("platforms") or {}
+    plats_enabled = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True, "ring": False}
+    if "divar" not in plats_enabled:
+        plats_enabled["divar"] = True
+    if "sheypoor" not in plats_enabled:
+        plats_enabled["sheypoor"] = True
     return {
         "profile_ready": ready,
         "profile_status": rec.get("status") or ("ready" if ready else "none"),
@@ -789,4 +794,30 @@ def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
         "last_error": rec.get("last_error") or "",
         "chromium_dir": str(chromium_dir(accounts_dir, name)),
         "platforms": plats,
+        "platforms_enabled": plats_enabled,
     }
+
+
+def get_platforms_enabled(accounts_dir: str, name: str) -> Dict[str, bool]:
+    rec = load_meta(accounts_dir, name)
+    en = rec.get("platforms_enabled") or {}
+    return {
+        "divar": bool(en.get("divar", True)),
+        "sheypoor": bool(en.get("sheypoor", True)),
+        "ring": bool(en.get("ring", False)),
+    }
+
+def set_platform_enabled(accounts_dir: str, name: str, platform: str, enabled: bool) -> Dict[str, bool]:
+    platform = (platform or "").lower().strip()
+    if platform not in ("divar", "sheypoor", "ring"):
+        raise ValueError("platform باید divar یا sheypoor یا ring باشد")
+    rec = load_meta(accounts_dir, name)
+    en = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True, "ring": False}
+    en[platform] = bool(enabled)
+    save_meta(accounts_dir, name, {"platforms_enabled": en})
+    return en
+
+def toggle_platform_enabled(accounts_dir: str, name: str, platform: str) -> Dict[str, bool]:
+    cur = get_platforms_enabled(accounts_dir, name)
+    new_val = not cur.get(platform, True)
+    return set_platform_enabled(accounts_dir, name, platform, new_val)

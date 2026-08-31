@@ -999,6 +999,180 @@ def tira_price(query: str = "", models: str = ""):
                         pass
     return {"ok": True, "query": q, "prices": prices, "message": f"{len([p for p in prices if p.get('has_price')])} قیمت از اینترنت پیدا شد"}
 
+
+# ---------------- تیرا ایجنت تمام‌عیار v3.6
+class TiraAgentReq(BaseModel):
+    message: str = ""
+    session_id: str = "default"
+    reset: bool = False
+    topic: str = ""  # برای guide
+
+
+@app.get("/api/tira/guide")
+def tira_guide(topic: str = "general"):
+    from ..tira_agent import get_system_guide
+    guide = get_system_guide(topic)
+    return {"ok": True, "topic": topic, "guide": guide}
+
+
+@app.post("/api/tira/agent")
+def tira_agent_chat(req: TiraAgentReq):
+    """تیرا ایجنت — تسلط کامل به سیستم + تحقیق بازار + شکار"""
+    from ..tira_agent import get_tira_agent, get_system_guide, research_any_product
+    sid = (req.session_id or "default").strip() or "default"
+    ag = get_tira_agent(sid)
+    if req.reset:
+        ag.reset()
+        start = ag.start()
+        return {"ok": True, **start, "session_id": sid}
+    # اگر هنوز شروع نشده
+    if not ag.state.get("messages"):
+        ag.start()
+    # اگر topic guide خواسته
+    if req.topic and not req.message:
+        guide = get_system_guide(req.topic)
+        return {"ok": True, "reply": guide, "messages": ag.state["messages"], "guide": guide, "session_id": sid}
+    result = ag.handle_user(req.message or "")
+    result["session_id"] = sid
+    result["ok"] = True
+    return result
+
+
+class TiraResearchReq(BaseModel):
+    keyword: str = ""
+
+
+@app.post("/api/tira/research")
+def tira_research(req: TiraResearchReq):
+    from ..tira_agent import research_any_product
+    kw = (req.keyword or "").strip()
+    if not kw:
+        raise HTTPException(400, "کلمه کلیدی خالی است")
+    res = research_any_product(kw)
+    prices = res.get("prices") or []
+    market_price = prices[0]["price"] if prices else None
+    source = prices[0]["source"] if prices else res.get("type")
+    variant = None
+    # تشخیص واریانت آیفون از keyword
+    low = kw.lower()
+    if "پرو مکس" in kw or "promax" in low or "pro max" in low:
+        variant = {"model": "Pro Max", "type": "پرو مکس"}
+    elif "پرو" in kw:
+        variant = {"model": "Pro", "type": "پرو"}
+    elif "مینی" in kw or "mini" in low:
+        variant = {"model": "Mini", "type": "مینی"}
+    elif "پلاس" in kw or "plus" in low:
+        variant = {"model": "Plus", "type": "پلاس"}
+    else:
+        variant = {"model": res.get("variants", [kw])[0] if res.get("variants") else kw, "type": res.get("type")}
+    # اگر نات‌اکتیو
+    if any(w in low for w in ["نات اکتیو", "not active", "پلمپ", "آکبند"]):
+        variant["not_active"] = True
+        variant["extra"] = "+8% گران‌تر از کارکرده سالم"
+    return {"ok": True, "market_price": market_price, "source": source, "variant": variant, "all_prices": prices, **res}
+
+
+class TiraTestReq(BaseModel):
+    phone: str = ""  # شماره تست خود کاربر
+    title: str = ""  # عنوان آگهی فرضی
+    price: int = 0
+    scenario: str = "negotiate"  # negotiate | second_sim | opener | full
+    incoming_phone: str = ""  # برای تست سیم دوم
+    original_phone: str = ""
+    incoming_text: str = ""  # متن ورودی فروشنده برای تست شما؟
+
+
+@app.post("/api/tira/test")
+def tira_test(req: TiraTestReq):
+    """🧪 تست تیرا — مذاکره آزمایشی + سیم دوم + تحقیق قیمت"""
+    from ..tira_agent import generate_polite_negotiation, detect_second_sim_reply, detect_ambiguous_text_reply, research_any_product
+    phone = (req.phone or "").strip()
+    if phone and not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
+        raise HTTPException(400, "شماره تست باید 11 رقم و با 09 شروع شود")
+    title = (req.title or "آیفون 13 پرو مکس تمیز").strip()
+    price = int(req.price or 25_000_000)
+    scenario = (req.scenario or "negotiate").lower()
+
+    if scenario == "second_sim":
+        inc = (req.incoming_phone or "09120000000").strip()
+        orig = (req.original_phone or "09121111111").strip()
+        inc_text = (req.incoming_text or "").strip() or "شما؟"
+        det_phone = detect_second_sim_reply(inc, orig, ad_token="test-token", ad_title=title, incoming_text=inc_text)
+        det_text = detect_ambiguous_text_reply(inc_text, ad_title=title)
+        return {"ok": True, "scenario": "second_sim", "detection": det_phone, "text_detection": det_text, "second_sim_test": {"incoming": inc_text, "needs_clarify": det_phone.get("need_clarify") or det_text.get("need_clarify"), "response": det_phone.get("message") or det_text.get("message")}, "message": det_phone.get("message") or det_text.get("message"), "note": "اگر فروشنده با سیم دوم یا با متن «شما؟» جواب داد، تیرا گیج نمی‌زند"}
+
+    # سناریو مذاکره
+    context = {
+        "title": title,
+        "price": price,
+        "fair": int(price * 1.15),
+        "healthy_median": int(price * 1.2),
+        "discount_pct": 12,
+        "model": title,
+        "factors": [],
+    }
+    if scenario == "opener":
+        msg = generate_polite_negotiation(context, stage="opener")
+    elif scenario == "offer":
+        msg = generate_polite_negotiation(context, stage="offer")
+    elif scenario == "final":
+        msg = generate_polite_negotiation(context, stage="final")
+    elif scenario == "full":
+        research = research_any_product(title)
+        opener = generate_polite_negotiation({**context, "fair": research.get("prices", [{}])[0].get("price", context["fair"]) if research.get("prices") else context["fair"]}, stage="opener")
+        offer = generate_polite_negotiation(context, stage="offer")
+        closer = generate_polite_negotiation(context, stage="final")
+        second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test-full", ad_title=title, incoming_text="شما؟")
+        analysis = None
+        try:
+            from ..hunter import analyze_lead
+            lead_mock = {"title": title, "price": price, "description": title, "city": "تهران"}
+            analysis = analyze_lead(lead_mock, keyword=title)
+        except Exception as e:
+            analysis = {"note": f"hunter analyze not available: {e}", "price": price, "fair": context["fair"], "level": "good"}
+        return {"ok": True, "scenario": "full", "analysis": analysis, "negotiation": {"opener": opener, "offer": offer, "closer": closer, "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": "تست کامل تیرا"}
+    else:
+        msg = generate_polite_negotiation(context, stage="opener")
+        try:
+            from ..hunter import analyze_lead
+            analysis = analyze_lead({"title": title, "price": price, "description": title, "city": "تهران"}, keyword=title)
+        except Exception:
+            analysis = {"price": price, "fair": context["fair"], "median": context["healthy_median"], "level": "good", "raw_level": "good", "discount_pct": 12, "flags": {}, "missing": []}
+        offer = generate_polite_negotiation(context, stage="offer")
+        closer = generate_polite_negotiation(context, stage="final")
+        second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test-neg", ad_title=title, incoming_text="شما؟")
+        research = research_any_product(title)
+        return {"ok": True, "scenario": scenario, "analysis": analysis, "negotiation": {"opener": msg, "offer": offer, "closer": closer, "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": msg}
+
+    try:
+        from ..hunter import analyze_lead
+        analysis = analyze_lead({"title": title, "price": price, "description": title, "city": "تهران"}, keyword=title)
+    except Exception:
+        analysis = {"price": price, "fair": context["fair"], "median": context["healthy_median"], "level": "good", "discount_pct": 5, "flags": {}, "missing": []}
+    second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test", ad_title=title, incoming_text="شما؟")
+    research = research_any_product(title)
+    return {"ok": True, "scenario": scenario, "analysis": analysis, "negotiation": {"opener": msg if scenario=="opener" else "", "offer": msg if scenario=="offer" else "", "closer": msg if scenario=="final" else "", "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": msg}
+
+
+@app.post("/api/accounts/platform/toggle")
+def accounts_platform_toggle(req: PlatformToggleReq):
+    """toggle آیکون دیوار/شیپور کنار اکانت‌ها — روشن/خاموش پلتفرم per-account"""
+    from ..chromium_profile import get_platforms_enabled, set_platform_enabled, toggle_platform_enabled, safe_name
+    try:
+        name = safe_name(req.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    plat = (req.platform or "").lower().strip()
+    if plat not in ("divar", "sheypoor", "ring"):
+        raise HTTPException(400, "platform باید divar یا sheypoor باشد")
+    if req.enabled is None:
+        en = toggle_platform_enabled(ACCOUNTS_DIR, name, plat)
+    else:
+        en = set_platform_enabled(ACCOUNTS_DIR, name, plat, bool(req.enabled))
+    log("info", f"پلتفرم «{plat}» برای اکانت «{name}» → {'روشن' if en.get(plat) else 'خاموش'}")
+    return {"ok": True, "name": name, "platform": plat, "enabled": bool(en.get(plat)), "platforms_enabled": en, "message": f"{plat} برای {name} {'روشن' if en.get(plat) else 'خاموش'} شد"}
+
+
 @app.get("/api/platforms")
 def platforms_status():
     from ..platforms import active_platforms, enabled_from_settings, TITLES

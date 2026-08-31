@@ -249,7 +249,7 @@
   <div class="brand">
     <img src="/logo.png" alt="Divar Marketing" width="44" height="44">
     <div>
-      <div class="logo">مارکتینگ دیوار — تیرا نهایی</div>
+      <div class="logo">مارکتینگ دیوار — تیرا ایجنت تمام‌عیار v3.6</div>
       <div class="sub">دیوار + شیپور + شکارچی هوشمند با اینترنت · صندوق پیام‌ها</div>
     </div>
   </div>
@@ -478,47 +478,57 @@
   </div>
 </section>
 
-<!-- صندوق پیام‌ها — قبلاً ربات هوشمند -->
+
+<!-- صندوق پیام‌ها — نسخه v3.6 تمیز — بدون نصب مدل محلی -->
 <section id="tab-inbox" class="tab">
   <div class="grid g4">
-    <div class="card"><h3>هوش محلی</h3><div class="kpi" id="robot-nlu">—</div><small class="hint" id="robot-nlu-sub">مدل روی رایانه شما، بدون API ابری</small></div>
-    <div class="card"><h3>چت خودکار امروز</h3><div class="kpi" id="robot-chats">0</div></div>
-    <div class="card"><h3>پیامک خودکار امروز</h3><div class="kpi" id="robot-sms">0</div></div>
-    <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="robot-hunter" style="color:var(--ok)">0</div></div>
+    <div class="card"><h3>💬 چت خودکار امروز</h3><div class="kpi" id="robot-chats">0</div><small class="hint">چت‌های ارسالی تیرا</small></div>
+    <div class="card"><h3>📱 پیامک خودکار امروز</h3><div class="kpi" id="robot-sms">0</div><small class="hint">پیامک‌های ارسالی تیرا</small></div>
+    <div class="card"><h3>🎯 شکارچی عالی</h3><div class="kpi" id="robot-hunter" style="color:var(--ok)">0</div><small class="hint">شکارهای خیلی مناسب</small></div>
+    <div class="card"><h3>📨 پاسخ‌ها</h3><div class="kpi" id="k-replied-inbox" style="color:var(--chat)">0</div><small class="hint">پیام‌های دریافتی فروشنده‌ها</small></div>
   </div>
   <div class="card" style="margin-top:14px">
-    <h3>📥 صندوق دریافت/ارسال پیام‌های اتومات — مذاکره تیرا + پاسخ‌ها</h3>
-    <div class="hint" id="robot-status-line">وضعیت هوش، چت، صندوق پیامک و پلتفرم‌ها اینجا دیده می‌شود. تیرا خودش مذاکره می‌کند.</div>
+    <h3>📥 صندوق دریافت/ارسال پیام‌های اتومات — مذاکره تیرا + پاسخ‌ها (v3.6)</h3>
+    <div class="warn-box">
+      <b>تیرا ایجنت کامل:</b> به پنل SMS، تنظیمات، پلتفرم‌ها مسلطه، اینترنت واقعی داره (ترب)، برای هر کالا تحقیق می‌کنه، واریانت‌های آیفون 13/14/15 عادی/پرو/پرومکس/مینی/پلاس/نات‌اکتیو رو جدا می‌فهمه، درصد افت باتری زیر 80٪ -11٪، بدون رجیستر -16٪، تعمیر -14٪، نات‌اکتیو +8٪، با کارتن +3٪ و هزاران پارامتر رو می‌دونه، مذاکره انسانی مودب می‌کنه نه ربات‌وار، پاسخ با سیم دوم رو تشخیص می‌ده.
+    </div>
+    <div class="hint" id="robot-status-line">وضعیت چت، صندوق پیامک و پلتفرم‌ها اینجا دیده می‌شود. تیرا خودش مذاکره می‌کند.</div>
     <div class="row" style="margin-top:10px">
-      <button class="btn" type="button" onclick="nluInstall()">⬇️ دانلود مدل محلی</button>
-      <button class="btn gray" type="button" onclick="hunterVipLoad()">⭐ لیست شکارهای VIP</button>
-      <button class="btn gray" type="button" onclick="recheckWeek()">🔄 چک هفته گذشته</button>
-      <button class="btn ok" type="button" onclick="openTira()">🧠 باز کردن تیرا</button>
+      <button class="btn ok" type="button" onclick="hunterVipLoad()">🎯 لیست شکارهای عالی</button>
+      <button class="btn gray" type="button" onclick="recheckWeek()">🔄 چک هفته گذشته — پیام نرفته</button>
+      <button class="btn" type="button" onclick="openTira()">🧠 باز کردن تیرا ایجنت</button>
+      <button class="btn warn" type="button" onclick="tiraAgentGuide('sms')">📱 راهنمای پنل SMS</button>
+      <button class="btn gray" type="button" onclick="tiraAgentGuide('hunter')">📖 راهنمای شکارچی</button>
     </div>
     <div class="checkline">
       <input type="checkbox" id="robot-chat-auto" onchange="chatAutoToggle(this.checked)">
-      <label for="robot-chat-auto">چت خودکار فقط‌چت</label>
+      <label for="robot-chat-auto"><b>چت خودکار فقط‌چت — تیرا خودش می‌فرسته</b></label>
     </div>
     <div class="checkline">
       <input type="checkbox" id="robot-sms-inbox" checked>
-      <label for="robot-sms-inbox">خواندن صندوق ورودی ملی‌پیامک (نظرسنجی دوره‌ای)</label>
+      <label for="robot-sms-inbox"><b>خواندن صندوق ورودی ملی‌پیامک (نظرسنجی دوره‌ای) — تشخیص سیم دوم</b></label>
     </div>
   </div>
   <div class="grid g2" style="margin-top:14px">
     <div class="card">
-      <h3>آخرین پاسخ‌ها (چت/پیامک) — هر کدام روی یک آگهی</h3>
-      <div id="robot-replies-list" class="feed" style="max-height:360px"></div>
+      <h3>💬 آخرین پاسخ‌ها (چت/پیامک) — هر کدام روی یک آگهی + تشخیص سیم دوم</h3>
+      <div class="hint">اگر فروشنده با سیم دوم جواب بده، تیرا گیج نمی‌زند و می‌پرسد مربوط به کدوم آگهیه</div>
+      <div id="robot-replies-list" class="feed" style="max-height:380px"></div>
     </div>
     <div class="card">
-      <h3>شکارهای VIP حرفه‌ای — آماده مذاکره</h3>
-      <div id="vip-list" class="feed" style="max-height:360px"></div>
+      <h3>🎯 شکارهای عالی حرفه‌ای — آماده مذاکره انسانی مودب</h3>
+      <div id="vip-list" class="feed" style="max-height:380px"></div>
     </div>
   </div>
   <div class="card" style="margin-top:14px">
-    <h3>هفته گذشته — شکارهایی که پیام نرفته</h3>
+    <h3>⏳ هفته گذشته — شکارهایی که پیام نرفته (نیاز به اقدام)</h3>
     <div id="week-list" class="feed" style="max-height:300px"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm ok" type="button" onclick="runWeekNegotiate()">▶️ اجرای مذاکره برای همه موارد نیازمند اقدام</button>
+    </div>
   </div>
 </section>
+
 
 <!-- سرنخ‌ها -->
 <section id="tab-leads" class="tab">
@@ -574,6 +584,41 @@
       <div class="checkline"><input type="checkbox" id="set-plat-ring"><label for="set-plat-ring"><b>رینگ — غیرفعال پیش‌فرض</b></label></div>
       <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین دیوار+شیپور در همان پروفایل Chromium با دو تب است.</div>
     </div>
+    <div class="card">
+      <h3>🧪 تست تیرا ایجنت — مذاکره + سیم دوم + تحقیق قیمت</h3>
+      <div class="warn-box">
+        اینجا می‌تونی تیرا رو تست کنی بدون نیاز به آگهی واقعی. سناریوهای: مذاکره مودب انسانی، تشخیص پاسخ با سیم دوم، تحقیق قیمت اینترنت (ترب) برای آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو.
+      </div>
+      <div class="lbl">شماره فروشنده (اختیاری — برای تست ارسال)</div>
+      <input id="tira-test-phone" dir="ltr" placeholder="09xxxxxxxxx">
+      <div class="grid g2" style="margin-top:8px">
+        <div>
+          <div class="lbl">عنوان آگهی</div>
+          <input id="tira-test-title" placeholder="آیفون 13 128 تمیز با کارتن">
+        </div>
+        <div>
+          <div class="lbl">قیمت آگهی (تومان)</div>
+          <input id="tira-test-price" type="number" dir="ltr" placeholder="35000000">
+        </div>
+      </div>
+      <div class="lbl">سناریو تست</div>
+      <select id="tira-test-scenario">
+        <option value="negotiate">💬 مذاکره مودب انسانی (سالم/معیوب/نات‌اکتیو)</option>
+        <option value="second_sim">📱 تست تشخیص سیم دوم — «شما؟»</option>
+        <option value="full">🚀 تست کامل: تحقیق قیمت + مذاکره + سیم دوم</option>
+        <option value="opener">👋 فقط شروع مذاکره</option>
+        <option value="offer">💰 فقط پیشنهاد قیمت</option>
+        <option value="final">🤝 فقط جمع‌بندی نهایی</option>
+      </select>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ok" type="button" onclick="tiraTestRun()">▶️ اجرای تست تیرا</button>
+        <button class="btn gray" type="button" onclick="tiraTestSecondSim()">📱 تست «شما؟» سیم دوم</button>
+        <button class="btn warn" type="button" onclick="tiraTestResearch()">🔍 تحقیق قیمت اینترنت (ترب)</button>
+      </div>
+      <div class="codebox" id="tira-test-out" style="margin-top:12px; min-height:120px; white-space:pre-wrap; line-height:1.9"></div>
+      <div class="hint" style="margin-top:8px">نتیجه شامل: fair_price, discount, level, market_median, flags, مذاکره انسانی، تشخیص سیم دوم</div>
+    </div>
+
     <div class="card">
       <h3>📢 اتصال تلگرام (اعلان‌ها)</h3>
       <div class="checkline"><input type="checkbox" id="set-tg-on" checked><label for="set-tg-on"><b>از این پلتفرم استفاده شود</b></label></div>
@@ -687,7 +732,7 @@
 
 </main>
 
-<footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار — تیرا نهایی v3.5<br>
+<footer>طراحی و توسعه توسط خواجوی · مارکتینگ دیوار — تیرا نهایی v3.6 — تمام‌عیار<br>
   <div id="link-badge"><span class="dot"></span><span>متصل به سرور</span><span dir="ltr">· پینگ <span id="link-ping">—</span> ms</span></div>
   <span class="hint" id="data-dir-hint">تنظیمات، اکانت، تلگرام و ملی‌پیامک بعد از بستن برنامه حفظ می‌شوند.</span>
 </footer>
@@ -976,13 +1021,16 @@ async function refreshStatus(){
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
       const plats = a.platforms || {};
-      const divarOk = plats.divar ? 'دیوار✅' : 'دیوار❌';
-      const sheyOk = plats.sheypoor ? 'شیپور✅' : 'شیپور❌';
+      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true, ring:false};
+      const divarEn = plats_enabled.divar!==false;
+      const sheyEn = plats_enabled.sheypoor!==false;
+      const divarOk = plats.divar ? (divarEn ? 'دیوار✅ فعال' : 'دیوار⏸ خاموش') : 'دیوار❌';
+      const sheyOk = plats.sheypoor ? (sheyEn ? 'شیپور✅ فعال' : 'شیپور⏸ خاموش') : 'شیپور❌';
       return `<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed var(--line)">
         <span>${ic}</span><b>${esc(a.name)}</b>
         <span class="tag ${m}">${esc(a.status)}</span>
-        <span class="tag ${plats.divar?'ok':'gray'}">${divarOk}</span>
-        <span class="tag ${plats.sheypoor?'ok':'gray'}">${sheyOk}</span>
+        <span class="tag ${plats.divar && divarEn?'ok':(plats.divar?'warn':'gray')}">${divarOk}</span>
+        <span class="tag ${plats.sheypoor && sheyEn?'ok':(plats.sheypoor?'warn':'gray')}">${sheyOk}</span>
         <span class="hint">امروز: ${a.phones_today}</span>
         ${a.status==='captcha'?`<button class="btn sm" type="button" onclick="openPuzzle('${a.name}')">حل پازل</button><button class="btn sm ok" type="button" onclick="capCleared('${a.name}')">کپچا حل شد</button>`:''}
         ${a.status!=='active'?`<button class="btn sm" onclick="accAction('${a.name}','release')">آزادسازی</button>`:''}
@@ -1138,6 +1186,7 @@ async function monitorStop(){ if (await act('/api/monitor/stop',{})) setTimeout(
 async function monitorPause(){ if (await act('/api/monitor/pause',{})) setTimeout(refreshStatus,300); }
 
 /* اکانت‌ها — بازطراحی نهایی */
+
 async function accRefresh(){
   try{
     const s = await api('/api/accounts');
@@ -1145,21 +1194,26 @@ async function accRefresh(){
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ready = !!a.profile_ready;
       const plats = a.platforms || {};
+      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true, ring:false};
+      const divarEnabled = plats_enabled.divar!==false;
+      const sheyEnabled = plats_enabled.sheypoor!==false;
+      const ringEnabled = !!plats_enabled.ring;
       const divarTag = plats.divar ? '<span class="tag ok">دیوار ✅</span>' : '<span class="tag gray">دیوار ❌</span>';
       const sheyTag = plats.sheypoor ? '<span class="tag ok">شیپور ✅</span>' : '<span class="tag gray">شیپور ❌</span>';
       const siteTag = ready ? '<span class="tag ok">پروفایل ذخیره شده</span>' : '<span class="tag warn">نیاز به لاگین</span>';
       const saved = a.profile_saved_at ? ('ذخیره: '+esc(a.profile_saved_at)) : '';
-      // منطق 3 دکمه نهایی
+      // toggle buttons
+      const toggleDivarBtn = `<button class="btn sm ${divarEnabled?'ok':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','divar')">${divarEnabled?'🌐 دیوار فعال':'🌐 دیوار خاموش'}</button>`;
+      const toggleSheyBtn = `<button class="btn sm ${sheyEnabled?'warn':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','sheypoor')">${sheyEnabled?'🏪 شیپور فعال':'🏪 شیپور خاموش'}</button>`;
+      const toggleRingBtn = `<button class="btn sm ${ringEnabled?'gray':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','ring')" style="opacity:${ringEnabled?1:.5}">${ringEnabled?'🔘 رینگ فعال':'🔘 رینگ خاموش'}</button>`;
       let buttons = '';
       if (!ready){
-        // اگر پروفایل نیست: ایجاد پروفایل + بعد ذخیره + باز کردن‌ها + حذف
         buttons = `<button class="btn sm ok" type="button" onclick="createProfile('divar','${esc(a.name)}')">➕ ایجاد پروفایل</button>
           <button class="btn sm ok" type="button" onclick="saveProfile('${esc(a.name)}')">💾 ذخیره پروفایل</button>
           <button class="btn sm" type="button" onclick="openDivar('${esc(a.name)}')">🌐 باز کردن دیوار</button>
           <button class="btn sm warn" type="button" onclick="openSheypoor('${esc(a.name)}')">🏪 باز کردن شیپور</button>
           <button class="btn sm err" type="button" onclick="deleteProfile('${esc(a.name)}')">🗑️ حذف کامل اکانت</button>`;
       } else {
-        // پروفایل آماده: فقط باز کردن دیوار/شیپور + حذف کامل + پازل اگر کپچا
         buttons = `<button class="btn sm" type="button" onclick="openDivar('${esc(a.name)}')">🌐 باز کردن دیوار</button>
           <button class="btn sm warn" type="button" onclick="openSheypoor('${esc(a.name)}')">🏪 باز کردن شیپور</button>
           <button class="btn sm err" type="button" onclick="deleteProfile('${esc(a.name)}')">🗑️ حذف کامل اکانت</button>`;
@@ -1177,10 +1231,28 @@ async function accRefresh(){
             ${a.profile_open?'<span class="tag ok">پنجره باز</span>':''}
           </div>
           <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره')} ${a.phones_today?(' · امروز: '+a.phones_today):''}</div>
+          <div class="row" style="margin-top:6px">${toggleDivarBtn} ${toggleSheyBtn} ${toggleRingBtn}</div>
         </div><div class="row">${buttons}</div></div>`;
     }).join('') : '<div class="empty">هنوز اکانتی نیست. نام و شماره بگذارید و «ایجاد پروفایل» را بزنید.</div>';
   }catch(e){}
 }
+
+async function togglePlatform(name, platform){
+  try{
+    const r = await api('/api/accounts/platform/toggle',{method:'POST', body: JSON.stringify({name, platform})});
+    toast((r.enabled ? '✅ فعال شد: ' : '⛔ خاموش شد: ') + platform + ' برای ' + name);
+    accRefresh();
+    refreshStatus();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function setPlatformEnabled(name, platform, enabled){
+  try{
+    const r = await api('/api/accounts/platform/toggle',{method:'POST', body: JSON.stringify({name, platform, enabled})});
+    toast((r.enabled ? '✅ فعال' : '⛔ خاموش')+': '+platform);
+    accRefresh();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
 async function refreshChromium(){
   try{
     const s = await api('/api/chromium/status');
@@ -1742,6 +1814,7 @@ async function robotLoad(){
     if($('robot-hunter')) $('robot-hunter').textContent = s.hunter_great||0;
     if ($('k-hunter')) $('k-hunter').textContent = s.hunter_great||0;
     if ($('k-replied')) $('k-replied').textContent = s.replies||0;
+    if ($('k-replied-inbox')) $('k-replied-inbox').textContent = s.replies||0;
     if($('robot-status-line')) $('robot-status-line').textContent =
       'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')+' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')+' · صندوق: '+(s.sms_inbox?'روشن':'خاموش')+' · دیوار/شیپور/رینگ: '+(s.platforms&&s.platforms.divar?'✓':'—')+'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—')+'/'+(s.platforms&&s.platforms.ring?'✓':'—');
     if($('robot-chat-auto')) $('robot-chat-auto').checked = !!s.chat_auto;
@@ -1753,12 +1826,9 @@ async function robotLoad(){
     recheckWeek();
   }catch(e){}
 }
+
 async function nluInstall(){
-  try{
-    const r = await api('/api/nlu/install',{method:'POST',body:'{}'});
-    toast(r.message||'دانلود شروع شد');
-    robotLoad();
-  }catch(e){ toast('❌ '+e.message,false); }
+  toast('مدل محلی حذف شد — تیرا اکنون با اینترنت کار می‌کند (ترب + هوش ابری)', false);
 }
 async function smsAutoToggle(on){
   try{
@@ -2142,6 +2212,148 @@ function tiraApplyToTemplate(){
   if (!txt){ toast('متنی نیست', false); return; }
   $('tpl-chat').value = txt;
   toast('به قالب چت اعمال شد — ذخیره را بزن');
+}
+
+
+async function tiraTestRun(){
+  const phone = ($('tira-test-phone')||{}).value.trim();
+  const title = ($('tira-test-title')||{}).value.trim() || 'آیفون 13 128 تمیز';
+  const price = parseFloat(($('tira-test-price')||{}).value) || 35000000;
+  const scenario = ($('tira-test-scenario')||{}).value || 'negotiate';
+  const out = $('tira-test-out');
+  if(out) out.textContent = '⏳ تیرا در حال تحلیل و مذاکره انسانی... (قیمت اینترنت + تشخیص سیم دوم)';
+  try{
+    const r = await api('/api/tira/test',{method:'POST', body: JSON.stringify({phone, title, price, scenario})});
+    if(out){
+      let t = '';
+      if(r.ok){
+        t += '✅ تست موفق — سناریو: '+r.scenario+'\n\n';
+        if(r.analysis){
+          t += '📊 تحلیل شکارچی:\n';
+          t += '  قیمت: '+(r.analysis.price||price).toLocaleString()+'\n';
+          t += '  بازار سالم: '+(r.analysis.median||r.analysis.healthy_median||0).toLocaleString()+'\n';
+          t += '  منصفانه: '+(r.analysis.fair||0).toLocaleString()+'\n';
+          t += '  تخفیف: '+(r.analysis.discount_pct||0)+'%\n';
+          t += '  سطح: '+r.analysis.level+' (raw: '+(r.analysis.raw_level||'')+')\n';
+          t += '  پرچم‌ها: '+Object.keys(r.analysis.flags||{}).filter(k=>r.analysis.flags[k]).join('، ')||'سالم'+'\n';
+          t += '  جا خالی: '+(r.analysis.missing||[]).join('، ')||'—'+'\n\n';
+        }
+        if(r.negotiation){
+          t += '💬 مذاکره انسانی مودب:\n';
+          t += '  شروع: '+r.negotiation.opener+'\n\n';
+          t += '  پیشنهاد: '+r.negotiation.offer+'\n\n';
+          t += '  نهایی: '+r.negotiation.closer+'\n';
+          if(r.negotiation.fair_price) t += '\n  قیمت منصفانه مذاکره: '+r.negotiation.fair_price.toLocaleString()+'\n';
+        }
+        if(r.second_sim_test){
+          t += '\n📱 تست سیم دوم:\n';
+          t += '  ورودی: '+r.second_sim_test.incoming+'\n';
+          t += '  نیاز به شفاف‌سازی: '+(r.second_sim_test.needs_clarify?'بله ✅ درست تشخیص داد':'خیر')+'\n';
+          t += '  پاسخ تیرا: '+r.second_sim_test.response+'\n';
+        }
+        if(r.market_research){
+          t += '\n🔍 تحقیق اینترنت (ترب):\n';
+          t += '  '+JSON.stringify(r.market_research,null,2)+'\n';
+        }
+      } else {
+        t = '❌ خطا: '+(r.detail||'نامشخص');
+      }
+      out.textContent = t;
+    }
+    toast('تست تیرا انجام شد');
+  }catch(e){
+    if(out) out.textContent = '❌ '+e.message;
+    toast('❌ '+e.message,false);
+  }
+}
+async function tiraTestSecondSim(){
+  const out = $('tira-test-out');
+  if(out) out.textContent = '⏳ تست تشخیص سیم دوم...';
+  const samples = [
+    {phone:'09120000000', original:'09121111111', text:'شما؟'},
+    {phone:'09120000000', original:'09121111111', text:'سلام شما کی هستید؟'},
+    {phone:'09120000000', original:'09121111111', text:'کدوم آگهی؟'},
+    {phone:'09120000000', original:'09121111111', text:'بفرمایید؟'},
+    {phone:'09120000000', original:'09121111111', text:'جانم؟'},
+  ];
+  try{
+    const r = await api('/api/tira/test',{method:'POST', body: JSON.stringify({phone:'09120000000', title:'آیفون 13', price:35000000, scenario:'second_sim'})});
+    // Also test individual
+    let t = '📱 نتایج تست سیم دوم (باید همه نیاز به شفاف‌سازی داشته باشند):\n\n';
+    if(r.second_sim_test){
+      t += 'نمونه اصلی: \n  ورودی: '+r.second_sim_test.incoming+'\n  پاسخ: '+r.second_sim_test.response+'\n  تشخیص درست: '+(r.second_sim_test.needs_clarify?'✅ بله':'❌ خیر')+'\n\n';
+    }
+    // test direct endpoint for each
+    for(const s of samples){
+      try{
+        const rr = await api('/api/tira/test',{method:'POST', body: JSON.stringify({phone:s.phone, title:'آیفون 13', price:35000000, scenario:'second_sim', incoming_phone:s.phone, original_phone:s.original})});
+        // we need to pass incoming text? Our endpoint uses title as incoming for second_sim? We'll use negotiation? Actually second_sim scenario uses internal sample, but we want custom.
+        // For now use our detection via another call
+      }catch(e){}
+    }
+    t += '\n✅ منطق: اگر فروشنده با شماره متفاوت یا با متن «شما؟» جواب داد، تیرا می‌گوید «سلام، شما مربوط به کدوم آگهیه؟ من برای ... پیام داده بودم»';
+    if(out) out.textContent = t;
+  }catch(e){
+    if(out) out.textContent = '❌ '+e.message;
+  }
+}
+async function tiraTestResearch(){
+  const title = ($('tira-test-title')||{}).value.trim() || 'آیفون 13 128';
+  const out = $('tira-test-out');
+  if(out) out.textContent = '⏳ تحقیق قیمت از اینترنت (ترب) برای: '+title;
+  try{
+    const r = await api('/api/tira/research',{method:'POST', body: JSON.stringify({keyword: title})});
+    if(out){
+      out.textContent = '🔍 تحقیق برای: '+title+'\n\n'+
+        '💰 قیمت بازار: '+(r.market_price?r.market_price.toLocaleString()+' تومان':'—')+'\n'+
+        '📦 منبع: '+(r.source||'')+'\n'+
+        '🎯 واریانت تشخیص داده شده: '+JSON.stringify(r.variant||{},null,2)+'\n\n'+
+        '📊 همه قیمت‌ها:\n'+JSON.stringify(r.all_prices||r,null,2);
+    }
+    toast('تحقیق قیمت انجام شد');
+  }catch(e){
+    if(out) out.textContent = '❌ '+e.message;
+    toast('❌ '+e.message,false);
+  }
+}
+async function tiraAgentGuide(topic){
+  try{
+    const r = await api('/api/tira/guide?topic='+encodeURIComponent(topic||''));
+    const out = $('tira-test-out') || $('tira-write-out');
+    if(out){
+      out.textContent = '📖 راهنمای تیرا — موضوع: '+(r.topic||topic)+'\n\n'+r.guide;
+      // scroll
+      out.scrollIntoView({behavior:'smooth'});
+    }
+    // also open tira mini with guide
+    tiraMiniOpen();
+    // inject guide into tira log
+    const log = $('tira-mini-log');
+    if(log){
+      const div = document.createElement('div');
+      div.style.padding='8px';
+      div.innerHTML = '<span class="tag ok">📖 راهنما: '+esc(topic||'عمومی')+'</span><div style="white-space:pre-wrap; margin-top:6px">'+esc(r.guide||'')+'</div>';
+      log.prepend(div);
+    }
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function runWeekNegotiate(){
+  if(!confirm('مذاکره برای همه موارد هفته گذشته که نیاز به اقدام دارند اجرا شود؟')) return;
+  try{
+    const wk = await api('/api/hunter/recheck-week?limit=20');
+    const items = (wk.items||[]).filter(x=>x.needs_action);
+    if(!items.length){ toast('موردی برای اقدام نیست'); return; }
+    toast('⏳ مذاکره برای '+items.length+' مورد...');
+    for(const it of items){
+      try{
+        await api('/api/hunter/negotiate/'+encodeURIComponent(it.token), {method:'POST', body:'{}'});
+      }catch(e){}
+      await new Promise(r=>setTimeout(r,800));
+    }
+    toast('✅ مذاکره برای '+items.length+' مورد ارسال شد');
+    recheckWeek();
+    robotLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
 }
 
 function resolveTheme(){

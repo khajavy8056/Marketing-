@@ -97,15 +97,20 @@ def _check_static_ui() -> None:
         raise FileNotFoundError(f"Persian panel file missing: {p}")
     if "kw-category" not in html:
         raise FileNotFoundError("category picker missing from panel")
-    if "kw-city" not in html:
-        raise FileNotFoundError("city picker missing from panel")
-    if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
-        if "multiple size" not in html:
-            raise FileNotFoundError("multi-city picker missing from panel")
+    # شهرها اکنون آبشاری کشویی با تیک است — id قدیمی kw-city حذف شد
+    if "city-dropdown" not in html and "kw-city" not in html:
+        raise FileNotFoundError("city picker missing from panel (expected city-dropdown)")
+    # اگر kw-city قدیمی بود، چک multiple، اگر جدید بود city-dropdown کافی است
+    if "kw-city" in html:
+        if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
+            if "multiple size" not in html and "city-dropdown" not in html:
+                raise FileNotFoundError("multi-city picker missing from panel")
     if "set-plat-divar" not in html or "set-plat-sheypoor" not in html or "set-plat-ring" not in html:
         raise FileNotFoundError("platform enable switches missing from panel")
-    if "kw-price-min" not in html or "kw-vip" not in html:
-        raise FileNotFoundError("price range / VIP missing from panel")
+    if "kw-price-min" not in html:
+        raise FileNotFoundError("price range missing from panel")
+    if "kw-vip" not in html and "kw-hunter" not in html:
+        raise FileNotFoundError("hunter / VIP missing from panel")
     if "hunter-adv-dlg" not in html or "hunterAdvOpen" not in html:
         raise FileNotFoundError("hunter advanced settings popup missing from panel")
     if "/api/hunter-profile" not in html:
