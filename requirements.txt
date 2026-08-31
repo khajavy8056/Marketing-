@@ -7,3 +7,8 @@ httpx>=0.27,<0.29
 playwright>=1.40,<1.51
 # کپی متن پیام در کلیپ‌بورد (اختیاری، برای فرمان draft)
 pyperclip>=1.8 ; sys_platform != "linux"
+# دسکتاپ مستقل تیرا — پنجره native بدون مرورگر (WebView2/Edge)
+pywebview>=4.4
+# دانلود منیجر استاندارد با resume و سرعت بالا
+tqdm>=4.66
+aiohttp>=3.9 ; python_version >= "3.8"

@@ -31,6 +31,22 @@ from .notifier import notify
 from .rate import RateLimiter
 
 
+def _emit_event(kind: str, payload: Dict[str, Any]) -> None:
+    try:
+        from .events import emit
+        emit(kind, payload)
+    except Exception:
+        pass
+
+
+def _remember_listing(token: str, title: str, category: str = "", keyword: str = "", platform: str = "divar") -> None:
+    try:
+        from .nlu_memory import remember_listing
+        remember_listing(token, title, category=category, keyword=keyword, platform=platform)
+    except Exception:
+        pass
+
+
 class CommandListener(threading.Thread):
     """شنیدن فرمان‌های اپراتور در پس‌زمینه (بدون قفل‌کردن حلقه اصلی)."""
 
@@ -151,6 +167,53 @@ class Monitor:
                 url=str(post.get("url") or ""),
                 phone=phone or "",
             ))
+        except Exception:
+            pass
+
+    def _vip_hunter_alert(self, payload: Dict[str, Any], spec: Dict[str, Any], city: str) -> None:
+        """VIP آلارم ویژه شکارچی — بعد از مذاکره یا شکار مستقیم."""
+        if not self._vip_on():
+            return
+        try:
+            from .telegram_bot import vip_alert_text
+            from .cities import title_of_city
+            from .categories import title_of
+            cities = spec.get("cities") or []
+            city_name = title_of_city(cities[0]) if cities else (city or "همه ایران")
+            title = payload.get("title") or ""
+            price = payload.get("final_price") or payload.get("original_price") or 0
+            fair = payload.get("fair_price") or 0
+            healthy = payload.get("healthy_median") or 0
+            discount = payload.get("discount_pct") or 0
+            level = payload.get("level") or ""
+            conf = payload.get("confidence") or 0
+            url = payload.get("url") or ""
+            phone = payload.get("phone") or ""
+            # متن حرفه‌ای VIP
+            extra_lines = []
+            if fair:
+                extra_lines.append(f"منصفانه: {fair:,} تومان")
+            if healthy:
+                extra_lines.append(f"بازار سالم: {healthy:,} تومان")
+            if discount:
+                extra_lines.append(f"تخفیف: {discount}%")
+            extra_lines.append(f"سطح: {level} | اطمینان: {conf}")
+            if payload.get("negotiated_price"):
+                extra_lines.append(f"بعد مذاکره: {payload.get('negotiated_price'):,} تومان")
+            if payload.get("neg_summary"):
+                extra_lines.append(f"مذاکره: {payload.get('neg_summary')[:120]}")
+            extra = "\n".join(extra_lines)
+            msg = vip_alert_text(
+                title=title,
+                city=city_name,
+                category=title_of(spec.get("category") or "") or "",
+                price=price,
+                url=url,
+                phone=phone,
+            )
+            if extra:
+                msg = msg + "\n\n📊 آنالیز حرفه‌ای:\n" + extra
+            self._tg(msg)
         except Exception:
             pass
 
@@ -281,8 +344,9 @@ class Monitor:
     # ------------------------------------------------------- شماره‌گیری 📞 --
     def _score_hunter(self, con, post: Dict[str, Any], spec: Dict[str, Any],
                       kw: str, city: str) -> None:
+        """آنالیزور حرفه‌ای — بازار سالم + اطمینان + مذاکره."""
         from .categories import hunter_allowed
-        from .hunter import collect_samples, evaluate
+        from .hunter import collect_samples_detailed, evaluate
         from .hunter_profile import default_profile, merge_overrides
         from . import store as _st2
         cat = spec.get("category") or post.get("category") or ""
@@ -298,7 +362,13 @@ class Monitor:
         blob = " ".join(str(post.get(k) or "") for k in
                         ("title", "subtitle", "description", "inspect_summary"))
         plat = str(post.get("platform") or "divar")
-        samples = collect_samples(con, kw, city, plat)
+        # نمونه‌های دقیق برای بازار سالم
+        try:
+            samples = collect_samples_detailed(con, kw, city, plat, limit=80)
+        except Exception:
+            from .hunter import collect_samples
+            samples = collect_samples(con, kw, city, plat)
+
         sc = evaluate(int(post.get("price") or 0), samples,
                       _st2.settings_all(self.db_path), extra=extra,
                       profile=prof, text=blob)
@@ -312,15 +382,30 @@ class Monitor:
             if not sc.get("pending"):
                 if level == "market":
                     level = ""
+        # ذخیره حرفه‌ای
         try:
             con.execute(
-                "UPDATE leads SET hunter_level=?, hunter_adj_pct=?, hunter_questions=? "
+                "UPDATE leads SET hunter_level=?, hunter_adj_pct=?, hunter_questions=?, "
+                "hunter_confidence=?, hunter_fair_price=?, hunter_discount_pct=?, hunter_market_median=? "
                 "WHERE token=?",
-                (level, float(sc.get("adj_pct") or 0),
-                 str(sc.get("questions") or "")[:400], token))
+                (level,
+                 float(sc.get("adj_pct") or 0),
+                 str(sc.get("questions") or "")[:400],
+                 float(sc.get("confidence") or 0),
+                 int(sc.get("fair") or 0),
+                 float(sc.get("discount_pct") or 0),
+                 int(sc.get("healthy_median") or sc.get("median") or 0),
+                 token))
         except Exception:
-            con.execute("UPDATE leads SET hunter_level=? WHERE token=?",
-                        (level, token))
+            try:
+                con.execute(
+                    "UPDATE leads SET hunter_level=?, hunter_adj_pct=?, hunter_questions=? "
+                    "WHERE token=?",
+                    (level, float(sc.get("adj_pct") or 0),
+                     str(sc.get("questions") or "")[:400], token))
+            except Exception:
+                con.execute("UPDATE leads SET hunter_level=? WHERE token=?",
+                            (level, token))
         if sc.get("pending") or level == "pending":
             try:
                 con.execute(
@@ -331,6 +416,65 @@ class Monitor:
                 pass
         post["hunter_level"] = level
         post["hunter_questions"] = sc.get("questions") or ""
+        post["hunter_confidence"] = sc.get("confidence") or 0
+        post["hunter_fair"] = sc.get("fair") or 0
+
+        # اگر شکار خوب است و نیاز به مذاکره دارد → رویداد مذاکره
+        try:
+            from .hunter_negotiator import should_start_negotiation
+            if should_start_negotiation(sc) and level in ("good", "great"):
+                _emit_event("hunter_should_negotiate", {
+                    "token": token,
+                    "title": str(post.get("title") or "")[:80],
+                    "keyword": kw,
+                    "category": cat,
+                    "level": level,
+                    "fair": sc.get("fair"),
+                    "healthy_median": sc.get("healthy_median"),
+                    "discount_pct": sc.get("discount_pct"),
+                    "confidence": sc.get("confidence"),
+                    "platform": plat,
+                })
+        except Exception:
+            pass
+
+        if level == "pending" or sc.get("pending"):
+            _emit_event("hunter_pending", {
+                "token": token,
+                "title": str(post.get("title") or "")[:80],
+                "keyword": kw,
+                "category": cat,
+                "questions": sc.get("questions") or "",
+                "platform": plat,
+                "confidence": sc.get("confidence") or 0,
+                "missing": sc.get("missing") or [],
+            })
+        elif level in ("good", "great"):
+            # شکار بدون نیاز به استعلام → VIP فوری
+            try:
+                from .hunter_negotiator import build_vip_payload
+                payload = build_vip_payload(
+                    token=token,
+                    title=str(post.get("title") or "")[:80],
+                    original_price=int(post.get("price") or 0),
+                    negotiated_price=None,
+                    fair_price=int(sc.get("fair") or 0),
+                    healthy_median=int(sc.get("healthy_median") or sc.get("median") or 0),
+                    discount_pct=sc.get("discount_pct"),
+                    level=level,
+                    flags=sc.get("flags") or {},
+                    confidence=float(sc.get("confidence") or 0),
+                    market=sc.get("market") or {},
+                    negotiation_history=[],
+                    url=str(post.get("url") or ""),
+                    phone="",
+                    city=str(city),
+                )
+                _emit_event("hunter_vip", payload)
+                # تلگرام VIP
+                self._vip_hunter_alert(payload, spec, city)
+            except Exception:
+                pass
 
     def _row_get(self, row, key, default=""):
         try:
@@ -345,13 +489,19 @@ class Monitor:
 
     def _maybe_hunter_inquire(self, con, row, phone: str = "",
                               account_name: str = "") -> None:
-        """جای‌خالی شکارچی: اگر شماره هست پیامک، وگرنه چت. وضعیت: در انتظار تصمیم."""
+        """جای‌خالی شکارچی — حالا با مذاکره‌گر حرفه‌ای و مدل."""
         token = self._row_get(row, "token")
         if not token:
             return
         hl = str(self._row_get(row, "hunter_level") or "")
         inq = str(self._row_get(row, "inquiry_status") or "")
-        if hl != "pending" and inq not in ("pending",):
+        # اگر pending نیست، ممکن است مذاکره باشد — آن را جدا هندل می‌کنیم
+        if hl != "pending" and inq not in ("pending", ""):
+            # اگر شکار good/great و مذاکره لازم است، مذاکره را شروع کن
+            try:
+                self._maybe_hunter_negotiate(con, row, phone=phone, account_name=account_name)
+            except Exception:
+                pass
             return
         if inq == "sent":
             return
@@ -373,29 +523,94 @@ class Monitor:
             "hunter_questions": questions,
             "phone": phone or self._row_get(row, "phone"),
         }
+
+        # متن استعلام حرفه‌ای با مدل
+        try:
+            from .hunter_profile import default_profile, merge_overrides
+            from .hunter_negotiator import generate_inquiry_message
+            import json as _json
+
+            kw = self._row_get(row, "keyword") or ""
+            cat = ""
+            try:
+                kwrow = con.execute("SELECT category, hunter_adv FROM keywords WHERE keyword=?", (kw,)).fetchone()
+                if kwrow:
+                    cat = kwrow["category"] or ""
+                    raw = kwrow["hunter_adv"] or ""
+                    adv = _json.loads(raw) if raw else {}
+                else:
+                    adv = {}
+            except Exception:
+                adv = {}
+                cat = ""
+            prof = merge_overrides(default_profile(cat, kw), adv)
+            missing = []
+            try:
+                raw_missing = self._row_get(row, "hunter_questions") or ""
+                # missing از سوالات قبلی استخراج نشده — از پروفایل بگیر
+                from .hunter_profile import missing_ask_slots
+
+                missing = missing_ask_slots(lead.get("title") or "", prof, {"title": lead.get("title") or ""})
+            except Exception:
+                missing = []
+            # اگر tpl خالی است، از مذاکره‌گر بساز
+            if not tpl or "{title}" not in tpl:
+                inquiry_text = generate_inquiry_message(prof, missing, title=lead.get("title") or "", extra=lead)
+            else:
+                # قالب قدیمی + بهبود مدل
+                from .chat import compose_chat
+
+                inquiry_text = compose_chat(tpl, lead)
+                # اگر مدل آماده است، بهبود بده
+                try:
+                    improved = generate_inquiry_message(prof, missing, title=lead.get("title") or "", extra=lead)
+                    if improved and len(improved) > 20:
+                        inquiry_text = improved
+                except Exception:
+                    pass
+        except Exception:
+            from .chat import compose_chat
+
+            inquiry_text = compose_chat(tpl, lead) if tpl else questions
+
         if lead["phone"]:
             try:
                 from .sms import live_sms_cfg, send_for_lead, sms_ready
+
                 cfg = live_sms_cfg(self.db_path, self.cfg)
                 ready, _why = sms_ready(cfg)
                 if ready:
                     lim = int(cfg.get("sms_daily_limit") or 40)
                     if quota_today(con).get("sms", 0) < lim:
-                        r = send_for_lead(cfg, lead, tpl)
+                        # برای SMS از متن کوتاه استفاده کن
+                        r = send_for_lead(cfg, {**lead, "custom_text": inquiry_text}, tpl)
                         if r and r.get("ok"):
                             con.execute(
                                 "UPDATE leads SET inquiry_status='sent', sms_status='sent', "
                                 "sms_sent_at=? WHERE token=?",
-                                (_now(), token))
+                                (_now(), token),
+                            )
                             bump_quota(con, "sms")
                             con.commit()
-                            self._ev("success", "استعلام شکارچی پیامک شد")
+                            self._ev("success", "استعلام شکارچی پیامک شد (حرفه‌ای)")
+                            _emit_event(
+                                "inquiry_sent",
+                                {
+                                    "token": token,
+                                    "channel": "sms",
+                                    "phone": lead.get("phone") or "",
+                                    "questions": questions,
+                                    "text": inquiry_text[:200],
+                                },
+                            )
                             return
             except Exception as e:
                 self._ev("warning", f"استعلام پیامک: {e}")
-        # چت
+
+        # چت — با متن حرفه‌ای
         try:
-            from .chat import compose_chat, send_divar_chat
+            from .chat import send_divar_chat
+
             lim = 40
             try:
                 lim = int(store.settings_all(self.db_path).get("chat_auto_daily_limit") or 40)
@@ -406,42 +621,210 @@ class Monitor:
             name = account_name or self.mgr.pick(self.db_path)
             if not name:
                 return
-            text = compose_chat(tpl, lead)
             cl = self.client_for(name)
 
             def _send(_c, tok, msg):
                 from .chat_browser import send_for_token
-                return send_for_token(
-                    tok, msg, client=_c,
-                    accounts_dir=str(self.mgr.dir), account=name,
-                    url=lead.get("url") or "")
 
-            r = send_divar_chat(cl, token, text, send_fn=_send)
+                return send_for_token(
+                    tok, msg, client=_c, accounts_dir=str(self.mgr.dir), account=name, url=lead.get("url") or ""
+                )
+
+            r = send_divar_chat(cl, token, inquiry_text, send_fn=_send)
             if r.get("ok"):
                 con.execute(
                     "UPDATE leads SET inquiry_status='sent', chat_status='sent', "
                     "chat_sent_at=?, chat_account=? WHERE token=?",
-                    (_now(), name, token))
+                    (_now(), name, token),
+                )
                 bump_quota(con, "chats")
                 con.commit()
-                self._ev("success", "استعلام شکارچی در چت ارسال شد")
+                self._ev("success", "استعلام شکارچی در چت ارسال شد (حرفه‌ای)")
+                _emit_event(
+                    "inquiry_sent",
+                    {
+                        "token": token,
+                        "channel": "chat",
+                        "account": name,
+                        "questions": questions,
+                        "text": inquiry_text[:200],
+                    },
+                )
             elif r.get("status") == "removed":
                 con.execute(
-                    "UPDATE leads SET phone_status='removed', inquiry_status='gone' "
-                    "WHERE token=?", (token,))
+                    "UPDATE leads SET phone_status='removed', inquiry_status='gone' WHERE token=?", (token,)
+                )
                 con.commit()
         except Exception as e:
             self._ev("warning", f"استعلام چت: {e}")
 
+    def _maybe_hunter_negotiate(self, con, row, phone: str = "", account_name: str = "") -> None:
+        """مذاکره خودکار برای شکارهای خوب — چندمرحله‌ای، انسانی."""
+        token = self._row_get(row, "token")
+        if not token:
+            return
+        hl = str(self._row_get(row, "hunter_level") or "")
+        if hl not in ("good", "great"):
+            return
+        # اگر قبلاً مذاکره تمام شده
+        neg_status = str(self._row_get(row, "negotiation_status") or "")
+        if neg_status in ("negotiated", "vip", "refused"):
+            return
+
+        import json as _json
+
+        # تاریخچه
+        history: List[Dict[str, Any]] = []
+        try:
+            raw = self._row_get(row, "negotiation_history") or ""
+            if raw:
+                history = _json.loads(raw)
+        except Exception:
+            history = []
+
+        # اگر تاریخچه خالی و inquiry_status answered نیست، یعنی تازه شکار شده → opener
+        # اگر تاریخچه دارد و آخرین پیام فروشنده است → ادامه مذاکره
+        try:
+            from .hunter_negotiator import (
+                generate_negotiation_message,
+                should_continue_negotiation,
+            )
+
+            cont, stage = should_continue_negotiation(history, {"level": hl})
+            if not cont and stage in ("negotiated", "refused"):
+                return
+            # stage: opener, offer, final
+            context = {
+                "price": int(self._row_get(row, "price", 0) or 0),
+                "original_price": int(self._row_get(row, "price", 0) or 0),
+                "fair": int(self._row_get(row, "hunter_fair_price", 0) or 0),
+                "fair_price": int(self._row_get(row, "hunter_fair_price", 0) or 0),
+                "healthy_median": int(self._row_get(row, "hunter_market_median", 0) or 0),
+                "market_median": int(self._row_get(row, "hunter_market_median", 0) or 0),
+                "discount_pct": float(self._row_get(row, "hunter_discount_pct", 0) or 0),
+                "title": str(self._row_get(row, "title") or ""),
+                "level": hl,
+            }
+            msg_text = generate_negotiation_message(context, history, stage=stage)
+
+            # ارسال
+            from . import store
+            from .db import now as _now
+
+            # اگر شماره دارد → SMS، وگرنه چت
+            phone_val = phone or self._row_get(row, "phone") or ""
+            if phone_val:
+                try:
+                    from .sms import live_sms_cfg, send_for_lead, sms_ready
+
+                    cfg = live_sms_cfg(self.db_path, self.cfg)
+                    ready, _ = sms_ready(cfg)
+                    if ready and quota_today(con).get("sms", 0) < int(cfg.get("sms_daily_limit") or 40):
+                        r = send_for_lead(cfg, {"title": context["title"], "phone": phone_val, "custom_text": msg_text}, "")
+                        if r and r.get("ok"):
+                            history.append({"role": "buyer", "text": msg_text[:500], "stage": stage})
+                            con.execute(
+                                "UPDATE leads SET negotiation_status=?, negotiation_history=?, sms_status='sent', sms_sent_at=? WHERE token=?",
+                                (f"negotiating_{stage}", _json.dumps(history, ensure_ascii=False)[:4000], _now(), token),
+                            )
+                            bump_quota(con, "sms")
+                            con.commit()
+                            self._ev("success", f"مذاکره {stage} پیامک شد")
+                            _emit_event("negotiation_sent", {"token": token, "stage": stage, "channel": "sms", "text": msg_text[:200]})
+                            return
+                except Exception as e:
+                    self._ev("warning", f"مذاکره SMS: {e}")
+
+            # چت
+            try:
+                from .chat import send_divar_chat
+
+                name = account_name or self.mgr.pick(self.db_path)
+                if not name:
+                    return
+                if quota_today(con).get("chats", 0) >= int(store.settings_all(self.db_path).get("chat_auto_daily_limit") or 40):
+                    return
+                cl = self.client_for(name)
+
+                def _send(_c, tok, msg):
+                    from .chat_browser import send_for_token
+
+                    return send_for_token(tok, msg, client=_c, accounts_dir=str(self.mgr.dir), account=name, url=self._row_get(row, "url") or "")
+
+                r = send_divar_chat(cl, token, msg_text, send_fn=_send)
+                if r.get("ok"):
+                    history.append({"role": "buyer", "text": msg_text[:500], "stage": stage})
+                    con.execute(
+                        "UPDATE leads SET negotiation_status=?, negotiation_history=?, chat_status='sent', chat_sent_at=?, chat_account=? WHERE token=?",
+                        (f"negotiating_{stage}", _json.dumps(history, ensure_ascii=False)[:4000], _now(), name, token),
+                    )
+                    bump_quota(con, "chats")
+                    con.commit()
+                    self._ev("success", f"مذاکره {stage} در چت ارسال شد")
+                    _emit_event("negotiation_sent", {"token": token, "stage": stage, "channel": "chat", "account": name, "text": msg_text[:200]})
+            except Exception as e:
+                self._ev("warning", f"مذاکره چت: {e}")
+
+        except Exception as e:
+            self._ev("warning", f"مذاکره: {e}")
+
     def drain_hunter_inquire(self, max_items: int = 6) -> None:
+        """استعلام جای خالی + مذاکره برای شکارهای خوب."""
         con = connect(self.db_path)
         try:
             try:
                 rows = con.execute(
-                    "SELECT * FROM leads WHERE hunter_level='pending' "
-                    "AND COALESCE(inquiry_status,'') IN ('','pending') "
+                    "SELECT * FROM leads WHERE (hunter_level='pending' "
+                    "AND COALESCE(inquiry_status,'') IN ('','pending')) "
+                    "OR (hunter_level IN ('good','great') AND COALESCE(negotiation_status,'') IN ('','negotiating_opener','negotiating_offer') ) "
                     "AND COALESCE(phone_status,'') != 'removed' "
-                    "ORDER BY id DESC LIMIT ?", (max_items,)).fetchall()
+                    "ORDER BY id DESC LIMIT ?",
+                    (max_items,),
+                ).fetchall()
+            except Exception:
+                try:
+                    rows = con.execute(
+                        "SELECT * FROM leads WHERE hunter_level='pending' "
+                        "AND COALESCE(inquiry_status,'') IN ('','pending') "
+                        "AND COALESCE(phone_status,'') != 'removed' "
+                        "ORDER BY id DESC LIMIT ?",
+                        (max_items,),
+                    ).fetchall()
+                except Exception:
+                    rows = []
+        finally:
+            con.close()
+        for row in rows:
+            if self.stop_event.is_set():
+                return
+            con = connect(self.db_path)
+            try:
+                phone = ""
+                try:
+                    if "phone_status" in row.keys() and row["phone_status"] == "found":
+                        phone = row["phone"] or ""
+                except Exception:
+                    pass
+                hl = str(row["hunter_level"] if "hunter_level" in row.keys() else "")
+                if hl in ("good", "great"):
+                    self._maybe_hunter_negotiate(con, row, phone=phone)
+                else:
+                    self._maybe_hunter_inquire(con, row, phone=phone)
+            finally:
+                con.close()
+
+    def drain_hunter_negotiate(self, max_items: int = 4) -> None:
+        """صف مذاکره جدا — برای شکارهای خوب که نیاز به چانه دارند."""
+        con = connect(self.db_path)
+        try:
+            try:
+                rows = con.execute(
+                    "SELECT * FROM leads WHERE hunter_level IN ('good','great') "
+                    "AND COALESCE(negotiation_status,'') IN ('','negotiating_opener','negotiating_offer','negotiating') "
+                    "AND COALESCE(phone_status,'') != 'removed' "
+                    "ORDER BY id DESC LIMIT ?",
+                    (max_items,),
+                ).fetchall()
             except Exception:
                 rows = []
         finally:
@@ -457,9 +840,107 @@ class Monitor:
                         phone = row["phone"] or ""
                 except Exception:
                     pass
-                self._maybe_hunter_inquire(con, row, phone=phone)
+                self._maybe_hunter_negotiate(con, row, phone=phone)
             finally:
                 con.close()
+
+    def drain_week_old(self, max_items: int = 12) -> Dict[str, int]:
+        """هفت روز گذشته — آگهی‌هایی که شکار خوب بودند ولی پیام نرفته را دوباره چک کن.
+
+        اگر chat_status و sms_status هنوز sent نیست و negotiation_status تمام نشده،
+        دوباره مذاکره/استعلام را شروع کن. این برای آگهی‌هایی است که هفته پیش پیدا شدند
+        ولی کاربر پیام نداده یا سیستم نرسیده.
+        """
+        con = connect(self.db_path)
+        stats = {"checked": 0, "negotiated": 0, "inquired": 0, "skipped": 0}
+        try:
+            try:
+                # آگهی‌های 7 روز اخیر که شکار خوب/عالی هستند ولی پیام نرفته
+                rows = con.execute(
+                    "SELECT * FROM leads WHERE "
+                    "hunter_level IN ('good','great','pending') "
+                    "AND COALESCE(phone_status,'') != 'removed' "
+                    "AND ("
+                    "  (hunter_level IN ('good','great') AND COALESCE(negotiation_status,'') NOT IN ('negotiated','vip','refused','gone')) "
+                    "  OR (hunter_level='pending' AND COALESCE(inquiry_status,'') NOT IN ('sent','gone'))"
+                    ") "
+                    "AND ("
+                    "  datetime(first_seen_at) >= datetime('now','-7 days') "
+                    "  OR datetime(published_at) >= datetime('now','-7 days') "
+                    "  OR first_seen_at IS NULL"
+                    ") "
+                    "ORDER BY hunter_level DESC, id DESC LIMIT ?",
+                    (max_items,),
+                ).fetchall()
+            except Exception as e:
+                # fallback بدون datetime
+                try:
+                    rows = con.execute(
+                        "SELECT * FROM leads WHERE hunter_level IN ('good','great','pending') "
+                        "AND COALESCE(phone_status,'') != 'removed' "
+                        "ORDER BY id DESC LIMIT ?",
+                        (max_items,),
+                    ).fetchall()
+                except Exception:
+                    rows = []
+        finally:
+            con.close()
+
+        for row in rows:
+            if self.stop_event.is_set():
+                break
+            stats["checked"] += 1
+            con2 = connect(self.db_path)
+            try:
+                # چک کن پیام قبلا نرفته
+                sms_st = str(row["sms_status"] if "sms_status" in row.keys() else "" or "")
+                chat_st = str(row["chat_status"] if "chat_status" in row.keys() else "" or "")
+                neg_st = str(row["negotiation_status"] if "negotiation_status" in row.keys() else "" or "")
+                inq_st = str(row["inquiry_status"] if "inquiry_status" in row.keys() else "" or "")
+                hl = str(row["hunter_level"] if "hunter_level" in row.keys() else "" or "")
+
+                # اگر قبلا پیام رفته، رد کن مگر مذاکره نیمه‌کاره باشد
+                if hl in ("good", "great"):
+                    if sms_st == "sent" or chat_st == "sent":
+                        # اگر negotiation هنوز شروع نشده، یعنی پیام عادی رفته ولی مذاکره نه -> دوباره مذاکره
+                        if neg_st in ("", "negotiating", "negotiating_opener", "negotiating_offer"):
+                            pass
+                        else:
+                            stats["skipped"] += 1
+                            continue
+                    phone = ""
+                    try:
+                        if "phone_status" in row.keys() and row["phone_status"] == "found":
+                            phone = row["phone"] or ""
+                    except:
+                        pass
+                    self._maybe_hunter_negotiate(con2, row, phone=phone)
+                    stats["negotiated"] += 1
+                    self._ev("info", f"🔄 هفته گذشته — مذاکره مجدد: {str(row['title'] if 'title' in row.keys() else '')[:40]}")
+                    _emit_event("hunter_week_recheck", {
+                        "token": row["token"] if "token" in row.keys() else "",
+                        "title": str(row["title"] if "title" in row.keys() else "")[:80],
+                        "level": hl,
+                        "action": "negotiate",
+                    })
+                elif hl == "pending":
+                    if inq_st == "sent":
+                        stats["skipped"] += 1
+                        continue
+                    phone = ""
+                    try:
+                        if "phone_status" in row.keys() and row["phone_status"] == "found":
+                            phone = row["phone"] or ""
+                    except:
+                        pass
+                    self._maybe_hunter_inquire(con2, row, phone=phone)
+                    stats["inquired"] += 1
+                    self._ev("info", f"🔄 هفته گذشته — استعلام مجدد: {str(row['title'] if 'title' in row.keys() else '')[:40]}")
+            except Exception as e:
+                self._ev("warning", f"هفته گذشته چک: {e}")
+            finally:
+                con2.close()
+        return stats
 
     def _maybe_sms(self, con, row, phone: str) -> None:
         """اگر گزینهٔ خودکار روشن باشد، همان لحظه از ملی‌پیامک پیامک می‌زند."""
@@ -516,6 +997,7 @@ class Monitor:
                     except Exception:
                         pass
                 self._ev("success", f"پیامک خودکار ارسال شد → {phone}")
+                _emit_event("sms_sent", {"token": token, "phone": phone, "title": str(row["title"] or "")[:80] if "title" in row.keys() else ""})
                 print(f"  📩 پیامک خودکار: {phone}")
                 qn = quota_today(con)
                 self._tg(f"پیامک ارسال شد\nشماره: {phone}\n"
@@ -603,6 +1085,7 @@ class Monitor:
             if r.get("ok"):
                 bump_quota(con, "chats")
                 self._ev("success", "💬 چت خودکار ارسال شد (%s)" % account_name)
+                _emit_event("chat_sent", {"token": token, "account": account_name, "thread_id": r.get("thread_id") or "", "title": str(lead.get("title") or "")[:80]})
             else:
                 self._ev("warning", "چت خودکار ناموفق — اپراتور: %s" % r.get("message"))
         except Exception as e:
@@ -773,6 +1256,13 @@ class Monitor:
                 log_operation(con, token=row["token"], account=name,
                               operation="contact", result=status,
                               error=str(e), started_at=started)
+                _emit_event("captcha_hit", {
+                    "account": name,
+                    "token": row["token"],
+                    "status": e.status if hasattr(e, "status") else 403,
+                    "error": str(e)[:200],
+                    "url": (row["url"] if "url" in row.keys() else "") or "",
+                })
                 return "wait"
             except Exception as e:
                 con.execute(
@@ -815,8 +1305,26 @@ class Monitor:
             self._acct_errors[name] = 0
             if st == "found":
                 self._ev("success", f"📞 شماره پیدا شد: {row['title'][:40]} → {res['phone']}")
+                _emit_event("contact_found", {
+                    "token": row["token"],
+                    "phone": res.get("phone") or "",
+                    "account": name,
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                    "price": row["price"] if "price" in row.keys() else 0,
+                })
+                try:
+                    _remember_listing(row["token"], str(row["title"] or ""), category=str(row["category"] if "category" in row.keys() else ""), keyword=str(row["keyword"] if "keyword" in row.keys() else ""), platform=str(row["platform"] if "platform" in row.keys() else "divar"))
+                except Exception:
+                    pass
             elif st == "hidden":
                 self._ev("info", f"💬 فقط چت (دیوار صریحاً مخفی کرد): {row['title'][:40]}")
+                _emit_event("chat_only", {
+                    "token": row["token"],
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                    "account": name,
+                })
             self.mgr.record_use(self.db_path, name)
             con.commit()
             if st == "found":
@@ -854,6 +1362,11 @@ class Monitor:
                     self._ev("warning", f"چت خودکار: {e}")
             elif st == "removed":
                 print(f"  × {row['title'][:32]} حذف شده")
+                _emit_event("contact_removed", {
+                    "token": row["token"],
+                    "title": str(row["title"] or "")[:80],
+                    "platform": str(row["platform"] if "platform" in row.keys() else "divar") or "divar",
+                })
             return "done"
         finally:
             con.close()
@@ -925,6 +1438,10 @@ class Monitor:
                 except Exception as e:
                     self._ev("warning", f"استعلام شکارچی: {e}")
                 try:
+                    self.drain_hunter_negotiate()
+                except Exception as e:
+                    self._ev("warning", f"مذاکره شکارچی: {e}")
+                try:
                     self.poll_inboxes()
                 except Exception as e:
                     self._ev("warning", f"صندوق پاسخ: {e}")
@@ -954,3 +1471,63 @@ class Monitor:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+
+def recheck_week_old_leads(db_path: str, max_items: int = 20) -> Dict[str, Any]:
+    """تابع مستقل برای API — بدون نیاز به Monitor فعال."""
+    from .db import connect as _connect
+    con = _connect(db_path)
+    checked = []
+    try:
+        try:
+            rows = con.execute(
+                "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+                "hunter_confidence,negotiation_status,inquiry_status,sms_status,chat_status,url,phone,city,platform,first_seen_at "
+                "FROM leads WHERE hunter_level IN ('good','great','pending') "
+                "AND COALESCE(phone_status,'') != 'removed' "
+                "AND datetime(first_seen_at) >= datetime('now','-7 days') "
+                "ORDER BY id DESC LIMIT ?",
+                (max_items,),
+            ).fetchall()
+        except Exception:
+            rows = con.execute(
+                "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+                "hunter_confidence,negotiation_status,inquiry_status,sms_status,chat_status,url,phone,city,platform,first_seen_at "
+                "FROM leads WHERE hunter_level IN ('good','great','pending') "
+                "ORDER BY id DESC LIMIT ?",
+                (max_items,),
+            ).fetchall()
+        for r in rows:
+            d = dict(r)
+            # آیا پیام نرفته؟
+            sms_sent = (d.get("sms_status") or "") == "sent"
+            chat_sent = (d.get("chat_status") or "") == "sent"
+            neg = d.get("negotiation_status") or ""
+            inq = d.get("inquiry_status") or ""
+            needs_action = False
+            action = ""
+            if d.get("hunter_level") in ("good", "great"):
+                if not sms_sent and not chat_sent:
+                    needs_action = True
+                    action = "negotiate"
+                elif neg in ("", "negotiating", "negotiating_opener", "negotiating_offer"):
+                    needs_action = True
+                    action = "negotiate_retry"
+            elif d.get("hunter_level") == "pending":
+                if inq not in ("sent", "gone"):
+                    needs_action = True
+                    action = "inquire"
+            d["needs_action"] = needs_action
+            d["suggested_action"] = action
+            checked.append(d)
+    finally:
+        con.close()
+    # آمار
+    need = [x for x in checked if x.get("needs_action")]
+    return {
+        "total_week": len(checked),
+        "needs_action": len(need),
+        "items": checked,
+        "summary": f"هفته گذشته {len(checked)} شکار، {len(need)} تا نیاز به پیام/مذاکره دارد",
+    }
+

@@ -74,7 +74,7 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "chat_auto_hourly_limit": 8,
     "platform_divar": True,
     "platform_sheypoor": True,
-    "platform_ring": True,
+    "platform_ring": False,
     "hunter_good_pct": 10,
     "hunter_great_pct": 22,
     "hunter_suspicious_pct": 45,
@@ -222,10 +222,11 @@ def keywords_add(db_path: str, keyword: str,
                  price_min: int = 0, price_max: int = 0,
                  vip: bool = False, hunter: bool = False,
                  hunter_adv: Optional[Dict[str, Any]] = None) -> bool:
-    """افزودن کلمه و/یا دستهٔ دیوار.
+    """افزودن کلمه و/یا دستهٔ دیوار + تریگر مدل (حافظه و رویداد).
 
     بدون کلمه + دسته = مرور کل دسته (عنوان آگهی مهم نیست).
     کلمه + دسته = جستجو داخل همان دسته سپس تطبیق عبارت.
+    هر بار اضافه → حافظه مدل بیشتر می‌شود تا آنالیز بهتر شود.
     """
     from .categories import (PHONE_BRANDS, LAPTOP_BRANDS, hunter_allowed,
                              normalize_slug, title_of)
@@ -266,6 +267,28 @@ def keywords_add(db_path: str, keyword: str,
                     (cat, browse, json.dumps(cities) if cities else None,
                      pmin, pmax, vip_i, hun_i, adv_s, label))
                 added = True
+    # --- تریگر مدل: هر کلمه جدید → حافظه + رویداد ---
+    if added:
+        try:
+            from .events import emit
+            from .nlu_memory import remember_keyword
+            for label in parts:
+                remember_keyword(label, cat, str(cities or ""), extra={
+                    "price_min": pmin, "price_max": pmax, "vip": bool(vip), "hunter": bool(hunter),
+                    "hunter_adv": hunter_adv or {}
+                })
+                emit("keyword_added", {
+                    "keyword": label,
+                    "category": cat,
+                    "cities": cities,
+                    "price_min": pmin,
+                    "price_max": pmax,
+                    "vip": bool(vip),
+                    "hunter": bool(hunter),
+                    "hunter_adv": hunter_adv or {},
+                })
+        except Exception:
+            pass
     return added
 
 

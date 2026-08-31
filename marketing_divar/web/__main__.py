@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Start the local web panel — python -m marketing_divar.web"""
+"""Start the local web panel — python -m marketing_divar.web
+Supports --desktop for native Tira window without browser.
+"""
+import sys
 import threading
 
 import uvicorn
@@ -16,8 +19,23 @@ HOST = "0.0.0.0"
 
 
 def main() -> None:
+    # اگر --desktop داده شده، مستقیم برو به اپ دسکتاپ
+    if "--desktop" in sys.argv or "--tira" in sys.argv or "--app" in sys.argv:
+        from ..desktop_app import main as desktop_main
+        return desktop_main()
+
+    # اگر pywebview هست و --web نداده، دسکتاپ را ترجیح بده
+    if "--web" not in sys.argv:
+        try:
+            import webview  # noqa: F401
+            from ..desktop_app import main as desktop_main
+            print("Desktop mode (pywebview) — opening native Tira window")
+            return desktop_main()
+        except ImportError:
+            pass
+
     info = listen_urls(PORT)
-    print(f"{APP_NAME_EN} {__version__}")
+    print(f"{APP_NAME_EN} {__version__} — 🧠 تیرا")
     print(f"This computer:  {info['local']}")
     if info["lan"]:
         print("Phone / other device on the same Wi-Fi:")
@@ -26,6 +44,7 @@ def main() -> None:
     else:
         print("LAN address:    (connect this PC to Wi-Fi to see it)")
     print("The panel is Persian. This window stays English.")
+    print("Tip: run with --desktop for native window without browser")
     print("Press Ctrl+C to stop.")
     start_background()
 

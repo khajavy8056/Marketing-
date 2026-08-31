@@ -1,65 +1,90 @@
-﻿@echo off
+@echo off
 setlocal EnableExtensions
-title Divar Marketing Setup
+title Tira - Install and Run
+chcp 65001 >nul 2>nul
 cd /d "%~dp0"
 
 echo.
 echo  ============================================
-echo   Divar Marketing - Install
+echo   Tira - Dastyar Shekar Herfei
+echo   Divar Marketing - Tira Desktop
+echo   Nasb va Ejra Khodkar
 echo  ============================================
 echo  Folder: %CD%
 echo.
 
-if not exist "installer\installer.ps1" goto NOEXTRACT
 if not exist "main.py" goto NOEXTRACT
 if not exist "requirements.txt" goto NOEXTRACT
+if not exist "installer\setup_app.py" goto NOEXTRACT
 
-where powershell >nul 2>nul
+set "PY="
+where py >nul 2>nul
+if %errorlevel%==0 (
+  py -3 --version >nul 2>nul
+  if %errorlevel%==0 set "PY=py -3"
+)
+if not defined PY (
+  where python >nul 2>nul
+  if %errorlevel%==0 set "PY=python"
+)
+if not defined PY (
+  echo [ERROR] Python not found. Install Python 3.11 from python.org
+  echo Lotfan Python 3.11 ra nasb konid - Add to PATH
+  pause
+  exit /b 1
+)
+
+echo [1/3] Python: %PY%
+%PY% --version
+
+if not exist ".venv\Scripts\python.exe" (
+  echo [2/3] Creating venv...
+  %PY% -m venv .venv
+  if errorlevel 1 (
+    echo [ERROR] venv failed
+    pause
+    exit /b 1
+  )
+) else (
+  echo [2/3] venv exists
+)
+
+set "VPY=.venv\Scripts\python.exe"
+
+echo [3/3] Installing deps...
+%VPY% -m pip install --upgrade pip --disable-pip-version-check --progress-bar off >nul 2>nul
+%VPY% -m pip install -r requirements.txt --disable-pip-version-check --progress-bar off
 if errorlevel 1 (
-  echo [ERROR] PowerShell was not found.
-  echo Windows needs PowerShell for this installer.
-  goto FAIL
+  echo [WARN] Trying mirror...
+  %VPY% -m pip install -r requirements.txt -i https://mirror-pypi.runflare.com/simple --disable-pip-version-check --progress-bar off
+  if errorlevel 1 (
+    echo [ERROR] pip failed
+    pause
+    exit /b 1
+  )
 )
 
-echo Unlocking files after ZIP extract...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '%CD%' -Recurse -Include *.ps1,*.bat -ErrorAction SilentlyContinue | Unblock-File" 1>nul 2>nul
+echo.
+echo Opening Tira graphical installer...
+echo.
 
-echo Opening installer window...
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File "installer\installer.ps1"
+%VPY% installer\setup_app.py
 set EC=%errorlevel%
+
 if "%EC%"=="0" (
-  echo Installer window closed.
+  echo.
+  echo Install complete - app running as native window
+  timeout /t 3 >nul
   exit /b 0
+) else (
+  echo.
+  echo Installer closed code %EC% - log: %TEMP%\tira-install.log
+  pause
+  exit /b %EC%
 )
-
-echo.
-echo GUI installer did not finish (code %EC%).
-echo Starting console install in this window...
-echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "installer\install-console.ps1"
-set EC=%errorlevel%
-if "%EC%"=="0" exit /b 0
-goto FAIL
 
 :NOEXTRACT
-echo [ERROR] Required files are missing.
-echo.
-echo Extract the ZIP first:
-echo   Right-click the zip -^> Extract All
-echo   Then open the extracted folder and double-click Install-and-Run.bat
-echo.
-echo Do not run this file from inside the zip window.
-echo.
-goto FAIL
-
-:FAIL
-echo.
-echo ============================================================
-echo  Install did not finish.
-echo  Log 1: %TEMP%\divar-marketing-install.log
-echo  Log 2: %CD%\installer\install-log.txt
-echo ============================================================
-echo.
-echo This window will stay open so you can read the error.
+echo [ERROR] Files missing - Extract ZIP first
+echo Right-click ZIP -^> Extract All
 pause
 exit /b 1

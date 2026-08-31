@@ -12,3 +12,11 @@ installer/install-log.txt
 *.gguf
 nlu-model/
 nlu-download/
+# فایل‌های نصب - فقط سورس در گیت، خروجی exe/zip نه
+dist/
+installer/payload.zip
+installer/nlu-download/
+installer/app-chromium/
+*.exe
+*.zip
+!installer/app.ico

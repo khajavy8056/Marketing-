@@ -175,6 +175,37 @@
   .remain-bar{height:12px;background:#e3e8f0;border-radius:99px;overflow:hidden;margin:10px 0 6px}
   .remain-bar > i{display:block;height:100%;background:linear-gradient(90deg,#1976d2,#2e9e5b);width:0}
   html[data-theme="dark"] .remain-bar{background:#243040}
+
+  /* ── تیرا FAB — هشدار شناور پایین چپ — شیک و حرفه‌ای ── */
+  #hunter-fab{position:fixed; bottom:22px; left:22px; z-index:200; display:flex; flex-direction:column; gap:12px; max-width:380px; pointer-events:none}
+  #hunter-fab > *{pointer-events:auto}
+  #hunter-fab-btn{width:66px; height:66px; border-radius:50%; background:linear-gradient(135deg,#7c3aed,#1976d2,#06b6d4); color:#fff; border:none; font-size:30px; cursor:pointer; box-shadow:0 12px 32px rgba(124,58,237,.35), 0 0 0 4px rgba(124,58,237,.12); display:flex; align-items:center; justify-content:center; position:relative; transition:.25s cubic-bezier(.34,1.56,.64,1)}
+  #hunter-fab-btn:hover{transform:scale(1.12) rotate(6deg); box-shadow:0 16px 40px rgba(124,58,237,.45), 0 0 0 6px rgba(124,58,237,.18)}
+  #hunter-fab-btn .badge{position:absolute; top:-6px; right:-6px; background:linear-gradient(135deg,#e11d48,#f43f5e); color:#fff; border-radius:99px; font-size:11px; padding:3px 8px; min-width:22px; text-align:center; font-weight:800; border:2px solid #fff; box-shadow:0 2px 8px rgba(225,29,72,.4)}
+  #hunter-fab-btn.pulse{animation:hfabPulse 1.6s infinite}
+  #hunter-fab-label{position:absolute; bottom:76px; left:0; background:#1e2a3a; color:#fff; padding:8px 14px; border-radius:12px; font-size:12.5px; line-height:1.6; white-space:nowrap; box-shadow:0 8px 24px rgba(0,0,0,.22); opacity:0; transform:translateY(8px); transition:.25s; pointer-events:none}
+  #hunter-fab:hover #hunter-fab-label{opacity:1; transform:translateY(0)}
+  @keyframes hfabPulse{0%{box-shadow:0 0 0 0 rgba(124,58,237,.6), 0 12px 32px rgba(124,58,237,.35)}70%{box-shadow:0 0 0 16px rgba(124,58,237,0), 0 12px 32px rgba(124,58,237,.35)}100%{box-shadow:0 0 0 0 rgba(124,58,237,0), 0 12px 32px rgba(124,58,237,.35)}}
+  .hunter-toast{background:#1e2a3a; color:#fff; padding:14px 16px; border-radius:16px; font-size:13px; line-height:1.85; box-shadow:0 16px 40px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08); animation:slideIn .38s cubic-bezier(.34,1.56,.64,1); max-width:360px; backdrop-filter:blur(8px)}
+  .hunter-toast.vip{background:linear-gradient(135deg,#2a1a4a,#1e3a5a,#2a1a4a); border-color:rgba(142,91,217,.4); box-shadow:0 16px 40px rgba(107,63,160,.35)}
+  .hunter-toast.week{background:linear-gradient(135deg,#2a2416,#3a2e14); border-color:#5a4a22; color:#e8c97a}
+  .hunter-toast b{color:#fff}
+  .hunter-toast .row{margin-top:10px}
+  .hunter-toast .tira-head{display:flex; gap:8px; align-items:center; margin-bottom:6px}
+  .hunter-toast .tira-avatar{width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#7c3aed,#06b6d4); display:flex; align-items:center; justify-content:center; font-size:16px}
+  .hunter-toast .tira-name{font-weight:800; font-size:12.5px; color:#c4b5fd}
+  @keyframes slideIn{from{transform:translateY(22px) scale(.96); opacity:0} to{transform:translateY(0) scale(1); opacity:1}}
+  html[data-theme="dark"] .hunter-toast{background:#121a26}
+  html[data-theme="dark"] .hunter-toast.vip{background:linear-gradient(135deg,#1e1430,#142a44)}
+  /* مینی چت تیرا */
+  #tira-mini{position:fixed; bottom:100px; left:22px; width:min(380px,92vw); max-height:520px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.28); z-index:201; display:none; flex-direction:column; overflow:hidden; animation:slideIn .32s ease}
+  #tira-mini.open{display:flex}
+  #tira-mini-head{background:linear-gradient(135deg,#7c3aed,#1976d2); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; justify-content:space-between}
+  #tira-mini-head b{font-size:14px}
+  #tira-mini-log{flex:1; overflow-y:auto; padding:12px; max-height:360px; min-height:180px; background:#fafbfd}
+  html[data-theme="dark"] #tira-mini-log{background:#151c24}
+  #tira-mini-input{border-top:1px solid var(--line); padding:10px; display:flex; gap:8px; background:var(--card)}
+  #tira-mini-input input{flex:1}
 </style>
 </head>
 <body class="booting gated">
@@ -229,6 +260,7 @@
   <button data-tab="dash" class="active">📊 داشبورد</button>
   <button data-tab="accounts">👤 اکانت‌ها</button>
   <button data-tab="keywords">🔑 کلمات کلیدی</button>
+  <button data-tab="hunter-ai">🧠 تیرا - دستیار شکار</button>
   <button data-tab="messages">✉️ پیام‌ها</button>
   <button data-tab="leads">📋 سرنخ‌ها</button>
   <button data-tab="robot">🤖 ربات هوشمند</button>
@@ -390,6 +422,39 @@
   </div>
 </section>
 
+<!-- ═══════════════════════ تیرا — دستیار شکار حرفه‌ای — ویزارد فارسی ═══════════════════════ -->
+<section id="tab-hunter-ai" class="tab">
+  <div class="grid g2">
+    <div class="card">
+      <h3>🧠 تیرا — دستیار شکار حرفه‌ای</h3>
+      <div class="warn-box">سلام! من <b>تیرا</b> هستم 👋 دستیار شکار حرفه‌ای تو! 🎯<br>بنویس: «دنبال مچ دستگاهی آیفون X 12 13 14 15 قیمت خوب بخریم» — من می‌فهمم چه مدل‌هایی، قیمت فروش سالم چقدره، سود مورد انتظار، تعداد، وضعیت. قدم به قدم می‌پرسم و آخر کارت تنظیمات آماده با دکمه «⭐ ست کردن تنظیمات تیرا» می‌دم. از همین‌جا می‌تونی تنظیمات پیشرفته شکارچی (درصد افت، کارکرد، باتری، رجیستر...) رو هم با من انجام بدی. مدل فقط برای فهم حرف آدمه، قیمت از شما می‌گیره نه از خودش.<br><br>همچنین از داخل <b>تلگرام، بله، روبیکا</b> با دکمه 🧠 تیرا می‌تونی با من صحبت کنی — همون‌جا پیام اختصاصی با اسم خودم می‌دم و تنظیماتت رو ست می‌کنم!</div>
+      <div id="ai-chat-log" class="feed" style="max-height:420px; min-height:220px; border:1px solid var(--line); border-radius:10px; padding:10px; background:#fafbfd"></div>
+      <div class="row" style="margin-top:10px">
+        <input id="ai-chat-input" placeholder="مثلاً: دنبال آیفون ۱۲ و ۱۳ تمیز میخوام، هر کدوم ۲ میلیون سود…" style="flex:1">
+        <button class="btn ok" type="button" onclick="aiSend()">ارسال</button>
+        <button class="btn gray" type="button" onclick="aiReset()">شروع دوباره</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Enter هم ارسال می‌کند. اگر گیج شد «شروع دوباره» بزن.</div>
+    </div>
+    <div class="card" id="ai-config-card" style="display:none">
+      <h3>📋 پیش‌نمایش تنظیمات — کارت آماده</h3>
+      <div id="ai-config-summary" class="hint" style="line-height:2"></div>
+      <div style="max-height:320px; overflow:auto; margin-top:10px">
+        <table style="width:100%; font-size:12.5px"><thead><tr><th>مدل</th><th>فروش سالم</th><th>سود</th><th>حداکثر خرید</th><th>شرایط</th></tr></thead><tbody id="ai-config-tbody"></tbody></table>
+      </div>
+      <div class="grid g2" style="margin-top:12px">
+        <div><div class="lbl">شهرها (اختیاری — خالی = همه ایران)</div>
+          <select id="ai-city" multiple size="6"><option value="0">همه ایران</option></select></div>
+        <div><div class="lbl">توضیح</div><div class="hint" id="ai-config-note"></div></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn ok" type="button" id="ai-apply-btn" onclick="aiApply()">⭐ ست کردن تنظیمات تیرا</button>
+        <span class="hint" id="ai-apply-hint"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══════════════════════ پیام‌ها ═══════════════════════ -->
 <section id="tab-messages" class="tab">
   <div class="grid g2">
@@ -440,8 +505,9 @@
         <button class="btn sm gray" onclick="leadsLoad('all')">همه</button>
         <button class="btn sm" onclick="leadsLoad('phone')">شماره‌دار</button>
         <button class="btn sm warn" onclick="leadsLoad('chat')">فقط چت</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter')">شکارچی</button>
-        <button class="btn sm gray" onclick="leadsLoad('hunter_pending')">در انتظار شکارچی</button>
+        <button class="btn sm ok" onclick="leadsLoad('hunter')">🎯 شکارچی</button>
+        <button class="btn sm warn" onclick="leadsLoad('hunter_pending')">⏳ در انتظار شکارچی</button>
+        <button class="btn sm" onclick="hunterVipLoad()">⭐ VIP حرفه‌ای</button>
         <button class="btn sm gray" onclick="leadsLoad('defect')">معیوب</button>
         <button class="btn sm gray" onclick="leadsLoad('replied')">پاسخ‌ها</button>
         <button class="btn sm gray" type="button" onclick="requeueHidden()">↩️ برگشت فقط‌چت به صف شماره</button>
@@ -521,9 +587,9 @@
         <label for="set-plat-divar"><b>دیوار</b></label></div>
       <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked>
         <label for="set-plat-sheypoor"><b>شیپور</b></label></div>
-      <div class="checkline"><input type="checkbox" id="set-plat-ring" checked>
-        <label for="set-plat-ring"><b>رینگ</b></label></div>
-      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین هر سه در همان پروفایل Chromium با سه تب است.</div>
+      <div class="checkline"><input type="checkbox" id="set-plat-ring">
+        <label for="set-plat-ring"><b>رینگ</b> — موقتاً غیرفعال پیش‌فرض (فقط دیوار و شیپور فعال)</label></div>
+      <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین دیوار+شیپور در همان پروفایل Chromium با دو تب است. رینگ فعلاً غیرفعال پیش‌فرض است.</div>
     </div>
     <div class="card">
       <h3>⭐ هشدار ویژه (VIP)</h3>
@@ -716,6 +782,23 @@
   </div>
 </dialog>
 
+<!-- ── تیرا شناور — دستیار شکار حرفه‌ای پایین چپ ── -->
+<div id="hunter-fab" aria-live="polite">
+  <div id="hunter-toasts" style="display:flex; flex-direction:column; gap:12px"></div>
+  <div style="position:relative">
+    <div id="hunter-fab-label">🧠 تیرا اینجاست! بزن تا تنظیمات پیشرفته شکارچی رو با هم بسازیم 🎯</div>
+    <button id="hunter-fab-btn" title="تیرا - دستیار شکار حرفه‌ای" onclick="hunterFabClick()">🧠<span class="badge" id="hunter-fab-badge" style="display:none">0</span></button>
+  </div>
+</div>
+<!-- مینی چت تیرا — همون مدل، تنظیمات پیشرفته از همین‌جا -->
+<div id="tira-mini" aria-live="polite">
+  <div id="tira-mini-head"><div style="display:flex; gap:8px; align-items:center"><span style="font-size:20px">🧠</span><div><b>تیرا</b><div style="font-size:11px; opacity:.85">دستیار شکار حرفه‌ای — تنظیمات پیشرفته</div></div></div><button class="btn sm gray" onclick="tiraMiniClose()" style="padding:4px 10px">✕</button></div>
+  <div id="tira-mini-log" class="feed"></div>
+  <div class="row" style="padding:8px 12px; gap:6px"><button class="btn sm gray" onclick="hunterAdvOpen()">⚙️ تنظیمات پیشرفته شکارچی</button><button class="btn sm ok" onclick="aiApply()">⭐ ست کردن تنظیمات تیرا</button><button class="btn sm gray" onclick="aiReset(); tiraMiniOpen()">🔄 شروع دوباره</button></div>
+  <div id="tira-mini-input"><input id="tira-mini-inp" placeholder="مثلاً: آیفون 12 13 تمیز هر کدوم 3 سود..."><button class="btn ok sm" onclick="tiraMiniSend()">ارسال</button></div>
+  <div class="hint" style="padding:6px 12px 10px; font-size:11px">از همین‌جا درصد افت، کارکرد، باتری، رجیستر و ... رو با تیرا تنظیم کن — بعد دکمه ست رو بزن. داخل تلگرام/بله/روبیکا هم با دکمه 🧠 تیرا همین‌طور صحبت می‌کنه! پیام‌های تیرا با اسم اختصاصی خودش ارسال می‌شه.</div>
+</div>
+
 <div id="notify-stack" aria-live="polite"></div>
 
 <dialog id="chat-dlg">
@@ -732,35 +815,65 @@
 </dialog>
 
 
-<dialog id="hunter-adv-warn" style="width:min(480px,92vw)">
-  <h3>تنظیمات تخصصی شکارچی</h3>
-  <p class="hint" style="margin:10px 0 14px;line-height:1.9">این فیلدها را یک کاسب حرفه‌ای برای هر دسته پر کرده (خودرو، موبایل، لپ‌تاپ، لوازم…).
-    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.
-    اگر بلد نیستید دست نزنید. اگر کاسبید، درصد افت را کمی سفت‌تر کنید.</p>
+<dialog id="hunter-adv-warn" style="width:min(520px,94vw)">
+  <h3>⚠️ تنظیمات تخصصی شکارچی — بخش مهم</h3>
+  <div class="warn-box" style="margin:10px 0">
+    <b>این بخش تخصصی است</b> — یک کاسب حرفه‌ای برای هر دسته (خودرو، موبایل، لپ‌تاپ، لوازم) بر اساس تحقیق بازار ایران ۱۴۰۳ درصدها را پر کرده.<br>
+    پیش‌فرض‌ها <b>عمداً نرم</b>اند تا در دمو چند فرصت پیدا شود.<br>
+    <b>مثال:</b> خودرو ۱۰۰ کیلومتر vs صفر — صفر ۳٪ گران‌تر است، پس ۱۰۰km با قیمت مناسب هنوز شکار محسوب می‌شود. خودرو دوررنگ حتی با ۱۴٪ افت، اگر ۲۵٪ زیر میانه باشد باز شکار است.<br>
+    اگر بلد نیستید دست نزنید. اگر کاسبید، درصدها را سفت‌تر کنید و آپشن جدید اضافه کنید.
+  </div>
+  <p class="hint" style="margin:10px 0 14px;line-height:1.9">
+    شکارچی یک <b>آنالیزور قیمت</b> است: میانهٔ همان کلمه/شهر + افت وضعیت (رنگ، شاسی، کارکرد، باتری، رجیستری...) = ارزش منصفانه. سپس تخفیف نسبت به منصفانه → مناسب / خیلی‌مناسب / مشکوک.<br>
+    جای‌خالی (سال، کارکرد، شاسی) → مدل سوال می‌پرسد (چت/پیامک) → از پاسخ دوباره امتیاز می‌دهد.
+  </p>
   <div class="row">
     <button class="btn ok" type="button" onclick="hunterAdvShow()">متوجه شدم — ادامه</button>
     <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-warn').close()">انصراف</button>
   </div>
 </dialog>
-<dialog id="hunter-adv-dlg" style="width:min(560px,94vw)">
-  <h3>تنظیمات پیشرفته شکارچی</h3>
+<dialog id="hunter-adv-dlg" style="width:min(720px,96vw)">
+  <h3>تنظیمات پیشرفته شکارچی — آنالیزور قیمت</h3>
   <p class="hint" id="hunter-adv-family" style="margin:8px 0 10px"></p>
-  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود.</div>
+  <div class="warn-box" id="hunter-adv-research" style="display:none"></div>
+  <div class="warn-box" id="hunter-adv-estate" style="display:none">املاک شکار نمی‌شود — فقط شماره پیدا می‌کند.</div>
   <div class="grid g2">
-    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده)</div>
+    <div><div class="lbl">آستانه مناسب (٪ زیر ارزش تعدیل‌شده) — پیش‌فرض کاسب ۱۲٪</div>
       <input id="hadv-good" type="number" min="1" max="40" dir="ltr"></div>
-    <div><div class="lbl">آستانه خیلی مناسب (٪)</div>
+    <div><div class="lbl">آستانه خیلی مناسب (٪) — پیش‌فرض کاسب ۲۲٪</div>
       <input id="hadv-great" type="number" min="2" max="50" dir="ltr"></div>
-    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪)</div>
+    <div><div class="lbl">مشکوک اگر ارزان‌تر از (٪) — پیش‌فرض ۴۸٪</div>
       <input id="hadv-sus" type="number" min="20" max="90" dir="ltr"></div>
+    <div><div class="lbl">کارکرد نرمال در سال (km) — خودرو</div>
+      <input id="hadv-kmpy" type="number" min="5000" max="50000" dir="ltr"></div>
   </div>
   <div class="checkline">
     <input type="checkbox" id="hadv-dealer">
-    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ را حتماً بپرس بعد تصمیم بگیر</label>
+    <label for="hadv-dealer">حالت کاسب حرفه‌ای — جای‌خالی شاسی/رنگ/سال/کارکرد را حتماً بپرس بعد تصمیم بگیر (استعلام با مدل)</label>
   </div>
-  <div id="hunter-adv-fields"></div>
-  <div class="row" style="margin-top:14px">
-    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره درصدها</button>
+  <div style="margin-top:12px"><h3 style="font-size:14px">درصد افت وضعیت — بر اساس تحقیق بازار (منفی = ارزان‌تر حساب شود)</h3>
+    <div class="hint">مثال: پراید ۱۰۰km vs صفر — صفر +۳٪ گران‌تر، پس ۱۰۰km هنوز شکار است. دوررنگ -۱۴٪ ولی اگر ۲۵٪ زیر میانه باشد باز شکار است. موبایل باتری زیر ۸۰٪ -۱۱٪، بدون رجیستر -۱۶٪.</div>
+  </div>
+  <div id="hunter-adv-fields" style="max-height:320px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:8px"></div>
+
+  <div style="margin-top:16px; border-top:1px dashed var(--line); padding-top:12px">
+    <h3 style="font-size:14px">➕ افزودن آپشن جدید (سفارشی)</h3>
+    <div class="hint">می‌توانید آپشن جدید اضافه کنید — مثلاً «کف‌خواب»، «باتری تعویض»، «گلس شکسته». کلمه کلیدی در متن آگهی پیدا شود → درصد افت اعمال می‌شود.</div>
+    <div class="grid g2" style="margin-top:8px">
+      <div><div class="lbl">نام آپشن (کلید انگلیسی)</div><input id="hadv-new-key" placeholder="مثلا tire_worn" dir="ltr"></div>
+      <div><div class="lbl">برچسب فارسی</div><input id="hadv-new-label" placeholder="لاستیک ساییده"></div>
+      <div><div class="lbl">درصد افت (منفی = ارزان‌تر)</div><input id="hadv-new-pct" type="number" step="0.5" dir="ltr" placeholder="-5"></div>
+      <div><div class="lbl">سوال از فروشنده (اختیاری)</div><input id="hadv-new-q" placeholder="لاستیک‌ها چند درصد است؟"></div>
+    </div>
+    <div><div class="lbl">کلمات کلیدی در متن آگهی (با کاما جدا)</div><input id="hadv-new-words" placeholder="لاستیک ساییده, لاستیک 20 درصد, بدون لاستیک"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn sm ok" type="button" onclick="hunterAdvAddCustom()">➕ افزودن به لیست</button>
+    </div>
+    <div id="hunter-adv-custom-list" style="margin-top:10px"></div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <button class="btn ok" type="button" onclick="hunterAdvSave()">💾 ذخیره همه (درصدها + آپشن‌های جدید)</button>
     <button class="btn gray" type="button" onclick="document.getElementById('hunter-adv-dlg').close()">بستن</button>
   </div>
 </dialog>
@@ -930,6 +1043,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab==='leads') leadsLoad('all');
   if (b.dataset.tab==='settings') settingsLoad();
   if (b.dataset.tab==='keywords') kwLoad();
+  if (b.dataset.tab==='hunter-ai') aiLoad();
   if (b.dataset.tab==='messages') tplLoad();
   if (b.dataset.tab==='robot') robotLoad();
   if (b.dataset.tab==='profile') licensePaint();
@@ -1383,6 +1497,7 @@ async function hunterAdvOpen(kwId, keyword, category){
   const w = $('hunter-adv-warn');
   if (w && !w.open) w.showModal();
 }
+let _hunterCustomAdjs = [];
 async function hunterAdvShow(){
   const w = $('hunter-adv-warn'); if (w && w.open) w.close();
   const kw = window._hunterAdvKw || '';
@@ -1391,47 +1506,112 @@ async function hunterAdvShow(){
     const r = await api('/api/hunter-profile?keyword='+encodeURIComponent(kw)+'&category='+encodeURIComponent(cat));
     const p = r.profile || {};
     if($('hunter-adv-family')) $('hunter-adv-family').textContent =
-      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.hint||'')));
+      (p.hunter===false ? (p.reason||'این دسته شکار نمی‌شود') : ('خانواده: '+(p.family||'')+' — '+(p.warning||p.hint||'')));
+    if($('hunter-adv-research')) {
+      const rn = p.research_note||'';
+      $('hunter-adv-research').style.display = rn ? 'block':'none';
+      $('hunter-adv-research').textContent = rn ? ('🔬 تحقیق بازار: '+rn) : '';
+    }
     if($('hunter-adv-estate')) $('hunter-adv-estate').style.display = p.hunter===false ? 'block':'none';
-    if($('hadv-good')) $('hadv-good').value = p.good_pct||8;
-    if($('hadv-great')) $('hadv-great').value = p.great_pct||15;
-    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||55;
+    if($('hadv-good')) $('hadv-good').value = p.good_pct||10;
+    if($('hadv-great')) $('hadv-great').value = p.great_pct||18;
+    if($('hadv-sus')) $('hadv-sus').value = p.suspicious_pct||48;
     if($('hadv-dealer')) $('hadv-dealer').checked = !!p.dealer_mode;
+    if($('hadv-kmpy')) $('hadv-kmpy').value = p.km_per_year||20000;
     const box = $('hunter-adv-fields');
     if(box){
       box.innerHTML = (p.adjustments||[]).map(a=>`
-        <div class="lbl">${esc(a.label)} (٪ افت، منفی یعنی ارزان‌تر حساب شود)</div>
-        <input data-hadv-key="${esc(a.key)}" type="number" step="0.5" dir="ltr" value="${a.pct}">
+        <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--line)">
+          <div style="flex:1">
+            <div class="lbl" style="margin:0 0 2px">${esc(a.label)} ${a.custom?'<span class=\"tag warn\">سفارشی</span>':''} <small style="color:var(--mut)">(${esc(a.key)})</small>
+              ${a.research?`<span class="q">؟<span class="qtip">${esc(a.research)}</span></span>`:''}
+            </div>
+            <div class="hint" style="font-size:11px">${esc((a.words||[]).slice(0,4).join('، '))}${(a.words||[]).length>4?'…':''}</div>
+          </div>
+          <input data-hadv-key="${esc(a.key)}" data-hadv-custom="${a.custom?'1':'0'}" type="number" step="0.5" dir="ltr" value="${a.pct}" style="max-width:90px">
+        </div>
       `).join('') || '<div class="hint">درصدی برای این دسته نیست</div>';
     }
+    // custom list reset
+    _hunterCustomAdjs = (p.adjustments||[]).filter(a=>a.custom).map(a=>({
+      key: a.key, label: a.label, pct: a.pct, words: (a.words||[]).join(', '), question: a.question||'', research: a.research||'سفارشی'
+    }));
+    hunterAdvRenderCustom();
     const dlg = $('hunter-adv-dlg');
     if (dlg && !dlg.open) dlg.showModal();
   }catch(e){ toast('❌ '+e.message, false); }
 }
+function hunterAdvRenderCustom(){
+  const box = $('hunter-adv-custom-list');
+  if(!box) return;
+  if(!_hunterCustomAdjs.length){ box.innerHTML='<div class=\"hint\">هنوز آپشن سفارشی اضافه نشده</div>'; return; }
+  box.innerHTML = _hunterCustomAdjs.map((c,i)=>`
+    <div class="row" style="justify-content:space-between; border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:4px 0">
+      <span><b>${esc(c.label)}</b> <small>(${esc(c.key)})</small> — ${c.pct}% — <small>${esc(c.words)}</small></span>
+      <button class="btn sm err" type="button" onclick="hunterAdvRemoveCustom(${i})">حذف</button>
+    </div>
+  `).join('');
+}
+function hunterAdvAddCustom(){
+  const key = ($('hadv-new-key')||{}).value.trim();
+  const label = ($('hadv-new-label')||{}).value.trim();
+  const pct = parseFloat(($('hadv-new-pct')||{}).value);
+  const q = ($('hadv-new-q')||{}).value.trim();
+  const words = ($('hadv-new-words')||{}).value.trim();
+  if(!label){ toast('برچسب فارسی را وارد کنید', false); return; }
+  if(isNaN(pct)){ toast('درصد افت را وارد کنید (مثلا -5)', false); return; }
+  const finalKey = key || label.replace(/\s+/g,'_').replace(/[^\w\u0600-\u06FF_]/g,'').slice(0,24) || 'custom_'+Date.now();
+  _hunterCustomAdjs.push({key: finalKey, label, pct, words, question: q||label+'؟', research:'سفارشی کاربر'});
+  $('hadv-new-key').value=''; $('hadv-new-label').value=''; $('hadv-new-pct').value=''; $('hadv-new-q').value=''; $('hadv-new-words').value='';
+  hunterAdvRenderCustom();
+  toast('آپشن سفارشی اضافه شد — ذخیره را بزنید');
+}
+function hunterAdvRemoveCustom(i){
+  _hunterCustomAdjs.splice(i,1);
+  hunterAdvRenderCustom();
+}
 async function hunterAdvSave(){
   const adjustments = {};
+  const adjustments_list = [];
   document.querySelectorAll('[data-hadv-key]').forEach(el=>{
     const n = parseFloat(el.value);
-    if(!isNaN(n)) adjustments[el.getAttribute('data-hadv-key')] = n;
+    const k = el.getAttribute('data-hadv-key');
+    if(!isNaN(n)){
+      adjustments[k] = n;
+      // برای custom هم لیست کامل می‌سازیم
+      if(el.getAttribute('data-hadv-custom')==='1'){
+        // پیدا کن از _hunterCustomAdjs یا از ورودی
+        const found = _hunterCustomAdjs.find(c=>c.key===k);
+        if(found) adjustments_list.push(found);
+        else adjustments_list.push({key:k, pct:n});
+      }
+    }
+  });
+  // اضافه کردن custom های جدید که هنوز در DOM نیستند
+  _hunterCustomAdjs.forEach(c=>{
+    if(!(c.key in adjustments)) adjustments[c.key]=c.pct;
+    if(!adjustments_list.find(x=>x.key===c.key)) adjustments_list.push(c);
   });
   const values = {
-    good_pct: parseFloat(($('hadv-good')||{}).value)||8,
-    great_pct: parseFloat(($('hadv-great')||{}).value)||15,
-    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||55,
+    good_pct: parseFloat(($('hadv-good')||{}).value)||10,
+    great_pct: parseFloat(($('hadv-great')||{}).value)||18,
+    suspicious_pct: parseFloat(($('hadv-sus')||{}).value)||48,
+    km_per_year: parseFloat(($('hadv-kmpy')||{}).value)||20000,
     dealer_mode: !!($('hadv-dealer')&&$('hadv-dealer').checked),
     adjustments,
+    custom_adjustments: _hunterCustomAdjs,
   };
   window._hunterAdv = values;
   if (_hunterAdvKwId){
     try{
       const r = await api('/api/keywords/'+_hunterAdvKwId+'/hunter-adv',
         {method:'POST', body: JSON.stringify({values})});
-      toast(r.message||'ذخیره شد');
+      toast(r.message||'ذخیره شد — آنالیزور با درصدهای جدید کار می‌کند');
     }catch(e){ toast('❌ '+e.message, false); return; }
   } else {
-    toast('درصدها برای پایش بعدی ذخیره شد — افزودن را بزنید');
+    toast('درصدها + آپشن‌های سفارشی برای پایش بعدی ذخیره شد — افزودن را بزنید');
   }
-  if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی آمادهٔ افزودن است';
+  if($('kw-hunter-adv-hint')) $('kw-hunter-adv-hint').textContent = 'درصدهای سفارشی + آپشن جدید آمادهٔ افزودن است';
   const dlg = $('hunter-adv-dlg'); if (dlg && dlg.open) dlg.close();
 }
 
@@ -1474,6 +1654,64 @@ async function chatMarkSent(){
     leadsLoad();
   }
 }
+async function hunterVipLoad(){
+  try{
+    const s = await api('/api/hunter/vip?limit=100');
+    const rows = s.vip||[];
+    $('leads-empty').style.display = rows.length?'none':'block';
+    $('leads-body').innerHTML = rows.map(l=>{
+      const levelTag = l.hunter_level==='great' ? '<span class="tag ok">⭐ خیلی مناسب</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ مناسب</span>' : '<span class="tag warn">'+esc(l.hunter_level||'')+'</span>');
+      const fair = l.hunter_fair_price ? (l.hunter_fair_price.toLocaleString()+' تومان') : '—';
+      const market = l.hunter_market_median ? (l.hunter_market_median.toLocaleString()) : '—';
+      const disc = l.hunter_discount_pct ? (l.hunter_discount_pct+'%') : '—';
+      const conf = l.hunter_confidence ? (Math.round(l.hunter_confidence*100)+'%') : '—';
+      const neg = l.negotiated_price ? ('<br><small>بعد مذاکره: '+l.negotiated_price.toLocaleString()+'</small>') : '';
+      const negSt = l.negotiation_status ? ('<span class="tag chat">'+esc(l.negotiation_status)+'</span>') : '';
+      return `<tr>
+        <td>${esc(l.title)}<br>${levelTag} ${negSt}<br><small>منصفانه: ${fair} | بازار سالم: ${market} | تخفیف: ${disc} | اطمینان: ${conf}</small>${neg}</td>
+        <td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
+        <td>${levelTag}</td>
+        <td><button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊 تحلیل</button> <button class="btn sm" onclick="hunterNegotiate('${esc(l.token)}')">💬 مذاکره</button></td>
+        <td>${esc(l.city||'')}</td>
+        <td>${esc(l.platform||'')}</td>
+        <td>${esc(l.url? (new Date().toLocaleString()) : '')}</td>
+        <td><a href="${esc(l.url||'')}" target="_blank" style="color:var(--pri)">مشاهده ↗</a></td></tr>`;
+    }).join('');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterAnalyze(token){
+  try{
+    const r = await api('/api/hunter/analyze/'+encodeURIComponent(token));
+    const a = r.analysis||{};
+    const hist = r.negotiation_history||[];
+    let html = `<b>${esc(r.lead.title||'')}</b><br>`;
+    html += `قیمت: ${(a.price||0).toLocaleString()} تومان<br>`;
+    html += `بازار سالم: ${(a.healthy_median||a.median||0).toLocaleString()} تومان<br>`;
+    html += `منصفانه: ${(a.fair||0).toLocaleString()} تومان<br>`;
+    html += `تخفیف: ${a.discount_pct||0}%<br>`;
+    html += `سطح: ${esc(a.level||'')} (raw: ${esc(a.raw_level||'')})<br>`;
+    html += `اطمینان: ${a.confidence||0}<br>`;
+    html += `افت: ${a.adj_pct||0}% (پرچم ${a.adj_flags_pct||0}% + کارکرد ${a.adj_mileage_pct||0}% + سال ${a.adj_year_pct||0}%)<br>`;
+    html += `پرچم‌ها: ${esc(Object.keys(a.flags||{}).filter(k=>a.flags[k]).join('، ')||'سالم')}<br>`;
+    html += `جای خالی: ${esc((a.missing||[]).join('، ')||'—')}<br>`;
+    if(a.questions) html += `<div class="warn-box">${esc(a.questions)}</div>`;
+    if(hist.length) html += `<div class="hint" style="margin-top:8px">مذاکره: ${esc(hist.map(h=> (h.role==='seller'?'فروشنده':'من')+': '+h.text).join(' | ').slice(0,300))}</div>`;
+    // نمایش در دیالوگ ساده
+    const dlg = document.createElement('dialog');
+    dlg.style.width='min(600px,96vw)';
+    dlg.innerHTML = `<h3>📊 تحلیل حرفه‌ای شکارچی</h3><div style="margin:12px 0; line-height:2; font-size:13px">${html}</div><div class="row"><button class="btn gray" onclick="this.closest('dialog').close()">بستن</button></div>`;
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.addEventListener('close', ()=>dlg.remove());
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function hunterNegotiate(token){
+  try{
+    const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+    toast(r.message||'مذاکره ارسال شد');
+    leadsLoad('hunter');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
 async function leadsLoad(filter){
   leadsFilter=filter||leadsFilter;
   try{ const s=await api('/api/leads?filter='+leadsFilter);
@@ -1486,6 +1724,7 @@ async function leadsLoad(filter){
                   legacy:`<span class="tag gray">${tt('قدیمی','Old')}</span>`,
                   removed:`<span class="tag gray">${tt('حذف‌شده','Removed')}</span>`,
                   error:`<span class="tag err">${tt('خطا','Error')}</span>`}[l.phone_status]||l.phone_status;
+      const hunterTag = l.hunter_level ? (l.hunter_level==='great' ? '<span class="tag ok">⭐ عالی</span>' : (l.hunter_level==='good' ? '<span class="tag ok">✅ خوب</span>' : (l.hunter_level==='pending' ? '<span class="tag warn">⏳ در انتظار</span>' : '<span class="tag gray">'+esc(l.hunter_level)+'</span>'))) : '';
       const chatBtn = l.phone_status==='hidden'
         ? `<button class="btn sm" onclick="openChat('${esc(l.token)}')">${tt('چت','Chat')}</button>
            <button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
@@ -1494,7 +1733,8 @@ async function leadsLoad(filter){
           : (l.phone_status==='error'
             ? `<button class="btn sm gray" onclick="requeueOne('${esc(l.token)}')">${tt('صف شماره','Requeue')}</button>`
             : (l.chat_status||'—')));
-      return `<tr><td>${esc(l.title)}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
+      const hunterBtn = l.hunter_level ? `<button class="btn sm ok" onclick="hunterAnalyze('${esc(l.token)}')">📊</button>` : '';
+      return `<tr><td>${esc(l.title)} ${hunterTag} ${hunterBtn}</td><td dir="ltr"><b>${esc(l.phone||'—')}</b></td>
         <td>${st}</td><td>${chatBtn}</td><td>${esc(l.keyword)}</td><td>${esc(l.city)}</td>
         <td>${esc(l.first_seen_at)}</td>
         <td><a href="${esc(l.url)}" target="_blank" style="color:var(--pri)">${tt('مشاهده ↗','view ↗')}</a></td></tr>`;
@@ -1824,6 +2064,229 @@ async function requeueHidden(){
 async function requeueOne(token){
   if (await act('/api/leads/requeue',{token})) leadsLoad();
 }
+
+/* ───────────────────────── تیرا — دستیار شکار حرفه‌ای — ویزارد ───────────────────────── */
+const TIRA_NAME = "تیرا";
+let _aiSid = localStorage.getItem('ai_sid') || ('ai-'+Date.now());
+localStorage.setItem('ai_sid', _aiSid);
+let _aiConfig = null;
+function aiRenderLog(msgs){
+  const box = $('ai-chat-log'); if(!box) return;
+  box.innerHTML = (msgs||[]).map(m=>{
+    const who = m.role==='user' ? '🧑 شما' : (m.role==='system' ? '⚙️ سیستم' : `🧠 ${TIRA_NAME}`);
+    const cls = m.role==='user' ? 'tag gray' : (m.role==='assistant' ? 'tag ok' : 'tag warn');
+    return `<div style="padding:8px; border-bottom:1px dashed var(--line)"><span class="${cls}">${who}</span> <span style="margin-right:8px">${esc(m.text||'')}</span></div>`;
+  }).join('') || `<div class="empty">سلام! من ${TIRA_NAME} هستم 👋 دستیار شکار حرفه‌ای! بگو چی میخوای شکار کنی؟ مثلا «دنبال آیفون X 12 13 14 15 قیمت خوب»</div>`;
+  box.scrollTop = box.scrollHeight;
+  // همگام با مینی چت
+  const mini = $('tira-mini-log'); if(mini){
+    mini.innerHTML = (msgs||[]).map(m=>{
+      const who = m.role==='user' ? '🧑 شما' : `🧠 ${TIRA_NAME}`;
+      const cls = m.role==='user' ? 'tag gray' : 'tag ok';
+      return `<div style="padding:7px; border-bottom:1px dashed var(--line)"><span class="${cls}">${who}</span> <span style="margin-right:6px">${esc(m.text||'')}</span></div>`;
+    }).join('') || `<div class="empty">${TIRA_NAME} اینجاست! 🎯</div>`;
+    mini.scrollTop = mini.scrollHeight;
+  }
+}
+function aiRenderConfig(cfg){
+  _aiConfig = cfg;
+  const card = $('ai-config-card');
+  if(!cfg || !cfg.items || !cfg.items.length){ if(card) card.style.display='none'; return; }
+  if(card) card.style.display='block';
+  const sum = $('ai-config-summary');
+  if(sum){
+    const q = cfg.quantity ? `تعداد هدف: ${cfg.quantity} · ` : '';
+    const cond = cfg.conditions ? `شرایط: ${esc((cfg.conditions||[]).join('، '))}` : '';
+    sum.innerHTML = `${q}${cond}<br>وضعیت استخراج: ${esc(cfg.state||'')}`.trim();
+  }
+  const tb = $('ai-config-tbody');
+  if(tb){
+    tb.innerHTML = cfg.items.map(it=>{
+      const maxBuy = it.max_buy ? it.max_buy.toLocaleString() : '—';
+      const sell = it.healthy_sell_price ? it.healthy_sell_price.toLocaleString() : '—';
+      const prof = it.desired_profit ? it.desired_profit.toLocaleString() : '—';
+      return `<tr><td>${esc(it.model)}</td><td dir="ltr">${sell}</td><td dir="ltr">${prof}</td><td dir="ltr"><b>${maxBuy}</b></td><td>${esc((it.conditions||[]).join('، ')||cfg.conditions||'')}</td></tr>`;
+    }).join('');
+  }
+  if($('ai-config-note')) $('ai-config-note').textContent = 'قیمت فروش سالم و سود از حرف شما استخراج شده، مدل قیمت نساخته. برای خرید زیر «حداکثر خرید» شکار می‌کند.';
+  // fill city select clone from kw-city
+  try{
+    const src = $('kw-city');
+    const dst = $('ai-city');
+    if(src && dst && dst.options.length<=1){
+      dst.innerHTML = src.innerHTML;
+    }
+  }catch(e){}
+}
+async function aiLoad(){
+  try{
+    const r = await api('/api/hunter/ai-start',{method:'POST', body: JSON.stringify({session_id:_aiSid})});
+    aiRenderLog(r.messages);
+    if(r.config && r.config.items && r.config.items.length) aiRenderConfig(r.config);
+    // load cities
+    try{
+      const cs = await api('/api/cities');
+      const dst = $('ai-city'); if(dst && cs.cities){
+        if(dst.options.length<=1){
+          dst.innerHTML = (cs.cities||[]).map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('') || '<option value="0">همه ایران</option>';
+        }
+      }
+    }catch(e){}
+  }catch(e){}
+}
+async function aiSend(){
+  const inp = $('ai-chat-input'); if(!inp) return;
+  const txt = inp.value.trim(); if(!txt) return;
+  inp.value='';
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message:txt})});
+    aiRenderLog(r.messages);
+    if(r.config) aiRenderConfig(r.config);
+    if(r.done) toast('تنظیمات آماده است — دکمه ست کردن را بزن');
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function aiReset(){
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, reset:true, message:''})});
+    aiRenderLog(r.messages); aiRenderConfig(null);
+    toast('گفتگو از اول شروع شد');
+  }catch(e){}
+}
+async function aiApply(){
+  if(!_aiConfig || !_aiConfig.items || !_aiConfig.items.length){ toast('اول با ربات صحبت کن تا تنظیمات آماده شود', false); return; }
+  const sel = $('ai-city');
+  let city_ids = null;
+  if(sel){
+    const ids=[...sel.selectedOptions].map(o=>parseInt(o.value,10)).filter(n=>n>0);
+    if(ids.length) city_ids = ids;
+  }
+  try{
+    const r = await api('/api/hunter/ai-apply',{method:'POST', body: JSON.stringify({session_id:_aiSid, config:_aiConfig, city_ids})});
+    if($('ai-apply-hint')) $('ai-apply-hint').textContent = r.message||'';
+    toast(r.message||'تنظیمات ست شد', !!r.ok);
+    kwLoad();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
+/* ───────── تیرا FAB — همون مدل، تنظیمات پیشرفته شکارچی از همین‌جا ───────── */
+let _hunterSeen = new Set();
+let _hunterBadge = 0;
+function tiraMiniOpen(){
+  const mini=$('tira-mini'); if(mini) mini.classList.add('open');
+  aiLoad();
+}
+function tiraMiniClose(){
+  const mini=$('tira-mini'); if(mini) mini.classList.remove('open');
+}
+async function tiraMiniSend(){
+  const inp=$('tira-mini-inp'); if(!inp) return;
+  const txt=inp.value.trim(); if(!txt) return;
+  inp.value='';
+  try{
+    const r = await api('/api/hunter/ai-chat',{method:'POST', body: JSON.stringify({session_id:_aiSid, message:txt})});
+    aiRenderLog(r.messages);
+    if(r.config) aiRenderConfig(r.config);
+    if(r.done) toast(`${TIRA_NAME}: تنظیمات آماده است — دکمه ست کردن را بزن`);
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+function hunterFabClick(){
+  const mini=$('tira-mini');
+  if(mini && !mini.classList.contains('open')){
+    tiraMiniOpen();
+    _hunterBadge=0; updateHunterBadge();
+    return;
+  }
+  document.querySelectorAll('nav button, .tab').forEach(x=>x.classList.remove('active'));
+  const btn = document.querySelector('nav button[data-tab=\"hunter-ai\"]');
+  if(btn) btn.classList.add('active');
+  const tab = $('tab-hunter-ai'); if(tab) tab.classList.add('active');
+  const toasts = $('hunter-toasts'); if(toasts) toasts.innerHTML='';
+  _hunterBadge=0; updateHunterBadge();
+  tiraMiniClose();
+  aiLoad();
+}
+function updateHunterBadge(){
+  const b=$('hunter-fab-badge'); if(!b) return;
+  if(_hunterBadge>0){ b.textContent=String(_hunterBadge); b.style.display='block'; $('hunter-fab-btn').classList.add('pulse'); }
+  else { b.style.display='none'; $('hunter-fab-btn').classList.remove('pulse'); }
+}
+function showHunterToast(item, kind){
+  const box=$('hunter-toasts'); if(!box) return;
+  const div=document.createElement('div');
+  const isVip = kind==='vip';
+  div.className='hunter-toast '+(isVip?'vip':'week');
+  const title = item.title||'آگهی جدید';
+  const price = item.price ? (item.price.toLocaleString()+' تومان') : '';
+  const disc = item.hunter_discount_pct ? (item.hunter_discount_pct+'% زیر قیمت') : '';
+  const city = item.city||'';
+  let msg='';
+  if(isVip){
+    const msgs=[
+      `<div class="tira-head"><div class="tira-avatar">🧠</div><div class="tira-name">${TIRA_NAME} — دستیار شکار</div></div>سلام! من ${TIRA_NAME} هستم 👋 یه شکار خفن پیدا کردم! 😍<br><b>${esc(title.slice(0,60))}</b><br>${price} · ${disc} · ${esc(city)}<br>بذار مخشو بزنم ببینم می‌تونم با قیمت خودمون بخرم؟ 🔥`,
+      `<div class="tira-head"><div class="tira-avatar">🎯</div><div class="tira-name">${TIRA_NAME}</div></div>داداش ببین چی گیر آوردم! 🎯<br><b>${esc(title.slice(0,60))}</b><br>${disc} ارزون‌تر از بازار سالمه! برم مذاکره؟ 😎`,
+      `<div class="tira-head"><div class="tira-avatar">🚀</div><div class="tira-name">${TIRA_NAME}</div></div>لعنتی چقدر سفته! 🚀<br><b>${esc(title.slice(0,60))}</b><br>${price} — ${disc}<br>می‌زنم بهش؟`,
+    ];
+    msg = msgs[Math.floor(Math.random()*msgs.length)];
+  } else {
+    msg = `<div class="tira-head"><div class="tira-avatar">🧠</div><div class="tira-name">${TIRA_NAME}</div></div>یادته هفته پیش اینو دیدیم؟ 🤔<br><b>${esc(title.slice(0,60))}</b><br>هنوز پیام نرفته بهش! بذار یه سر بزنم ببینم هنوز هست؟`;
+  }
+  div.innerHTML = `${msg}<div class="row"><button class="btn sm ok" onclick="hunterToastAction('${esc(item.token)}','go')">بزن بریم 💬</button><button class="btn sm gray" onclick="this.closest('.hunter-toast').remove()">بعداً</button><a class="btn sm gray" href="${esc(item.url||'')}" target="_blank" style="text-decoration:none">مشاهده ↗</a></div>`;
+  box.prepend(div);
+  setTimeout(()=>{ try{ div.remove(); }catch(e){} }, 18000);
+  _hunterBadge++; updateHunterBadge();
+  playAlert(isVip?'vip':'help');
+}
+async function hunterToastAction(token, act){
+  // حذف توست
+  const box=$('hunter-toasts'); if(box) box.innerHTML='';
+  _hunterBadge=0; updateHunterBadge();
+  if(act==='go'){
+    try{
+      const r = await api('/api/hunter/negotiate/'+encodeURIComponent(token), {method:'POST', body:'{}'});
+      toast(r.message||'مذاکره ارسال شد');
+    }catch(e){ toast('❌ '+e.message,false); }
+  }
+}
+async function pollHunterFab(){
+  try{
+    const vip = await api('/api/hunter/vip?limit=10');
+    const items = vip.vip||[];
+    for(const it of items){
+      if(!_hunterSeen.has(it.token)){
+        _hunterSeen.add(it.token);
+        // فقط اگر جدید باشد و کمتر از 2 دقیقه پیش دیده شده؟ فعلا همه جدید را نشان بده اگر اولین بار نیست
+        if(_hunterSeen.size>1) showHunterToast(it, 'vip');
+      }
+    }
+    // محدود نگه دار
+    if(_hunterSeen.size>200){ _hunterSeen = new Set([..._hunterSeen].slice(-100)); }
+  }catch(e){}
+  try{
+    const wk = await api('/api/hunter/recheck-week?limit=8');
+    const need = (wk.items||[]).filter(x=>x.needs_action);
+    if(need.length>0){
+      // فقط یکی را نشان بده هر 30 ثانیه
+      const one = need[0];
+      if(!one._shownWeek){
+        one._shownWeek=true;
+        showHunterToast(one, 'week');
+      }
+    }
+  }catch(e){}
+}
+
+// Enter to send + تیرا مینی چت
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = $('ai-chat-input');
+  if(inp) inp.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); aiSend(); }});
+  const miniInp = $('tira-mini-inp');
+  if(miniInp) miniInp.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); tiraMiniSend(); }});
+  // شروع polling تیرا FAB
+  setTimeout(pollHunterFab, 4000);
+  setInterval(pollHunterFab, 10000);
+});
+// auto load when tab clicked — handled via nav onclick wrapper below
+const _origTabClick = null;
 
 function resolveTheme(){
   const mode = localStorage.getItem('theme') || 'auto';
