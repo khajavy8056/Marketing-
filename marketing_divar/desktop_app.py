@@ -20,7 +20,7 @@ from .paths import apply_runtime_paths, user_data_dir
 from .brand import APP_NAME_EN, APP_NAME_FA, PORT
 
 APP_TITLE = f"🧠 تیرا - دستیار شکار حرفه‌ای | {APP_NAME_FA}"
-VERSION = "3.4.1"
+VERSION = "3.4.3-tira-responsive"
 
 
 def _ensure_runtime() -> Path:
@@ -183,9 +183,19 @@ def _open_tkinter(url: str, port: int):
 
     root = tk.Tk()
     root.title(APP_TITLE)
-    root.geometry("560x680")
-    root.resizable(False, False)
+    root.geometry("600x620")
+    root.minsize(520, 480)
+    root.resizable(True, True)
     root.configure(bg="#0f172a")
+    try:
+        root.update_idletasks()
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+        x = (sw - 600) // 2
+        y = (sh - 620) // 2
+        root.geometry(f"600x620+{x}+{y}")
+    except Exception:
+        pass
     try:
         ico = Path(__file__).resolve().parent.parent / "installer" / "app.ico"
         if ico.exists():
@@ -194,29 +204,47 @@ def _open_tkinter(url: str, port: int):
         pass
 
     main = tk.Frame(root, bg="#0f172a")
-    main.pack(fill="both", expand=True, padx=24, pady=24)
+    main.pack(fill="both", expand=True, padx=0, pady=0)
+    main.columnconfigure(0, weight=1)
+    main.rowconfigure(3, weight=1)
 
-    tk.Label(main, text="🧠 تیرا", font=("Segoe UI", 32, "bold"), fg="#a78bfa", bg="#0f172a").pack(pady=(20, 4))
-    tk.Label(main, text="دستیار شکار حرفه‌ای تو! 🎯", font=("Segoe UI", 14), fg="#e2e8f0", bg="#0f172a").pack()
-    tk.Label(main, text=f"{APP_NAME_FA} — نسخه دسکتاپ مستقل\nبدون نیاز به مرورگر", font=("Segoe UI", 10),
-             fg="#94a3b8", bg="#0f172a", justify="center").pack(pady=(12, 16))
+    # header - grid row 0
+    hdr = tk.Frame(main, bg="#0f172a")
+    hdr.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 4))
+    hdr.columnconfigure(0, weight=1)
+    tk.Label(hdr, text="🧠 تیرا", font=("Segoe UI", 20, "bold"), fg="#a78bfa", bg="#0f172a", anchor="w").pack(anchor="w")
+    tk.Label(hdr, text="دستیار شکار حرفه‌ای — نسخه دسکتاپ مستقل", font=("Segoe UI", 10), fg="#e2e8f0", bg="#0f172a", anchor="w").pack(anchor="w")
+    tk.Label(hdr, text=f"{APP_NAME_FA} — بدون نیاز به مرورگر", font=("Segoe UI", 8),
+             fg="#94a3b8", bg="#0f172a", anchor="w").pack(anchor="w")
 
     status_var = tk.StringVar(value="در حال راه‌اندازی...")
-    tk.Label(main, textvariable=status_var, font=("Segoe UI", 10), fg="#38bdf8", bg="#0f172a", wraplength=500).pack(pady=6)
+    tk.Label(main, textvariable=status_var, font=("Segoe UI", 9, "bold"), fg="#38bdf8", bg="#0f172a", anchor="w").grid(row=1, column=0, sticky="ew", padx=16, pady=2)
 
-    bar_chrome = ttk.Progressbar(main, length=480, mode="determinate", maximum=100)
-    bar_chrome.pack(pady=4)
-    lbl_chrome = tk.Label(main, text="Chromium: بررسی...", font=("Segoe UI", 9), fg="#cbd5e1", bg="#0f172a")
-    lbl_chrome.pack()
+    prog_frame = tk.Frame(main, bg="#0f172a")
+    prog_frame.grid(row=2, column=0, sticky="ew", padx=16, pady=2)
+    prog_frame.columnconfigure(0, weight=1)
 
-    bar_nlu = ttk.Progressbar(main, length=480, mode="determinate", maximum=100)
-    bar_nlu.pack(pady=4)
-    lbl_nlu = tk.Label(main, text="مدل تیرا: بررسی...", font=("Segoe UI", 9), fg="#cbd5e1", bg="#0f172a")
-    lbl_nlu.pack()
+    lbl_chrome = tk.Label(prog_frame, text="Chromium: بررسی...", font=("Segoe UI", 8), fg="#cbd5e1", bg="#0f172a", anchor="w")
+    lbl_chrome.pack(fill="x")
+    bar_chrome = ttk.Progressbar(prog_frame, mode="determinate", maximum=100)
+    bar_chrome.pack(fill="x", pady=1)
 
-    logbox = tk.Text(main, height=12, font=("Consolas", 8), bg="#1e293b", fg="#e2e8f0", relief="flat")
-    logbox.pack(fill="both", expand=True, pady=12)
-    logbox.configure(state="disabled")
+    lbl_nlu = tk.Label(prog_frame, text="مدل تیرا: بررسی...", font=("Segoe UI", 8), fg="#cbd5e1", bg="#0f172a", anchor="w")
+    lbl_nlu.pack(fill="x", pady=(4, 0))
+    bar_nlu = ttk.Progressbar(prog_frame, mode="determinate", maximum=100)
+    bar_nlu.pack(fill="x", pady=1)
+
+    # log expandable
+    log_frame = tk.Frame(main, bg="#0f172a")
+    log_frame.grid(row=3, column=0, sticky="nsew", padx=16, pady=6)
+    log_frame.columnconfigure(0, weight=1)
+    log_frame.rowconfigure(0, weight=1)
+
+    logbox = tk.Text(log_frame, font=("Consolas", 8), bg="#1e293b", fg="#e2e8f0", relief="flat", wrap="word")
+    logbox.grid(row=0, column=0, sticky="nsew")
+    sb = ttk.Scrollbar(log_frame, orient="vertical", command=logbox.yview)
+    sb.grid(row=0, column=1, sticky="ns")
+    logbox.configure(yscrollcommand=sb.set, state="disabled")
 
     def log(msg: str):
         def _do():
@@ -225,19 +253,28 @@ def _open_tkinter(url: str, port: int):
             logbox.see("end")
             logbox.configure(state="disabled")
             status_var.set(msg[:90])
-        root.after(0, _do)
+        try:
+            root.after(0, _do)
+        except Exception:
+            print(msg)
 
     def upd_chrome(pct: int, txt: str):
         def _do():
             bar_chrome["value"] = pct
             lbl_chrome.configure(text=txt)
-        root.after(0, _do)
+        try:
+            root.after(0, _do)
+        except Exception:
+            pass
 
     def upd_nlu(pct: int, txt: str):
         def _do():
             bar_nlu["value"] = pct
             lbl_nlu.configure(text=txt)
-        root.after(0, _do)
+        try:
+            root.after(0, _do)
+        except Exception:
+            pass
 
     def open_panel():
         try:
@@ -252,16 +289,17 @@ def _open_tkinter(url: str, port: int):
         log(f"🌐 {url}")
 
     btn_frame = tk.Frame(main, bg="#0f172a")
-    btn_frame.pack(fill="x", pady=10)
+    btn_frame.grid(row=4, column=0, sticky="ew", padx=16, pady=8)
+    btn_frame.columnconfigure(0, weight=1)
 
-    tk.Button(btn_frame, text="🚀 باز کردن پنل تیرا", font=("Segoe UI", 11, "bold"),
+    tk.Button(btn_frame, text="🚀 باز کردن پنل تیرا", font=("Segoe UI", 10, "bold"),
               bg="#7c3aed", fg="white", activebackground="#6d28d9", relief="flat",
-              padx=20, pady=10, command=open_panel, cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 6))
-    tk.Button(btn_frame, text="خروج", font=("Segoe UI", 10), bg="#334155", fg="white",
-              relief="flat", padx=12, pady=10, command=root.destroy).pack(side="right")
+              padx=10, pady=8, command=open_panel, cursor="hand2").grid(row=0, column=0, sticky="ew", padx=(0, 6))
+    tk.Button(btn_frame, text="خروج", font=("Segoe UI", 9), bg="#334155", fg="white",
+              relief="flat", padx=10, pady=8, command=root.destroy).grid(row=0, column=1)
 
-    tk.Label(main, text=f"📍 {url}\n📱 موبایل همین Wi-Fi: http://<IP>:{port}\nپروفایل‌ها در Chromium جدا",
-             font=("Segoe UI", 8), fg="#64748b", bg="#0f172a", justify="center").pack(pady=(8, 0))
+    tk.Label(main, text=f"📍 {url} | 📱 موبایل همین Wi-Fi: http://<IP>:{port}",
+             font=("Segoe UI", 7), fg="#64748b", bg="#0f172a", wraplength=560).grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 8))
 
     def worker():
         try:
