@@ -132,14 +132,9 @@ def search(client, query: str, cities=None, page: int = 1,
            category: Optional[str] = None) -> List[Dict[str, Any]]:
     """جستجو روی شیپور — کامل مثل دیوار، با دسته و شهر و صفحه"""
     base = str(getattr(client, "base", "") or "")
-    # اگر کلاینت تستی با base خاص است، اجازه بده
-    if base and "divar.ir" not in base and "sheypoor" not in base and "test" not in base.lower():
-        # اگر base دیوار نیست ولی تست نیست، همچنان سعی کن (چون anon client base دیوار دارد)
-        # فقط اگر base شامل ring باشد، skip نکن چون anon base دیوار دارد
-            pass
-        # در حالت عادی anon base دیوار است، پس باید اجازه بده
+    # اگر کلاینت تستی با base خاص است، اجازه بده — anon base دیوار دارد
+    if base and "divar.ir" not in base and "sheypoor.com" not in base and "test" not in base.lower():
         if "divar.ir" not in base and "sheypoor.com" not in base and "api" not in base:
-            # برای تست‌های unit که base تستی دارند
             if not base.startswith("http"):
                 return []
 

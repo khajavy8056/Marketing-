@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """سیستم جمع‌آوری سرنخ و شماره تماس از آگهی‌های دیوار."""
 
-__version__ = "3.7.0-ip-reset-profitability"
+__version__ = "3.8.0-final-no-bug"
 
 import sys
 

@@ -182,46 +182,6 @@ SHEYPOOR_SLUG: Dict[str, str] = {
     "fish": "animals-pet",
 }
 
-RING_SLUG: Dict[str, str] = {
-    "real-estate": "real-estate",
-    "apartment-sell": "real-estate",
-    "apartment-rent": "real-estate",
-    "house-villa-sell": "real-estate",
-    "house-villa-rent": "real-estate",
-    "office-sell": "real-estate",
-    "office-rent": "real-estate",
-    "shop-sell": "real-estate",
-    "shop-rent": "real-estate",
-    "plot-old": "real-estate",
-    "vehicles": "vehicles",
-    "light": "vehicles",
-    "motorcycles": "vehicles",
-    "truck": "vehicles",
-    "classic-car": "vehicles",
-    "heavy-vehicles": "vehicles",
-    "auto-parts-accessories": "vehicles",
-    "rental-car": "vehicles",
-    "boat": "vehicles",
-    "electronic-devices": "digital",
-    "mobile-tablet": "digital",
-    "mobile-phones": "digital",
-    "tablet": "digital",
-    "computers": "digital",
-    "laptops": "digital",
-    "game-consoles-and-video-games": "digital",
-    "audio-video": "digital",
-    "home-kitchen": "home",
-    "furniture-wood": "home",
-    "services": "services",
-    "jobs": "jobs",
-    "personal": "personal",
-    "clothing-and-shoes": "personal",
-    "entertainment": "entertainment",
-    "social-services": "social",
-    "tools-materials-equipment": "industrial",
-    "animals": "home",
-}
-
 
 def normalize_slug(raw: Optional[str]) -> str:
     s = (raw or "").strip().lower().strip("/")
@@ -273,8 +233,6 @@ def platform_slug(canonical: Optional[str], platform: str = "divar") -> str:
         return ""
     if plat == "sheypoor":
         return SHEYPOOR_SLUG.get(s, s)
-    if plat == "ring":
-        return RING_SLUG.get(s, s)
     return s
 
 

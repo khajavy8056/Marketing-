@@ -231,7 +231,6 @@ _PLATFORM_SLUG = {
         "bandar-anzali": "anzali",
         "gonbad-kavus": "gonbad",
     },
-    "ring": {},
 }
 
 
