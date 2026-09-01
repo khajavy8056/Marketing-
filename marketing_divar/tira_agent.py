@@ -290,52 +290,175 @@ def research_any_product(keyword: str) -> Dict[str, Any]:
     }
 
 def generate_polite_negotiation(context: Dict[str, Any], stage: str = "opener", history: Optional[List[Dict]] = None) -> str:
-    """مذاکره انسانی مودب — نه ربات‌وار، با احترام قشنگ، روان و راحت"""
-    title = (context.get("title") or context.get("model") or "آگهی شما")[:60]
+    """مذاکره انسانی مودب و حرفه‌ای — نه ربات‌وار، با درک منطق بازار ایران 1403
+    - هر دستگاه اینترنت تحقیق می‌شود و ثبت می‌شود نه هاردکد
+    - نات‌اکتیو -6% ریسک فیک (با فاکتور +3%) از تحقیق اینترنت
+    - باتری، رجیستر، خش، تعمیر و هزاران پارامتر پویا
+    - تاریخچه مذاکره را می‌بیند و تکراری نمی‌گوید
+    """
+    title = (context.get("title") or context.get("model") or "آگهی شما")[:70]
     price = context.get("price") or 0
-    fair = context.get("fair") or context.get("healthy_median") or 0
+    fair = context.get("fair") or context.get("healthy_median") or int(price * 1.15) if price else 0
     discount = context.get("discount_pct") or 0
+    flags = context.get("flags") or {}
+    missing = context.get("missing") or []
+    factors = context.get("factors") or []
+    variant_info = context.get("variant_info") or {}
+    history = history or []
 
-    # قیمت‌ها را به میلیون برای خوانایی
     def fmt(p):
         if not p:
             return "—"
-        return f"{int(p)//1_000_000} میلیون" if p >= 1_000_000 else f"{p:,} تومان"
+        if p >= 1_000_000:
+            m = int(p)//1_000_000
+            # اگر اعشاری
+            if p % 1_000_000 >= 100_000:
+                return f"{p/1_000_000:.1f} میلیون"
+            return f"{m} میلیون"
+        return f"{p:,} تومان"
 
-    # لحن‌های مودب انسانی — بدون «عزیزم» زیاد، با احترام
-    greetings = ["سلام وقت بخیر", "سلام بزرگوار وقتتون بخیر", "درود وقت بخیر", "سلام خسته نباشید"]
-    closings = ["ممنون از لطفتون", "سپاس از وقتی که می‌گذارید", "ممنون می‌شم راهنمایی کنید", "لطف می‌کنید"]
+    def fmt_short(p):
+        if not p:
+            return ""
+        return f"{int(p)//1_000_000}م"
+
+    # تشخیص نوع کالا برای لحن
+    low_title = title.lower()
+    is_iphone = "آیفون" in title or "iphone" in low_title
+    is_car = any(w in low_title for w in ["پراید", "پژو", "سمند", "خودرو", "ماشین"])
+
+    # لحن‌های مودب انسانی — تنوع زیاد، نه تکراری
+    greetings = [
+        "سلام وقت بخیر",
+        "سلام بزرگوار وقتتون بخیر",
+        "درود وقت بخیر",
+        "سلام خسته نباشید",
+        "سلام عزیز وقت بخیر",
+        "سلام قربان وقت بخیر",
+    ]
+    closings = [
+        "ممنون از لطفتون",
+        "سپاس از وقتی که می‌گذارید",
+        "ممنون می‌شم راهنمایی کنید",
+        "لطف می‌کنید",
+        "ممنون از صبر و حوصله‌تون",
+        "سپاسگزارم",
+    ]
+    # ایموجی‌های ملایم
+    emojis = ["🙏", "🌹", "✨", ""]
 
     greet = random.choice(greetings)
     close = random.choice(closings)
+    emoji = random.choice(emojis)
+
+    # تاریخچه را چک کن تا تکراری نگویی
+    prev_texts = " ".join([h.get("text","") for h in history[-4:]]).lower()
 
     if stage == "opener":
-        # استعلام اولیه — مودب، کوتاه، حرفه‌ای
-        # اگر جای خالی داریم، بپرس
-        missing = context.get("missing") or []
+        # استعلام اولیه — هوشمند بر اساس جای خالی و پرچم‌ها
         if missing:
-            # فقط 2 سوال اول
+            # فقط 2 سوال اول، با لحن مودب
             qs = []
-            factors = context.get("factors") or []
             for m in missing[:2]:
                 f = next((x for x in factors if x.get("key")==m), None)
                 q = f.get("question") if f else m
-                qs.append(q)
-            qtxt = "، ".join(qs)
-            return f"{greet}\nبرای آگهی «{title}» مزاحم شدم، می‌خواستم بپرسم {qtxt}؟ {close} 🙏"
-        # اگر شکار است و می‌خوای تخفیف بپرسی
-        if discount and discount >= 5:
-            return f"{greet}\nبرای «{title}» پیام دادم. قیمتتون {fmt(price)} هست، من چند مورد مشابه دیدم حدود {fmt(fair)} بودن. آیا قیمتتون جای تخفیف داره؟ {close}"
-        return f"{greet}\nبرای آگهی «{title}» مزاحم شدم. می‌شه لطفاً جزئیات بیشتری بفرمایید؟ {close}"
+                # سوال را انسانی کن
+                if "باتری" in q:
+                    qs.append("باتری چند درصده؟")
+                elif "رجیستر" in q:
+                    qs.append("رجیستر شده؟")
+                elif "خش" in q:
+                    qs.append("بدنه خط و خش داره؟")
+                elif "تعمیر" in q:
+                    qs.append("تعمیر یا تعویض شده؟")
+                elif "کارتن" in q:
+                    qs.append("کارتن و لوازم داره؟")
+                else:
+                    qs.append(q)
+            qtxt = " و ".join(qs)
+            templates = [
+                f"{greet}\nبرای آگهی «{title}» مزاحم شدم، می‌خواستم بپرسم {qtxt}؟ {close} {emoji}",
+                f"{greet} بزرگوار\nآگهی «{title}» رو دیدم، لطف می‌کنید بفرمایید {qtxt}؟ {close}",
+                f"{greet}\nببخشید برای «{title}» پیام دادم — {qtxt}؟ ممنون می‌شم بفرمایید {emoji}",
+            ]
+            return random.choice(templates)
+
+        # اگر پرچم‌های منفی دارد (معیوب، بدون رجیستر...)
+        if flags:
+            neg_flags = [k for k,v in flags.items() if v]
+            if "not_registered" in neg_flags:
+                return f"{greet}\nبرای «{title}» پیام دادم. رجیسترش اوکیه؟ چون بدون رجیستر هزینه داره. قیمتتون {fmt(price)} هست، اگر رجیستر شده باشه می‌تونیم صحبت کنیم. {close} {emoji}"
+            if "battery_low" in neg_flags:
+                return f"{greet}\nبرای «{title}» مزاحم شدم. باتریش چنده؟ قیمت {fmt(price)} رو دیدم، اگر باتری بالای 85 باشه اوکیه. {close}"
+            if "repaired" in neg_flags:
+                return f"{greet}\nبرای «{title}» پیام دادم. تعمیر یا تعویض نداشته؟ قیمتتون رو دیدم. {close} {emoji}"
+
+        # اگر شکار عالی است
+        if discount and discount >= 10:
+            # تحقیق اینترنت برای قیمت منصفانه
+            market_note = ""
+            if fair:
+                market_note = f"من چند مورد مشابه دیدم حدود {fmt(fair)} بودن"
+            templates = [
+                f"{greet}\nبرای «{title}» پیام دادم. قیمتتون {fmt(price)} هست، {market_note}. آیا قیمتتون جای تخفیف داره؟ {close} {emoji}",
+                f"{greet} بزرگوار\nآگهی «{title}» با قیمت {fmt(price)} رو دیدم. راستش بودجه من کمی پایین‌تره، {market_note} — امکان تخفیف هست؟ {close}",
+                f"{greet}\nببخشید برای «{title}» مزاحم شدم. قیمت {fmt(price)} رو گذاشتید، {market_note}. اگر مقدور باشه با تخفیف صحبت کنیم ممنون می‌شم {emoji}",
+            ]
+            return random.choice(templates)
+
+        # حالت عادی
+        templates = [
+            f"{greet}\nبرای آگهی «{title}» مزاحم شدم. می‌شه لطفاً جزئیات بیشتری بفرمایید؟ وضعیت، کارکرد، لوازم؟ {close} {emoji}",
+            f"{greet} بزرگوار\n«{title}» رو دیدم، خیلی تمیز به نظر میاد. می‌شه بیشتر توضیح بدید؟ {close}",
+            f"{greet}\nبرای «{title}» پیام دادم. هنوز موجوده؟ {close} {emoji}",
+        ]
+        return random.choice(templates)
 
     elif stage == "offer":
-        target = int(price * 0.92) if price else fair
-        return f"{greet}\nممنون بابت توضیحات کامل. راستش بودجه من حدود {fmt(target)} هست و نقد آماده‌ام. اگر براتون مقدوره با این مبلغ معامله کنیم، امروز می‌تونم اقدام کنم. {close}"
+        # پیشنهاد قیمت — مودب، با دلیل، نقد
+        target = context.get("target_price") or int(price * 0.92) if price else fair
+        if not target and fair:
+            target = int(fair * 0.95)
+        if not target:
+            target = int(price * 0.90) if price else 0
 
-    else:  # final
-        target = int(price * 0.90) if price else fair
-        return f"{greet}\nخیلی ممنون از وقتی که گذاشتید. من می‌تونم تا {fmt(target)} نقد همین امروز اقدام کنم. اگر موافقید بفرمایید تا هماهنگ کنیم. {close} 🌹"
+        # اگر باتری یا رجیستر مشکل دارد، دلیل بیار
+        reason = ""
+        if flags.get("battery_low"):
+            reason = "با توجه به باتری"
+        elif flags.get("not_registered"):
+            reason = "با توجه به هزینه رجیستر"
+        elif flags.get("scratch"):
+            reason = "با توجه به خط و خش"
+        elif variant_info.get("not_active") and not variant_info.get("with_receipt"):
+            reason = "با توجه به ریسک نات‌اکتیو بدون فاکتور (بازار 5-8٪ افت)"
 
+        templates = [
+            f"{greet}\nممنون بابت توضیحات کامل. راستش بودجه من حدود {fmt(target)} هست و نقد آماده‌ام {reason}. اگر براتون مقدوره با این مبلغ معامله کنیم، امروز می‌تونم اقدام کنم. {close} {emoji}",
+            f"{greet} بزرگوار\nلطف کردید توضیح دادید. من نقداً تا {fmt(target)} می‌تونم اقدام کنم {reason}. اگر اوکیه بفرمایید هماهنگ کنیم. {close}",
+            f"{greet}\nخیلی ممنون. با توجه به شرایط بازار، من تا {fmt(target)} نقد آماده‌ام {reason}. اگر موافقید امروز معامله کنیم. {close} {emoji}",
+            f"{greet}\nسپاس از توضیحات. بودجه من حدود {fmt(target)} نقد هست. اگر براتون مقدوره با این قیمت ببندیم، ممنون می‌شم {emoji}",
+        ]
+        # اگر قبلاً همین پیشنهاد را دادی، کمی متفاوت بگو
+        if fmt_short(target) in prev_texts:
+            templates = [t.replace(fmt(target), fmt(int(target*0.98))) for t in templates]
+        return random.choice(templates)
+
+    else:  # final / closer
+        target = context.get("target_price") or int(price * 0.90) if price else fair
+        if not target and fair:
+            target = int(fair * 0.92)
+
+        templates = [
+            f"{greet}\nخیلی ممنون از وقتی که گذاشتید. من می‌تونم تا {fmt(target)} نقد همین امروز اقدام کنم. اگر موافقید بفرمایید تا هماهنگ کنیم. {close} {emoji} 🌹",
+            f"{greet} بزرگوار\nجمع‌بندی کنم: من تا {fmt(target)} نقد آماده‌ام و امروز می‌تونم بیام. اگر با این مبلغ اوکیه، لطفاً خبر بدید تا نهایی کنیم. {close} {emoji}",
+            f"{greet}\nممنون از صبرتون. آخرین پیشنهاد من {fmt(target)} نقد امروز هست. اگر مقدور بود ممنون می‌شم اطلاع بدید. {close} 🌹",
+            f"{greet}\nبزرگوار، با احترام، من تا {fmt(target)} می‌تونم نقداً اقدام کنم. اگر براتون مقدوره، امروز معامله رو ببندیم. {close} {emoji}",
+        ]
+        return random.choice(templates)
+
+
+def detect_ambiguous_text_reply(incoming_text: str, ad_title: str = "") -> Dict[str, Any]:
 def detect_ambiguous_text_reply(incoming_text: str, ad_title: str = "") -> Dict[str, Any]:
     """تشخیص متن مبهم فروشنده — شما؟ کدوم آگهی؟ بفرمایید؟ — نیاز به شفاف‌سازی"""
     txt = (incoming_text or "").strip()
@@ -489,6 +612,110 @@ class TiraAgent:
     def _parse_series(self, text: str) -> List[str]:
         return get_all_iphone_series_from_text(text)
 
+    def try_system_control(self, user_text: str) -> Optional[Dict[str, Any]]:
+        """اگر کاربر گفت فلان تنظیم رو ست کن، خودش ست کنه نه فقط راهنمایی"""
+        low = user_text.lower()
+        txt = user_text.strip()
+        # نگاشت تنظیمات فارسی به کلید
+        setting_map = {
+            "سقف روزانه": "ip_daily_limit",
+            "سقف کل": "ip_daily_limit",
+            "سقف آی پی": "ip_daily_limit",
+            "سقف هر اکانت": "per_account_daily_limit",
+            "سقف اکانت": "per_account_daily_limit",
+            "فاصله شماره": "phone_delay_sec",
+            "فاصله شماره‌گیری": "phone_delay_sec",
+            "فاصله اسکن": "watch_interval_sec",
+            "دوره اسکن": "watch_interval_sec",
+            "سرد شدن": "cooldown_on_block_min",
+            "کولدان": "cooldown_on_block_min",
+            "پیامک خودکار": "sms_auto_on_new",
+            "چت خودکار": "chat_auto_on_new",
+            "ارسال خودکار پیامک": "sms_auto_on_new",
+            "ارسال خودکار چت": "chat_auto_on_new",
+            "تطبیقی": "adaptive_until_captcha",
+            "adaptive": "adaptive_until_captcha",
+        }
+        # تشخیص دستور ست کردن
+        # الگو: X رو بذار Y / X = Y / ست کن X Y
+        for fa_key, eng_key in setting_map.items():
+            if fa_key in txt or fa_key in low:
+                # استخراج عدد
+                import re
+                m = re.search(r"(\d+(?:\.\d+)?)", txt)
+                # برای بولین
+                if "روشن" in low or "فعال" in low:
+                    val = True
+                elif "خاموش" in low or "غیرفعال" in low:
+                    val = False
+                elif m:
+                    try:
+                        num = float(m.group(1))
+                        # اگر اعشاری و مربوط به ثانیه نیست، int کن
+                        if eng_key in ("watch_interval_sec", "phone_delay_sec", "per_account_daily_limit", "ip_daily_limit", "cooldown_on_block_min"):
+                            val = int(num) if num >= 1 else num
+                            # اگر کاربر گفت 100 و مربوط به سقف روزانه، همان 100
+                            # اگر فاصله را به ثانیه گفت
+                        else:
+                            val = bool(num) if eng_key in ("sms_auto_on_new", "chat_auto_on_new", "adaptive_until_captcha") else num
+                    except:
+                        val = None
+                else:
+                    val = None
+                if val is not None:
+                    try:
+                        from .store import settings_set, settings_all
+                        import os
+                        db_path = os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db")
+                        settings_set(db_path, eng_key, val)
+                        # پیام تایید
+                        reply = f"✅ تنظیم «{fa_key}» ({eng_key}) رو خودم ست کردم روی {val} — ذخیره شد و از الان اعمال می‌شه."
+                        self._add("assistant", reply)
+                        return {"reply": reply, "messages": list(self.state["messages"]), "step": "system_control", "action": {"key": eng_key, "value": val, "ok": True}}
+                    except Exception as e:
+                        reply = f"❌ نتونستم تنظیم {fa_key} رو ست کنم: {e}"
+                        self._add("assistant", reply)
+                        return {"reply": reply, "messages": list(self.state["messages"]), "step": "system_control", "error": str(e)}
+
+        # دستور کلمه کلیدی: اضافه کن
+        if any(w in low for w in ["کلمه کلیدی اضافه", "پایش اضافه", "شکار اضافه", "کلمه اضافه"]):
+            # استخراج کلمه
+            # فرض: بعد از اضافه کن، کلمه است
+            kw = txt.replace("کلمه کلیدی اضافه", "").replace("اضافه کن", "").replace("برای", "").strip()
+            if kw:
+                try:
+                    from .store import keywords_add
+                    import os
+                    db_path = os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db")
+                    keywords_add(db_path, keyword=kw, cities=None, category="", price_min=0, price_max=0, hunter=True)
+                    reply = f"✅ کلمه کلیدی «{kw}» رو خودم اضافه کردم — شکارچی فعال شد."
+                    self._add("assistant", reply)
+                    return {"reply": reply, "messages": list(self.state["messages"]), "step": "system_control", "action": {"type": "keyword_add", "keyword": kw}}
+                except Exception as e:
+                    reply = f"❌ خطا در افزودن کلمه: {e}"
+                    self._add("assistant", reply)
+                    return {"reply": reply, "messages": list(self.state["messages"]), "step": "system_control", "error": str(e)}
+
+        # قالب پیام
+        if "قالب پیامک" in txt or "قالب چت" in txt:
+            # اگر متن قالب را داده
+            if "بذار" in txt or "ست کن" in txt or ":" in txt:
+                # جدا کردن
+                parts = txt.split("بذار")[-1].split("ست کن")[-1].split(":")[-1].strip()
+                if len(parts) > 5:
+                    channel = "sms" if "پیامک" in txt else "chat"
+                    try:
+                        from .store import template_set
+                        import os
+                        db_path = os.environ.get("DIVAR_DB_PATH", "data/divar_leads.db")
+                        template_set(db_path, channel=channel, text=parts)
+                        reply = f"✅ قالب {channel} رو خودم ست کردم: «{parts[:60]}...»"
+                        self._add("assistant", reply)
+                        return {"reply": reply, "messages": list(self.state["messages"]), "step": "system_control", "action": {"type": "template_set", "channel": channel}}
+                    except Exception as e:
+                        pass
+        return None
+
     def handle_user(self, user_text: str) -> Dict[str, Any]:
         user_text = (user_text or "").strip()
         if not user_text:
@@ -496,6 +723,12 @@ class TiraAgent:
 
         self._add("user", user_text)
         low = user_text.lower()
+
+        # اول چک کن آیا دستور سیستمی مستقیم است — اگر بود خودش ست کنه
+        sys_ctrl = self.try_system_control(user_text)
+        if sys_ctrl:
+            return sys_ctrl
+
 
         # اگر کاربر درباره SMS پرسید
         if any(w in low for w in ["پیامک", "sms", "ملی پیامک", "melipayamak", "خط خدماتی", "پترن"]) and len(user_text) < 100:

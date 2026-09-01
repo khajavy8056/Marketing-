@@ -136,7 +136,6 @@ def search(client, query: str, cities=None, page: int = 1,
     if base and "divar.ir" not in base and "sheypoor" not in base and "test" not in base.lower():
         # اگر base دیوار نیست ولی تست نیست، همچنان سعی کن (چون anon client base دیوار دارد)
         # فقط اگر base شامل ring باشد، skip نکن چون anon base دیوار دارد
-        if "ring.ir" in base:
             pass
         # در حالت عادی anon base دیوار است، پس باید اجازه بده
         if "divar.ir" not in base and "sheypoor.com" not in base and "api" not in base:

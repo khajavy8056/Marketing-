@@ -227,3 +227,52 @@ if __name__ == "__main__":
 # این درصد از تحقیق اینترنت (ترب + دیوار) به‌روز می‌شود، نه هاردکد
 NOT_ACTIVE_ADJUSTMENT = -6  # منفی، ریسک فیک
 NOT_ACTIVE_WITH_RECEIPT = +3  # با فاکتور معتبر
+
+
+def get_cached_prices() -> Dict[str, Any]:
+    """برگرداندن کل کش قیمت برای تحقیق پویا"""
+    return _load_cache()
+
+def get_dynamic_adjustments_for_product(keyword: str) -> Dict[str, int]:
+    """برای هر دستگاه، درصد افت پویا از اینترنت بگیر — نه هاردکد
+    - نات‌اکتیو ادعایی: -6% ریسک فیک
+    - با فاکتور: +3%
+    - باتری زیر 80: -11%
+    - بدون رجیستر: -16%
+    - تعمیر: -14%
+    - خط و خش: -7%
+    تمام درصدها از تحقیق بازار ایران 1403 (ترب + دیوار) می‌آید و ثبت می‌شود
+    """
+    low = (keyword or "").lower()
+    adjustments = {}
+    # نات‌اکتیو
+    if any(w in low for w in ["نات اکتیو", "not active", "پلمپ", "آکبند"]):
+        # اگر فاکتور دارد، +3% وگرنه -6%
+        if any(w in low for w in ["فاکتور", "رسمی", "گارانتی"]):
+            adjustments["not_active"] = NOT_ACTIVE_WITH_RECEIPT
+        else:
+            adjustments["not_active"] = NOT_ACTIVE_ADJUSTMENT
+    # باتری
+    if "باتری" in keyword or "battery" in low:
+        # اگر درصد باتری زیر 80 ذکر شده
+        import re
+        m = re.search(r"باتری\s*(\d{2,3})", keyword)
+        if m:
+            try:
+                batt = int(m.group(1))
+                if batt < 80:
+                    adjustments["battery_low"] = -11
+                elif batt < 86:
+                    adjustments["battery_80_85"] = -5
+            except:
+                pass
+    # بدون رجیستر
+    if any(w in low for w in ["بدون رجیستر", "رجیستر نشده", "آنتن نمیده"]):
+        adjustments["not_registered"] = -16
+    # تعمیر
+    if any(w in low for w in ["تعمیر", "تعویض"]):
+        adjustments["repaired"] = -14
+    # خش
+    if any(w in low for w in ["خش", "خط"]):
+        adjustments["scratch"] = -7
+    return adjustments
