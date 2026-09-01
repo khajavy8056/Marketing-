@@ -212,7 +212,7 @@ class AccountManager:
                             "profile_saved_at": prof.get("profile_saved_at") or "",
                             "profile_open": bool(prof.get("profile_open")),
                             "platforms": prof.get("platforms") or {},
-                            "platforms_enabled": prof.get("platforms_enabled") or {"divar": True, "sheypoor": True, "ring": False},
+                            "platforms_enabled": prof.get("platforms_enabled") or {"divar": True, "sheypoor": True},
                             "phones_today": account_quota_today(con, name),
                             "last_probe_at": rec.get("last_probe_at") or "",
                             "last_probe_state": rec.get("last_probe_state") or "",

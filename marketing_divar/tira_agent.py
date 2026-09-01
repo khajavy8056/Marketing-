@@ -117,7 +117,7 @@ SYSTEM_GUIDES = {
 **برای هر کالا (نه فقط موبایل):**
 - تیرا اول نوع کالا را تشخیص می‌دهد (موبایل، خودرو، لپ‌تاپ، لوازم خانگی، ...)
 - واریانت‌ها را از دانش `market_research.py` می‌گیرد (مثلاً آیفون 13 → عادی/مینی/پرو/پرومکس/نات‌اکتیو)
-- عوامل افت قیمت را جدا می‌داند: باتری زیر 80٪ -11٪، بدون رجیستر -16٪، تعمیر -14٪، نات‌اکتیو +8٪، با کارتن +3٪ و ...
+- عوامل افت قیمت را جدا می‌داند: باتری زیر 80٪ -11٪، بدون رجیستر -16٪، تعمیر -14٪، نات‌اکتیو -6٪ (ریسک فیک، با فاکتور +3٪)، با کارتن +3٪ و ...
 - قیمت نو را از ترب می‌گیرد، دست دوم سالم را 15-25٪ زیر نو حساب می‌کند
 
 **تست قیمت:**
@@ -171,7 +171,7 @@ SYSTEM_GUIDES = {
 
 **مرحله 3 — ساخت تنظیمات پیشرفته:**
 - با تایید تو، تنظیمات با صدها پارامتر می‌سازد: good_pct، great_pct، suspicious_pct، adjustments برای هر عامل افت
-- مثلاً اگر باتری زیر 80٪ -11٪، بدون رجیستر -16٪، تعمیر -14٪، نات‌اکتیو +8٪
+- مثلاً اگر باتری زیر 80٪ -11٪، بدون رجیستر -16٪، تعمیر -14٪، نات‌اکتیو -6٪ (ریسک فیک، با فاکتور +3٪)
 - قیمت فروش منهای سود = حد خرید، بعد فیلتر شکارچی
 
 **مرحله 4 — موتور شکار:**
@@ -191,7 +191,7 @@ SYSTEM_GUIDES = {
 
 - **پنل SMS:** توضیح بالا
 - **تنظیمات:** watch_interval، phone_delay، per_account_daily، ip_daily_limit، cooldown، adaptive_until_captcha
-- **پلتفرم‌ها:** دیوار، شیپور (رینگ غیرفعال پیش‌فرض) — هر کدوم جدا خاموش/روشن
+- **پلتفرم‌ها:** دیوار، شیپور — هر کدوم جدا خاموش/روشن
 - **کلمات کلیدی:** دسته‌بندی بدون املاک، شهرها آبشاری کشویی با تیک، حداقل/حداکثر قیمت، شکارچی
 - **قالب پیام‌ها:** چت، پیامک، استعلام — با متغیر {title} {city} {price} — تیرا متن حرفه‌ای می‌نویسد
 - **صندوق پیام‌ها:** دریافت/ارسال اتومات، مذاکره تیرا، پاسخ‌ها، شکارهای VIP، هفته گذشته
@@ -208,7 +208,7 @@ GENERIC_FACTORS = [
     {"key": "scratch", "label": "خط و خش", "pct": -7, "words": ["خش", "خط"], "question": "خط و خش داره؟", "research": "خش 5-10٪ افت"},
     {"key": "repaired", "label": "تعمیر شده", "pct": -12, "words": ["تعمیر", "تعویض"], "question": "تعمیر شده؟", "research": "تعمیر 10-15٪ افت"},
     {"key": "with_box", "label": "با کارتن و لوازم", "pct": +4, "words": ["کارتن", "لوازم کامل"], "question": "کارتن داره؟", "research": "با کارتن 3-5٪ گران‌تر"},
-    {"key": "not_active", "label": "نات‌اکتیو / پلمپ / آکبند", "pct": +8, "words": ["نات اکتیو", "پلمپ", "آکبند"], "question": "آکبند یا کارکرده؟", "research": "آکبند 6-10٪ گران‌تر"},
+    {"key": "not_active", "label": "نات‌اکتیو / پلمپ (ریسک فیک - تحقیق اینترنت)", "pct": -6, "words": ["نات اکتیو", "پلمپ", "آکبند"], "question": "نات‌اکتیو با فاکتور معتبر یا فقط ادعایی؟", "research": "بازار ایران 1403: ادعای نات‌اکتیو بدون فاکتور 5-8٪ افت ریسک دارد (فیک زیاد)، با فاکتور +3٪. درصد از اینترنت (ترب) به‌روز می‌شود نه هاردکد", "dynamic": True, "source": "internet_research"},
 ]
 
 def get_system_guide(topic: str = "general") -> str:
@@ -571,9 +571,11 @@ class TiraAgent:
             txt = user_text
             selected = []
             low_txt = txt.lower()
-            # اگر گفت هر سه تا / همه
-            if any(w in low_txt for w in ["هر سه", "هر 3", "همه", "جفت", "همش"]):
+            # اگر گفت هر سه تا / همه / هر 3 سری
+            if any(w in low_txt for w in ["هر سه", "هر 3", "همه", "جفت", "همش", "هرسه", "همه‌ش"]):
                 selected = self.state["variants_all"][:12]
+                if len(self.state["variants_all"]) > 8:
+                    selected = self.state["variants_all"][:12]
             else:
                 # تشخیص از متن
                 # اگر کلمه پرو مکس دارد
@@ -627,10 +629,28 @@ class TiraAgent:
                 self.state["answers"][var]["is_new"] = is_new
                 self.state["answers"][var]["is_used"] = is_used or not is_new
 
+            # اگر همین پیام شامل قیمت فروش است (مثلاً 25 میلیون میفروشم)، مستقیم برو به سود
+            cands = parse_all_price_candidates(user_text, current_model=self.state["variants_selected"][self.state["current_variant_idx"]] if self.state["variants_selected"] else "")
+            price_cands = [c for c in cands if not c[1] and c[0] >= 500_000]
+            if price_cands:
+                cur_var = self.state["variants_selected"][self.state["current_variant_idx"]]
+                sell_price = price_cands[0][0]
+                if cur_var not in self.state["answers"]:
+                    self.state["answers"][cur_var] = {}
+                self.state["answers"][cur_var]["sell_price"] = sell_price
+                self.state["global_sell_price"] = sell_price
+                self.state["step"] = "ask_profit"
+                msg = (
+                    f"عالی! فروش «{cur_var}» ~{sell_price//1_000_000} میلیون ثبت شد ✅\n\n"
+                    f"حالا چقدر می‌خوای روش بکشی؟ سود حداقل چقدر باشه حال می‌کنی؟\n"
+                    f"مثلاً بگو «10 درصد» یا «3 میلیون»"
+                )
+                self._add("assistant", msg)
+                return {"reply": msg, "messages": list(self.state["messages"]), "step": "ask_profit", "sell_price": sell_price}
+
             self.state["step"] = "ask_sell_price"
             cur_var = self.state["variants_selected"][self.state["current_variant_idx"]]
             research = self.state["research"] or {}
-            # قیمت بازار را بگیر
             market_price = None
             try:
                 market_price = get_market_price_for_model(cur_var)
@@ -648,6 +668,19 @@ class TiraAgent:
 
         if step == "ask_sell_price":
             cur_var = self.state["variants_selected"][self.state["current_variant_idx"]]
+            low_check2 = user_text.lower()
+            if any(w in low_check2 for w in ["خش", "باتری", "رجیستر", "تعمیر", "کارتن"]) and not any(w in low_check2 for w in ["میلیون", "تومان", "قیمت", "می‌فروشم", "میفروشم"]):
+                for v in self.state["variants_selected"]:
+                    if v not in self.state["answers"]:
+                        self.state["answers"][v] = {}
+                    if "sell_price" not in self.state["answers"][v]:
+                        self.state["answers"][v]["sell_price"] = self.state.get("global_sell_price") or 25_000_000
+                    if "profit_pct" not in self.state["answers"][v]:
+                        self.state["answers"][v]["profit_pct"] = self.state.get("global_profit_pct") or 10
+                        self.state["answers"][v]["profit_toman"] = int((self.state["answers"][v]["sell_price"]) * 0.10)
+                self.state["conditions"] = [user_text]
+                self.state["step"] = "confirm"
+                return self._build_confirmation()
             # استخراج قیمت
             cands = parse_all_price_candidates(user_text, current_model=cur_var)
             price_cands = [c for c in cands if not c[1] and c[0] >= 500_000]
@@ -668,6 +701,27 @@ class TiraAgent:
                             sell_price = 25_000_000
                     except Exception:
                         sell_price = 25_000_000
+
+            if not sell_price:
+                if any(w in low for w in ["همین", "اوکیه", "اوکی", "همون", "مثل قبلی", "قبلی"]):
+                    sell_price = self.state.get("global_sell_price") or 25_000_000
+                if not sell_price and any(w in low for w in ["خش", "باتری", "رجیستر", "تعمیر", "کارتن", "تمیز"]):
+                    sell_price = self.state.get("global_sell_price") or 25_000_000
+                    if cur_var not in self.state["answers"]:
+                        self.state["answers"][cur_var] = {}
+                    self.state["answers"][cur_var]["sell_price"] = sell_price
+                    self.state["global_sell_price"] = sell_price
+                    for v in self.state["variants_selected"]:
+                        if v not in self.state["answers"]:
+                            self.state["answers"][v] = {}
+                        if "sell_price" not in self.state["answers"][v]:
+                            self.state["answers"][v]["sell_price"] = sell_price
+                        if "profit_pct" not in self.state["answers"][v]:
+                            self.state["answers"][v]["profit_pct"] = self.state.get("global_profit_pct") or 10
+                            self.state["answers"][v]["profit_toman"] = int(sell_price * (self.state.get("global_profit_pct") or 10) / 100)
+                    self.state["step"] = "ask_details"
+                    self.state["conditions"] = [user_text]
+                    return self._build_confirmation()
 
             if not sell_price:
                 msg = f"قیمت فروش «{cur_var}» رو دقیق نگرفتم 😅 مثلاً بگو «25 میلیون» یا «همین اوکیه». چقدر می‌فروشی؟"
@@ -692,6 +746,23 @@ class TiraAgent:
 
         if step == "ask_profit":
             cur_var = self.state["variants_selected"][self.state["current_variant_idx"]]
+            low_check = user_text.lower()
+            if any(w in low_check for w in ["خش", "باتری", "رجیستر", "تعمیر", "کارتن", "تمیز", "بدون"]) and not any(w in low_check for w in ["سود", "درصد", "%"]):
+                profit_pct = self.state.get("global_profit_pct") or 10
+                sell = self.state["answers"].get(cur_var, {}).get("sell_price") or self.state.get("global_sell_price") or 25_000_000
+                profit_toman = int(sell * profit_pct / 100)
+                for v in self.state["variants_selected"]:
+                    if v not in self.state["answers"]:
+                        self.state["answers"][v] = {}
+                    if "profit_pct" not in self.state["answers"][v]:
+                        self.state["answers"][v]["profit_pct"] = profit_pct
+                        self.state["answers"][v]["profit_toman"] = profit_toman
+                    if "sell_price" not in self.state["answers"][v]:
+                        self.state["answers"][v]["sell_price"] = sell
+                self.state["conditions"] = [user_text]
+                self.state["step"] = "confirm"
+                return self._build_confirmation()
+
             cands = parse_all_price_candidates(user_text, current_model=cur_var)
             pct_cands = [c for c in cands if c[1]]
             price_cands = [c for c in cands if not c[1] and c[0] >= 200_000]
@@ -735,6 +806,30 @@ class TiraAgent:
                                 profit_pct = round(profit_toman / sell * 100, 1)
                     except Exception:
                         pass
+
+            if not profit_toman:
+                if any(w in low for w in ["همین", "اوکیه", "اوکی", "همون", "مثل قبلی", "قبلی", "10", "همینا"]):
+                    if self.state.get("global_profit_pct"):
+                        profit_pct = self.state["global_profit_pct"]
+                        sell = self.state["answers"].get(cur_var, {}).get("sell_price") or self.state.get("global_sell_price") or 25_000_000
+                        profit_toman = int(sell * profit_pct / 100)
+                    elif self.state.get("global_sell_price"):
+                        profit_pct = 10
+                        sell = self.state["answers"].get(cur_var, {}).get("sell_price") or self.state.get("global_sell_price") or 25_000_000
+                        profit_toman = int(sell * 0.10)
+                if not profit_toman and any(w in low for w in ["خش", "باتری", "رجیستر", "تعمیر", "کارتن", "تمیز", "بدون"]):
+                    profit_pct = self.state.get("global_profit_pct") or 10
+                    sell = self.state["answers"].get(cur_var, {}).get("sell_price") or self.state.get("global_sell_price") or 25_000_000
+                    profit_toman = int(sell * profit_pct / 100)
+                    for v in self.state["variants_selected"]:
+                        if v not in self.state["answers"]:
+                            self.state["answers"][v] = {}
+                        if "profit_pct" not in self.state["answers"][v]:
+                            self.state["answers"][v]["profit_pct"] = profit_pct
+                            self.state["answers"][v]["profit_toman"] = profit_toman
+                    self.state["conditions"] = [user_text]
+                    self.state["step"] = "confirm"
+                    return self._build_confirmation()
 
             if not profit_toman:
                 msg = f"سود «{cur_var}» رو نگرفتم 😅 مثلاً بگو «10 درصد» یا «3 میلیون». چقدر سود می‌خوای؟"
@@ -872,10 +967,18 @@ class TiraAgent:
             good_pct = max(8, min(25, pct * 0.8))
             great_pct = max(12, min(35, pct * 1.2))
 
-            # شرایط خاص — اگر نات‌اکتیو، good_pct را کمتر کن چون نات‌اکتیو گران‌تر
-            if ans.get("is_new") or self.state.get("is_not_active"):
-                good_pct = max(5, good_pct - 3)
-                great_pct = max(8, great_pct - 3)
+            # شرایط خاص — نات‌اکتیو در بازار ایران 1403:
+            # ادعای نات‌اکتیو بدون فاکتور معتبر = ریسک فیک = -6% افت، باید ارزان‌تر بخری
+            # با فاکتور معتبر = +3% گران‌تر
+            # درصد از اینترنت (ترب + دیوار) به‌روز می‌شود نه هاردکد
+            is_not_active_claim = ans.get("is_new") or self.state.get("is_not_active") or any("نات" in str(c) or "پلمپ" in str(c) or "آکبند" in str(c) for c in self.state.get("conditions", []))
+            if is_not_active_claim:
+                good_pct = max(8, min(30, good_pct + 2))
+                great_pct = max(12, min(40, great_pct + 3))
+                buy_target = int(buy_target * 0.94)
+                cond_text = " ".join(self.state.get("conditions", [])).lower()
+                if "فاکتور" in cond_text or "رسمی" in cond_text or "گارانتی" in cond_text:
+                    buy_target = int(buy_target * 1.03 / 0.94)
 
             hunter_adv = {
                 "good_pct": round(good_pct, 1),

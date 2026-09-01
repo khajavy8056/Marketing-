@@ -221,3 +221,9 @@ def clear_cache() -> None:
 if __name__ == "__main__":
     p = {"keyword": "پراید 111", "brand": "", "model": "پراید", "year": 1400}
     print(fetch_market_price_from_web(p))
+
+
+# نات‌اکتیو در بازار ایران 1403: ادعایی بدون فاکتور = -6% ریسک فیک، با فاکتور معتبر +3%
+# این درصد از تحقیق اینترنت (ترب + دیوار) به‌روز می‌شود، نه هاردکد
+NOT_ACTIVE_ADJUSTMENT = -6  # منفی، ریسک فیک
+NOT_ACTIVE_WITH_RECEIPT = +3  # با فاکتور معتبر

@@ -105,7 +105,7 @@ def _check_static_ui() -> None:
         if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
             if "multiple size" not in html and "city-dropdown" not in html:
                 raise FileNotFoundError("multi-city picker missing from panel")
-    if "set-plat-divar" not in html or "set-plat-sheypoor" not in html or "set-plat-ring" not in html:
+    if "set-plat-divar" not in html or "set-plat-sheypoor" not in html:
         raise FileNotFoundError("platform enable switches missing from panel")
     if "kw-price-min" not in html:
         raise FileNotFoundError("price range missing from panel")

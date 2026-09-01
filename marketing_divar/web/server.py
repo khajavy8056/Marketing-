@@ -1163,7 +1163,7 @@ def accounts_platform_toggle(req: PlatformToggleReq):
     except ValueError as e:
         raise HTTPException(400, str(e))
     plat = (req.platform or "").lower().strip()
-    if plat not in ("divar", "sheypoor", "ring"):
+    if plat not in ("divar", "sheypoor"):
         raise HTTPException(400, "platform باید divar یا sheypoor باشد")
     if req.enabled is None:
         en = toggle_platform_enabled(ACCOUNTS_DIR, name, plat)
@@ -1183,8 +1183,8 @@ def platforms_status():
         "active_default": list(active_platforms()),
         "enabled": enabled,
         "titles": TITLES,
-        "settings": {f"platform_{pid}": bool(s.get(f"platform_{pid}", pid in active_platforms())) for pid in ("divar", "sheypoor", "ring")},
-        "note": "رینگ غیرفعال پیش‌فرض — فقط دیوار و شیپور فعال",
+        "settings": {f"platform_{pid}": bool(s.get(f"platform_{pid}", pid in active_platforms())) for pid in ("divar", "sheypoor")},
+        "note": " غیرفعال پیش‌فرض — فقط دیوار و شیپور فعال",
     }
 
 
@@ -1223,7 +1223,6 @@ def _apply_sms_to_monitor() -> None:
               "per_account_daily_limit", "adaptive_until_captcha",
               "ip_daily_limit", "phone_delay_sec",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
-              "platform_divar", "platform_sheypoor", "platform_ring",
               "sms_inbox_on", "nlu_use_local",
               "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
               "sms_pattern_text"):
@@ -1308,8 +1307,7 @@ def robot_status():
             "platforms": {
                 "divar": bool(s.get("platform_divar", True)),
                 "sheypoor": bool(s.get("platform_sheypoor", True)),
-                "ring": bool(s.get("platform_ring", False)),
-            },
+                            },
             "nlu": nlu_st(),
             "chats_today": quota_today(con).get("chats", 0),
             "sms_today": quota_today(con).get("sms", 0),

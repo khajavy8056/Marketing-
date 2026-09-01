@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""پروفایل پایدار Chromium برای هر اکانت — دیوار + شیپور (رینگ غیرفعال).
+"""پروفایل پایدار Chromium برای هر اکانت — دیوار + شیپور.
 
 پنجره با خودِ chrome.exe اختصاصی باز می‌شود (نه Playwright thread، نه Edge).
 سشن تزریق نمی‌شود. user-data-dir همان accounts/<name>/chromium/ است.
@@ -186,7 +186,7 @@ def cookies_per_platform(cookies: List[Dict[str, Any]]) -> Dict[str, bool]:
             # این باعث می‌شود «ذخیره پروفایل» بعد از لاگین دستی شیپور حتماً قبول شود
             sheypoor_ok = True
 
-    return {"divar": divar_ok, "sheypoor": sheypoor_ok, "ring": False}
+    return {"divar": divar_ok, "sheypoor": sheypoor_ok}
 
 
 def _cookies_from_sqlite(profile: Path) -> List[Dict[str, Any]]:
@@ -779,7 +779,7 @@ def snapshot_fields(accounts_dir: str, name: str) -> Dict[str, Any]:
         except Exception:
             opened = False
     plats = rec.get("platforms") or {}
-    plats_enabled = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True, "ring": False}
+    plats_enabled = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True}
     if "divar" not in plats_enabled:
         plats_enabled["divar"] = True
     if "sheypoor" not in plats_enabled:
@@ -804,15 +804,14 @@ def get_platforms_enabled(accounts_dir: str, name: str) -> Dict[str, bool]:
     return {
         "divar": bool(en.get("divar", True)),
         "sheypoor": bool(en.get("sheypoor", True)),
-        "ring": bool(en.get("ring", False)),
-    }
+            }
 
 def set_platform_enabled(accounts_dir: str, name: str, platform: str, enabled: bool) -> Dict[str, bool]:
     platform = (platform or "").lower().strip()
-    if platform not in ("divar", "sheypoor", "ring"):
-        raise ValueError("platform باید divar یا sheypoor یا ring باشد")
+    if platform not in ("divar", "sheypoor"):
+        raise ValueError("platform باید divar یا sheypoor باشد")
     rec = load_meta(accounts_dir, name)
-    en = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True, "ring": False}
+    en = rec.get("platforms_enabled") or {"divar": True, "sheypoor": True}
     en[platform] = bool(enabled)
     save_meta(accounts_dir, name, {"platforms_enabled": en})
     return en

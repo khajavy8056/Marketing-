@@ -253,14 +253,6 @@ class Monitor:
                     category=cat) or [])
             except Exception as e:
                 self._ev("warning", "جستجوی شیپور: %s" % e)
-        if "ring" in plats:
-            try:
-                from . import ring as _rg
-                posts.extend(_rg.search(
-                    self.anon, q, cities=cities_arg, page=page,
-                    category=cat) or [])
-            except Exception as e:
-                self._ev("warning", "جستجوی رینگ: %s" % e)
         return posts
 
     # ------------------------------------------------------------ جستجو 🔎 --

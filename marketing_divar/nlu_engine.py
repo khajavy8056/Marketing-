@@ -68,7 +68,7 @@ class NluEngine:
                 "build_message — متن پیام با متغیرها {title}{city}{price}{greeting}{closing}{questions} + حافظه + پروفایل شکارچی",
                 "hunter_analyze — آنالیزور قیمت: میانه همان کلمه/شهر + افت وضعیت (تحقیق بازار ایران) + کارکرد/سال + آپشن سفارشی → ارزش منصفانه",
                 "hunter_inquiry — استعلام جای‌خالی با مدل (سوال از پروفایل دسته) + امتیاز دوباره از پاسخ",
-                "platforms — دیوار/شیپور/رینگ با سوییچ جدا، جستجو و شماره‌گیری هر سه اگر فعال",
+                "platforms — دیوار/شیپور با سوییچ جدا، جستجو و شماره‌گیری هر سه اگر فعال",
                 "messaging — پیامک ملی‌پیامک رسمی + چت خودکار برای فقط‌چت با متغیر متفاوت",
             ],
         }
@@ -187,7 +187,7 @@ class NluEngine:
         def cat_test():
             from .categories import normalize_slug, platform_slug, hunter_allowed
             return normalize_slug("mobile-phones") == "mobile-phones" and platform_slug("light", "sheypoor") == "car"
-        check("دسته‌بندی — نگاشت دیوار/شیپور/رینگ", cat_test)
+        check("دسته‌بندی — نگاشت دیوار/شیپور", cat_test)
 
         # 6) قیمت
         def price_test():
@@ -326,7 +326,7 @@ class NluEngine:
             p, nid = split_token(tok)
             en = enabled_from_settings({"platform_divar": True, "platform_sheypoor": False})
             return p == "sheypoor" and nid == "12345" and "divar" in en
-        check("پلتفرم — توکن دیوار/شیپور/رینگ + سوییچ روشن/خاموش", plat_test)
+        check("پلتفرم — توکن دیوار/شیپور + سوییچ روشن/خاموش", plat_test)
 
         # 19) اعلان‌ها (تلگرام/بله/روبیکا)
         def notif_test():

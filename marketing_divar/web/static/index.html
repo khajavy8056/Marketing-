@@ -581,7 +581,6 @@
       <h3>پلتفرم‌های پایش</h3>
       <div class="checkline"><input type="checkbox" id="set-plat-divar" checked><label for="set-plat-divar"><b>دیوار</b></label></div>
       <div class="checkline"><input type="checkbox" id="set-plat-sheypoor" checked><label for="set-plat-sheypoor"><b>شیپور — لاگین via Chromium، جستجو و شماره‌گیری فعال</b></label></div>
-      <div class="checkline"><input type="checkbox" id="set-plat-ring"><label for="set-plat-ring"><b>رینگ — غیرفعال پیش‌فرض</b></label></div>
       <div class="hint">هر سایت جدا خاموش/روشن می‌شود. لاگین دیوار+شیپور در همان پروفایل Chromium با دو تب است.</div>
     </div>
     <div class="card">
@@ -1021,7 +1020,7 @@ async function refreshStatus(){
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ic = {active:'✅', captcha:'🧩', cooldown:'⏳', relogin:'🔑', disabled:'⛔'}[a.status]||'❔';
       const plats = a.platforms || {};
-      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true, ring:false};
+      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true};
       const divarEn = plats_enabled.divar!==false;
       const sheyEn = plats_enabled.sheypoor!==false;
       const divarOk = plats.divar ? (divarEn ? 'دیوار✅ فعال' : 'دیوار⏸ خاموش') : 'دیوار❌';
@@ -1194,10 +1193,9 @@ async function accRefresh(){
       const m = {active:'ok', captcha:'warn', cooldown:'warn', relogin:'err', disabled:'gray'}[a.status]||'gray';
       const ready = !!a.profile_ready;
       const plats = a.platforms || {};
-      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true, ring:false};
+      const plats_enabled = a.platforms_enabled || {divar:true, sheypoor:true};
       const divarEnabled = plats_enabled.divar!==false;
       const sheyEnabled = plats_enabled.sheypoor!==false;
-      const ringEnabled = !!plats_enabled.ring;
       const divarTag = plats.divar ? '<span class="tag ok">دیوار ✅</span>' : '<span class="tag gray">دیوار ❌</span>';
       const sheyTag = plats.sheypoor ? '<span class="tag ok">شیپور ✅</span>' : '<span class="tag gray">شیپور ❌</span>';
       const siteTag = ready ? '<span class="tag ok">پروفایل ذخیره شده</span>' : '<span class="tag warn">نیاز به لاگین</span>';
@@ -1205,7 +1203,6 @@ async function accRefresh(){
       // toggle buttons
       const toggleDivarBtn = `<button class="btn sm ${divarEnabled?'ok':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','divar')">${divarEnabled?'🌐 دیوار فعال':'🌐 دیوار خاموش'}</button>`;
       const toggleSheyBtn = `<button class="btn sm ${sheyEnabled?'warn':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','sheypoor')">${sheyEnabled?'🏪 شیپور فعال':'🏪 شیپور خاموش'}</button>`;
-      const toggleRingBtn = `<button class="btn sm ${ringEnabled?'gray':'gray'}" type="button" onclick="togglePlatform('${esc(a.name)}','ring')" style="opacity:${ringEnabled?1:.5}">${ringEnabled?'🔘 رینگ فعال':'🔘 رینگ خاموش'}</button>`;
       let buttons = '';
       if (!ready){
         buttons = `<button class="btn sm ok" type="button" onclick="createProfile('divar','${esc(a.name)}')">➕ ایجاد پروفایل</button>
@@ -1231,7 +1228,7 @@ async function accRefresh(){
             ${a.profile_open?'<span class="tag ok">پنجره باز</span>':''}
           </div>
           <div class="hint">${saved || (ready?'':'در Chromium لاگین کنید، بعد ذخیره')} ${a.phones_today?(' · امروز: '+a.phones_today):''}</div>
-          <div class="row" style="margin-top:6px">${toggleDivarBtn} ${toggleSheyBtn} ${toggleRingBtn}</div>
+          <div class="row" style="margin-top:6px">${toggleDivarBtn} ${toggleSheyBtn}</div>
         </div><div class="row">${buttons}</div></div>`;
     }).join('') : '<div class="empty">هنوز اکانتی نیست. نام و شماره بگذارید و «ایجاد پروفایل» را بزنید.</div>';
   }catch(e){}
@@ -1755,7 +1752,6 @@ async function settingsLoad(){
     if($('set-rubika-on')) $('set-rubika-on').checked = s.rubika_enabled!==false;
     if($('set-plat-divar')) $('set-plat-divar').checked = s.platform_divar!==false;
     if($('set-plat-sheypoor')) $('set-plat-sheypoor').checked = s.platform_sheypoor!==false;
-    if($('set-plat-ring')) $('set-plat-ring').checked = s.platform_ring!==false;
   }catch(e){}
 }
 async function settingsSave(){
@@ -1787,7 +1783,6 @@ async function settingsSave(){
     rubika_enabled:!$('set-rubika-on') || !!$('set-rubika-on').checked,
     platform_divar:!$('set-plat-divar') || !!$('set-plat-divar').checked,
     platform_sheypoor:!$('set-plat-sheypoor') || !!$('set-plat-sheypoor').checked,
-    platform_ring:!$('set-plat-ring') || !!$('set-plat-ring').checked,
     sms_use_pattern: ($('set-sms-mode')||{}).value === 'pattern',
     sms_pattern_bodyid: $('set-sms-bodyid') ? $('set-sms-bodyid').value.trim() : '',
     sms_pattern_args: $('set-sms-args') ? $('set-sms-args').value.trim() : '',
@@ -1816,7 +1811,7 @@ async function robotLoad(){
     if ($('k-replied')) $('k-replied').textContent = s.replies||0;
     if ($('k-replied-inbox')) $('k-replied-inbox').textContent = s.replies||0;
     if($('robot-status-line')) $('robot-status-line').textContent =
-      'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')+' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')+' · صندوق: '+(s.sms_inbox?'روشن':'خاموش')+' · دیوار/شیپور/رینگ: '+(s.platforms&&s.platforms.divar?'✓':'—')+'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—')+'/'+(s.platforms&&s.platforms.ring?'✓':'—');
+      'چت خودکار: '+(s.chat_auto?'روشن':'خاموش')+' · پیامک خودکار: '+(s.sms_auto?'روشن':'خاموش')+' · صندوق: '+(s.sms_inbox?'روشن':'خاموش')+' · دیوار/شیپور: '+(s.platforms&&s.platforms.divar?'✓':'—')+'/'+(s.platforms&&s.platforms.sheypoor?'✓':'—');
     if($('robot-chat-auto')) $('robot-chat-auto').checked = !!s.chat_auto;
     const rr = await api('/api/replies');
     const list = (rr.replies||[]).map(x=>`<div><time>${esc(x.received_at||'')}</time> <b>${esc(x.channel||'')}</b> · ${esc(x.intent||x.nlu_intent||'')} · ${esc((x.body||'').slice(0,80))}</div>`).join('');

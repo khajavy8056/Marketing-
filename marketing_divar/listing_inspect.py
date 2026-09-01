@@ -84,7 +84,7 @@ def inspect_images(urls: Sequence[str], infer_fn=None) -> Dict[str, Any]:
 
 def inspect_listing(post: Dict[str, Any], use_llm: bool = True,
                     infer_fn=None, vision_fn=None) -> Dict[str, Any]:
-    """خروجی واحد برای دیوار/شیپور/رینگ."""
+    """خروجی واحد برای دیوار/شیپور."""
     from .nlu_role import parse_llm_json
 
     category = normalize_slug(post.get("category") or "")

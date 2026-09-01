@@ -222,7 +222,7 @@ CITIES = _uniq
 _BY_ID = {c["id"]: c for c in CITIES}
 _BY_SLUG = {c["slug"]: c for c in CITIES if c["slug"]}
 
-# اسلاگ شیپور/رینگ اگر با دیوار فرق کند
+# اسلاگ شیپور اگر با دیوار فرق کند
 _PLATFORM_SLUG = {
     "sheypoor": {
         "bandar-abbas": "bandarabbass",
