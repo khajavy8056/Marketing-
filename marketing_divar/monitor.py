@@ -258,6 +258,11 @@ class Monitor:
     # ------------------------------------------------------------ جستجو 🔎 --
     def watch_once(self) -> int:
         """یک دور جستجوی همه کلمه‌کلیدی‌ها؛ تعداد سرنخ جدید را برمی‌گرداند."""
+        # چک سریع IP در هر دور جستجو (کش دارد)
+        try:
+            self._maybe_check_ip_periodic()
+        except Exception:
+            pass
         con = connect(self.db_path)
         new_total = 0
         try:
@@ -1159,6 +1164,53 @@ class Monitor:
     def _global_quota_left(self, con) -> int:
         return self.cfg.get("ip_daily_limit", 240) - quota_today(con)["phones"]
 
+    def _check_ip_change(self) -> dict:
+        """هر بار IP خارجی عوض شد، سهمیه امروز را صفر می‌کند چون دیوار/شیپور محدودیت IP را ریست کرده.
+        Returns dict with changed info.
+        """
+        try:
+            from .netinfo import get_public_ip
+            from .db import connect as _connect, set_ip_and_check_reset, get_last_ip
+            ip = get_public_ip(timeout=6)
+            if not ip:
+                return {"checked": False, "reason": "no_ip"}
+            con = _connect(self.db_path)
+            try:
+                last = get_last_ip(con)
+                res = set_ip_and_check_reset(con, ip)
+                if res.get("changed"):
+                    # لاگ و اعلان
+                    self._ev("success", f"🌐 IP عوض شد: {res.get('old_ip')} → {res.get('new_ip')} — سهمیه امروز ریست شد (دیوار/شیپور محدودیت IP را برداشت)")
+                    try:
+                        from .notifier import notify as _notify
+                        _notify(self.cfg, f"IP عوض شد: {res.get('old_ip')} → {res.get('new_ip')}\nسهمیه امروز صفر شد — می‌تونید دوباره شماره بگیرید", important=True)
+                    except Exception:
+                        pass
+                    print(f"  🌐 IP تغییر: {res.get('old_ip')} → {res.get('new_ip')} — سهمیه ریست شد")
+                elif res.get("first_time"):
+                    self._ev("info", f"🌐 IP ثبت شد: {ip}")
+                return res
+            finally:
+                con.close()
+        except Exception as e:
+            self._ev("warning", f"چک IP: {e}")
+            return {"checked": False, "error": str(e)}
+
+    def _maybe_check_ip_periodic(self) -> None:
+        """هر 5 دقیقه یا هر 10 دور IP را چک کن."""
+        try:
+            # فقط هر 5 دقیقه
+            now = __import__('time').time()
+            if not hasattr(self, '_last_ip_check'):
+                self._last_ip_check = 0
+            if now - self._last_ip_check < 300:  # 5 دقیقه
+                return
+            self._last_ip_check = now
+            self._check_ip_change()
+        except Exception:
+            pass
+
+
     def _fetch_one(self) -> str:
         """یک سرنخ از صف را با یک اکانت موجود پردازش می‌کند.
         خروجی: 'done' | 'empty' (صف خالی) | 'wait' (اکانت/سهمیه نیست) | 'quota_done'
@@ -1427,6 +1479,11 @@ class Monitor:
             self.tick += 1
             print(f"\n⏰ دور {self.tick} — {time.strftime('%H:%M:%S')}")
             try:
+                # چک IP — اگر عوض شده سهمیه ریست می‌شود
+                try:
+                    self._maybe_check_ip_periodic()
+                except Exception:
+                    pass
                 new = self.watch_once()
                 if new:
                     print(f"  🆕 {new} سرنخ جدید وارد صف شد")

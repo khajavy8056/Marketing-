@@ -1512,6 +1512,24 @@ def status():
             "failed": _cnt("phone_status='error'"),
         }
         acc_snap = mgr().snapshot(DB_PATH, complete_only=False)
+        # IP info
+        current_ip = None
+        last_ip = None
+        ip_changed = False
+        try:
+            from ..netinfo import get_public_ip
+            from ..db import get_last_ip as _get_last_ip, get_ip_history as _get_ip_hist
+            # get_public_ip کش ندارد، پس از کش فایل استفاده کن برای سرعت
+            try:
+                from ..netinfo import get_current_ip_cached
+                current_ip = get_current_ip_cached(cache_sec=120)
+            except Exception:
+                current_ip = None
+            last_ip = _get_last_ip(con)
+            if last_ip and current_ip and last_ip != current_ip:
+                ip_changed = True
+        except Exception:
+            pass
         acc_break = {"active": 0, "busy": 0, "rate_limited": 0,
                      "captcha": 0, "error": 0, "disabled": 0}
         for a in acc_snap:
@@ -1998,6 +2016,111 @@ def diag_run():
     log("success" if good >= 4 else "error",
         f"بررسی اتصال تمام شد: {good}/{len(result['steps'])} قدم سالم")
     return result
+
+
+
+@app.get("/api/ip/status")
+def ip_status():
+    """وضعیت IP فعلی و تاریخچه — برای نمایش در پنل + ریست خودکار سهمیه."""
+    from ..db import connect as _connect, get_last_ip, get_ip_history, quota_today
+    from ..netinfo import get_public_ip, lan_ipv4
+    con = _connect(DB_PATH)
+    try:
+        last_ip = get_last_ip(con)
+        history = []
+        try:
+            rows = get_ip_history(con, limit=20)
+            history = [dict(r) for r in rows]
+        except Exception:
+            history = []
+        q = quota_today(con)
+    finally:
+        con.close()
+    current_ip = None
+    try:
+        current_ip = get_public_ip(timeout=5)
+    except Exception:
+        current_ip = None
+    lan = []
+    try:
+        lan = lan_ipv4()
+    except Exception:
+        lan = []
+    changed = (last_ip is not None and current_ip is not None and last_ip != current_ip)
+    return {
+        "ok": True,
+        "current_ip": current_ip,
+        "last_ip": last_ip,
+        "changed": bool(changed),
+        "lan_ips": lan,
+        "history": history,
+        "quota_today": q,
+        "message": f"IP فعلی: {current_ip or 'نامشخص'} — آخرین IP ثبت: {last_ip or 'ندارد'}" + (" — IP عوض شده، سهمیه ریست می‌شود" if changed else ""),
+    }
+
+
+@app.post("/api/ip/check")
+def ip_check():
+    """چک دستی IP — اگر عوض شده باشد سهمیه صفر می‌شود."""
+    from ..db import connect as _connect, set_ip_and_check_reset, quota_today
+    from ..netinfo import get_public_ip
+    ip = get_public_ip(timeout=8)
+    if not ip:
+        raise HTTPException(400, "نتوانست IP خارجی را بگیرد — اینترنت را چک کنید")
+    con = _connect(DB_PATH)
+    try:
+        res = set_ip_and_check_reset(con, ip)
+        q = quota_today(con)
+    finally:
+        con.close()
+    if res.get("changed"):
+        log("success", f"IP عوض شد: {res.get('old_ip')} → {res.get('new_ip')} — سهمیه ریست شد")
+        return {"ok": True, "changed": True, "old_ip": res.get("old_ip"), "new_ip": res.get("new_ip"), "quota": q, "message": f"IP عوض شد ({res.get('old_ip')} → {res.get('new_ip')}) — سهمیه امروز صفر شد ✅"}
+    elif res.get("first_time"):
+        return {"ok": True, "changed": False, "first_time": True, "new_ip": ip, "quota": q, "message": f"IP ثبت شد: {ip}"}
+    else:
+        return {"ok": True, "changed": False, "ip": ip, "quota": q, "message": f"IP تغییری نکرده: {ip} — سهمیه امروز: {q.get('phones',0)} شماره"}
+
+
+@app.post("/api/ip/reset-quota")
+def ip_reset_quota(reason: str = "manual"):
+    """ریست دستی سهمیه — وقتی کاربر می‌داند IP عوض شده یا می‌خواهد دوباره شروع کند."""
+    from ..db import connect as _connect, reset_today_quota, quota_today
+    con = _connect(DB_PATH)
+    try:
+        q = reset_today_quota(con, reason=reason)
+    finally:
+        con.close()
+    log("success", f"سهمیه امروز دستی ریست شد — دلیل: {reason}")
+    return {"ok": True, "quota": q, "message": "سهمیه امروز صفر شد — می‌تونی دوباره شماره بگیری ✅"}
+
+
+
+
+class TiraProfitReq(BaseModel):
+    keyword: str = ""
+    sell_price: int = 0
+    profit_pct: float = 10
+    conditions: str = ""
+    test_improve: bool = False
+
+@app.post("/api/tira/profitability")
+def tira_profitability(req: TiraProfitReq):
+    """محاسبه سودآوری با هزاران پارامتر + تحقیق اینترنت + تست/بهبود خودکار"""
+    from ..profitability import calculate_profitability, test_and_improve_profitability
+    kw = (req.keyword or "").strip()
+    if not kw:
+        raise HTTPException(400, "کلمه کلیدی خالی است")
+    if req.test_improve:
+        res = test_and_improve_profitability(kw, iterations=3)
+        return {"ok": True, **res}
+    res = calculate_profitability(
+        title=kw,
+        sell_price_healthy=req.sell_price if req.sell_price else None,
+        desired_profit_pct=req.profit_pct or 10,
+        conditions_text=req.conditions or "",
+    )
+    return {"ok": True, **res}
 
 
 @app.post("/api/shutdown")

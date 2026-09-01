@@ -281,6 +281,7 @@
     <div class="card"><h3>در صف شماره‌گیری</h3><div class="kpi" id="k-queue">0</div><small class="hint">سرنخ‌های منتظر شماره</small></div>
     <div class="card"><h3>لیست چت (فقط چت)</h3><div class="kpi" id="k-chat" style="color:var(--chat)">0</div><small class="hint">آگهی‌های بدون شماره → پیام چت</small></div>
     <div class="card"><h3>شماره‌های امروز</h3><div class="kpi" id="k-today">0<small>از سقف IP امروز</small></div></div>
+    <div class="card" style="border:1px solid #1976d2"><h3>🌐 IP خارجی</h3><div class="kpi" id="k-ip" style="font-size:18px" dir="ltr">—</div><small class="hint" id="k-ip-sub">در حال دریافت...</small><div class="row" style="margin-top:8px"><button class="btn sm" onclick="ipCheck()">🔄 چک IP</button><button class="btn sm gray" onclick="ipReset()">♻️ ریست سهمیه</button></div></div>
     <div class="card"><h3>کل سرنخ‌ها</h3><div class="kpi" id="k-total">0</div><small class="hint">همه آگهی‌های منطبق</small></div>
     <div class="card"><h3>شماره پیدا شده</h3><div class="kpi" id="k-found" style="color:var(--ok)">0</div><small class="hint">Contact Found</small></div>
     <div class="card"><h3>شکارچی عالی</h3><div class="kpi" id="k-hunter" style="color:var(--ok)">0</div><small class="hint">شکارهای خیلی مناسب</small></div>
@@ -338,16 +339,16 @@
     </div>
     <div class="grid g2">
       <div>
-        <div class="lbl">نام اکانت (مثلاً محمد 01)</div>
-        <input id="acc-name" placeholder="mohammad-01">
-        <div class="lbl">شماره موبایل (09...)</div>
-        <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11">
+        <div class="lbl">نام اکانت <span style="color:#d9534f">* الزامی</span> (مثلاً محمد 01)</div>
+        <input id="acc-name" placeholder="mohammad-01" required>
+        <div class="lbl">شماره موبایل <span style="color:#d9534f">* الزامی</span> (09...)</div>
+        <input id="acc-phone" placeholder="09xxxxxxxxx" dir="ltr" maxlength="11" required>
         <div class="row" style="margin-top:12px">
           <button class="btn ok" onclick="sendOtp('divar')">📱 ارسال کد دیوار</button>
           <button class="btn warn" onclick="sendOtp('sheypoor')">🏪 ارسال کد شیپور</button>
         </div>
-        <div class="lbl" style="margin-top:12px">کد تایید (دیوار API)</div>
-        <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6">
+        <div class="lbl" style="margin-top:12px">کد تایید دیوار <span style="color:#d9534f">* الزامی</span> — از SMS دیوار می‌آید</div>
+        <input id="acc-code" placeholder="- - - - - -" dir="ltr" maxlength="6" required>
         <div class="row" style="margin-top:8px">
           <button class="btn gray" onclick="confirmOtp()">✅ تأیید کد دیوار</button>
         </div>
@@ -656,6 +657,18 @@
       <div class="row" style="margin-top:10px"><button class="btn sm ok" type="button" onclick="chanTest('rubika')">بررسی اتصال روبیکا</button></div>
     </div>
     <div class="card">
+      <h3>🌐 وضعیت IP و ریست خودکار سهمیه</h3>
+      <div class="warn-box">
+        وقتی IP عوض می‌شه (مثلاً مودم ریست، VPN عوض شد)، دیوار و شیپور محدودیت IP رو برمی‌دارن. سیستم خودکار هر 5 دقیقه IP رو چک می‌کنه؛ اگر عوض شده باشه، شمارنده امروز (شماره/پیامک/چت) صفر می‌شه تا بتونی دوباره شماره بگیری. اینجا می‌تونی دستی هم چک کنی.
+      </div>
+      <div class="codebox" id="ip-status-box" style="margin-top:8px; min-height:60px; white-space:pre-wrap; line-height:1.9">در حال دریافت IP...</div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sm ok" onclick="ipCheck()">🌐 چک الان IP و ریست اگر عوض شده</button>
+        <button class="btn sm warn" onclick="ipReset()">♻️ ریست دستی سهمیه امروز</button>
+        <button class="btn sm gray" onclick="ipHistory()">📜 تاریخچه IP</button>
+      </div>
+      <div class="codebox" id="ip-history-box" style="display:none; margin-top:8px; max-height:200px; overflow:auto; white-space:pre-wrap"></div>
+      <div style="margin-top:16px; border-top:1px dashed var(--line); padding-top:12px"></div>
       <h3>🛡️ پارامترهای ضد بلاک و سهمیه IP</h3>
       <div class="grid g2">
         <div><div class="lbl">فاصله دورهای اسکن (ثانیه)</div><input id="set-watch" type="number" dir="ltr"></div>
@@ -989,6 +1002,26 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 async function refreshStatus(){
   try{
     const s = await api('/api/status');
+    // IP
+    try{
+      if($('k-ip')){
+        $('k-ip').textContent = s.current_ip||'—';
+        if(s.ip_changed){
+          $('k-ip-sub').textContent = `⚠️ IP عوض شده: ${s.last_ip||'?'} → ${s.current_ip} — سهمیه ریست می‌شود`;
+          $('k-ip').style.color = '#d9534f';
+        } else {
+          $('k-ip-sub').textContent = s.current_ip ? `آخرین ثبت: ${s.last_ip||s.current_ip}` : 'در حال دریافت IP...';
+          $('k-ip').style.color = '';
+        }
+      }
+      if($('ip-status-box') && s.current_ip){
+        // only update if not manually checking
+        if(!$('ip-status-box').textContent.includes('تاریخچه') && !$('ip-status-box').textContent.includes('چک شد')){
+          $('ip-status-box').textContent = `IP فعلی: ${s.current_ip||'نامشخص'}\nآخرین ثبت: ${s.last_ip||'ندارد'}\nتغییر: ${s.ip_changed?'بله ✅':'خیر'}\nسهمیه: ${s.phones_today||0} از ${s.ip_daily_limit||240}`;
+        }
+      }
+    }catch(e){}
+
     $('run-badge').textContent = s.running ? (s.paused?'⏸ مکث':'🟢 در حال اجرا') : '⏸ متوقف';
     $('run-badge').className = 'on';
     $('k-run').textContent = s.running ? (s.paused?'مکث':`دور ${s.tick}`) : 'خاموش';
@@ -1993,6 +2026,40 @@ async function requeueHidden(){
 async function requeueOne(token){
   if (await act('/api/leads/requeue',{token})) leadsLoad();
 }
+async function ipCheck(){
+  try{
+    const r = await api('/api/ip/check',{method:'POST', body:'{}'});
+    toast(r.message||'چک شد', !!r.ok);
+    if($('k-ip')) $('k-ip').textContent = r.new_ip||r.ip||'—';
+    if($('k-ip-sub')) $('k-ip-sub').textContent = r.message||'';
+    if($('ip-status-box')) $('ip-status-box').textContent = JSON.stringify(r,null,2);
+    refreshStatus();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function ipReset(){
+  if(!confirm('سهمیه امروز صفر شود؟ (شماره/پیامک/چت)')) return;
+  try{
+    const r = await api('/api/ip/reset-quota?reason=manual',{method:'POST', body:'{}'});
+    toast(r.message||'ریست شد', !!r.ok);
+    if($('ip-status-box')) $('ip-status-box').textContent = JSON.stringify(r,null,2);
+    refreshStatus();
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+async function ipHistory(){
+  try{
+    const r = await api('/api/ip/status');
+    const box = $('ip-history-box');
+    const statusBox = $('ip-status-box');
+    if(statusBox) statusBox.textContent = `IP فعلی: ${r.current_ip||'نامشخص'}\nآخرین IP ثبت: ${r.last_ip||'ندارد'}\nتغییر کرده؟ ${r.changed?'بله ✅ سهمیه ریست می‌شود':'خیر'}\nLAN: ${(r.lan_ips||[]).join(', ')}\nسهمیه امروز: ${JSON.stringify(r.quota_today||{})}`;
+    if(box){
+      box.style.display = box.style.display==='none' ? 'block' : 'none';
+      box.textContent = (r.history||[]).map(h=> `${h.changed_at||h.first_seen_at||''} — ${h.ip} — ${h.day}`).join('\n') || 'تاریخی نیست';
+    }
+    if($('k-ip')) $('k-ip').textContent = r.current_ip||'—';
+    if($('k-ip-sub')) $('k-ip-sub').textContent = r.message||'';
+  }catch(e){ toast('❌ '+e.message,false); }
+}
+
 
 /* تیرا — دستیار شکار */
 const TIRA_NAME = "تیرا";

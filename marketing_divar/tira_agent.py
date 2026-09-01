@@ -45,10 +45,20 @@ except Exception:
     IPHONE_VARIANTS = {}
 
 try:
-    from .price_knowledge import fetch_market_price_from_web
+    from .price_knowledge import fetch_market_price_from_web, get_dynamic_adjustments_for_product
 except Exception:
     def fetch_market_price_from_web(prod, timeout=8, use_cache=True):  # type: ignore
         return None
+    def get_dynamic_adjustments_for_product(kw):  # type: ignore
+        return {}
+
+try:
+    from .profitability import calculate_profitability, test_and_improve_profitability
+except Exception:
+    def calculate_profitability(title, market_price_new=None, sell_price_healthy=None, desired_profit_pct=10, desired_profit_toman=None, conditions_text="", extra_factors=None, db_path="data/divar_leads.db"):
+        return {}
+    def test_and_improve_profitability(title, iterations=3):
+        return {}
 
 try:
     from .hunter_ai_wizard import (
@@ -278,6 +288,13 @@ def research_any_product(keyword: str) -> Dict[str, Any]:
         else:
             factors = GENERIC_FACTORS
 
+    # محاسبه سودآوری با هزاران پارامتر — خودش تحقیق اینترنتی می‌کند و بر اساس پارامتر دوباره تنظیم می‌کند
+    profitability = None
+    try:
+        profitability = calculate_profitability(kw, market_price_new=(prices[0]["price"] if prices else None), desired_profit_pct=10, conditions_text=kw)
+    except Exception:
+        profitability = None
+
     return {
         "product": kw,
         "type": res.get("type", "generic"),
@@ -287,6 +304,7 @@ def research_any_product(keyword: str) -> Dict[str, Any]:
         "market_note": res.get("market_note", "قیمت بر اساس میانه آگهی‌های همان دسته + افت وضعیت"),
         "prices": prices,
         "has_variants": res.get("has_variants", False),
+        "profitability": profitability,
     }
 
 def generate_polite_negotiation(context: Dict[str, Any], stage: str = "opener", history: Optional[List[Dict]] = None) -> str:
@@ -458,7 +476,6 @@ def generate_polite_negotiation(context: Dict[str, Any], stage: str = "opener", 
         return random.choice(templates)
 
 
-def detect_ambiguous_text_reply(incoming_text: str, ad_title: str = "") -> Dict[str, Any]:
 def detect_ambiguous_text_reply(incoming_text: str, ad_title: str = "") -> Dict[str, Any]:
     """تشخیص متن مبهم فروشنده — شما؟ کدوم آگهی؟ بفرمایید؟ — نیاز به شفاف‌سازی"""
     txt = (incoming_text or "").strip()
