@@ -351,6 +351,7 @@ def live_sms_cfg(db_path: str, fallback: Optional[Dict[str, Any]] = None) -> Dic
     for k in ("sms_provider", "sms_api_key", "sms_username", "sms_password",
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
+              "sms_pattern_text",
               "sms_inbox_on"):
         cfg[k] = s.get(k, cfg.get(k))
     return cfg
@@ -376,7 +377,8 @@ def send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
         return send_melipayamak_pattern(
             user, pwd, phone, (cfg.get("sms_pattern_bodyid") or "").strip(),
             args, http_post=http_post)
-    text = compose_sms(template, lead)
+    custom = (lead.get("custom_text") or "").strip() if isinstance(lead, dict) else ""
+    text = compose_sms(custom or template, lead)
     return send_melipayamak(
         user, pwd, phone, (cfg.get("sms_line_number") or "").strip(),
         text, http_post=http_post)

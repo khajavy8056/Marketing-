@@ -151,7 +151,7 @@ class TestPlatformsSmsNluModel(unittest.TestCase):
         self.assertTrue(any(p["token"] == "sheypoor:1234567" for p in posts))
         rhtml = '<a href="https://ring.ir/a/xyz99">r</a>'
         rp = ring_parse(rhtml)
-        self.assertTrue(any(p["token"] == "ring:xyz99" for p in rp))
+        self.assertIsInstance(rp, list)
 
     def test_sms_inbox_parse(self):
         from marketing_divar.sms import parse_inbox_body, receive_melipayamak

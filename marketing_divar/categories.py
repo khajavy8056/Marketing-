@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """دسته‌بندی واحد برنامه — همان درخت دیوار.
 
-شیپور و رینگ اسلاگ جدا دارند؛ با انتخاب کاربر به‌صورت خودکار نگاشت می‌شود.
+شیپور اسلاگ جدا دارد؛ با انتخاب کاربر به‌صورت خودکار نگاشت می‌شود.
 درخت جدا برای هر سایت ساخته نمی‌شود.
 """
 
@@ -74,6 +74,7 @@ CATEGORIES: List[Dict[str, str]] = [
     {"slug": "furniture-wood", "group": "خانه", "title": "مبلمان و صنایع چوب", "parent": "home-kitchen"},
     {"slug": "refrigerator-freezer", "group": "خانه", "title": "یخچال و فریزر", "parent": "home-kitchen"},
     {"slug": "washers", "group": "خانه", "title": "ماشین لباسشویی", "parent": "home-kitchen"},
+    {"slug": "vacuum-cleaner", "group": "خانه", "title": "جاروبرقی", "parent": "home-kitchen"},
     {"slug": "cookware", "group": "خانه", "title": "ظروف آشپزخانه", "parent": "home-kitchen"},
     {"slug": "lighting", "group": "خانه", "title": "روشنایی", "parent": "home-kitchen"},
     {"slug": "carpet", "group": "خانه", "title": "فرش و گلیم", "parent": "home-kitchen"},
@@ -109,7 +110,7 @@ CATEGORIES: List[Dict[str, str]] = [
 
 _BY_SLUG = {c["slug"]: c for c in CATEGORIES if c["slug"]}
 
-# نگاشت اسلاگ واحد → اسلاگ زنده شیپور / رینگ
+# نگاشت اسلاگ واحد → اسلاگ زنده شیپور
 SHEYPOOR_SLUG: Dict[str, str] = {
     "mobile-phones": "mobile-tablet",
     "mobile-tablet": "mobile-tablet",
@@ -149,6 +150,7 @@ SHEYPOOR_SLUG: Dict[str, str] = {
     "furniture-wood": "furniture",
     "refrigerator-freezer": "home-appliances",
     "washers": "home-appliances",
+    "vacuum-cleaner": "home-appliances",
     "cookware": "home",
     "lighting": "home",
     "carpet": "home",
@@ -182,46 +184,6 @@ SHEYPOOR_SLUG: Dict[str, str] = {
     "fish": "animals-pet",
 }
 
-RING_SLUG: Dict[str, str] = {
-    "real-estate": "real-estate",
-    "apartment-sell": "real-estate",
-    "apartment-rent": "real-estate",
-    "house-villa-sell": "real-estate",
-    "house-villa-rent": "real-estate",
-    "office-sell": "real-estate",
-    "office-rent": "real-estate",
-    "shop-sell": "real-estate",
-    "shop-rent": "real-estate",
-    "plot-old": "real-estate",
-    "vehicles": "vehicles",
-    "light": "vehicles",
-    "motorcycles": "vehicles",
-    "truck": "vehicles",
-    "classic-car": "vehicles",
-    "heavy-vehicles": "vehicles",
-    "auto-parts-accessories": "vehicles",
-    "rental-car": "vehicles",
-    "boat": "vehicles",
-    "electronic-devices": "digital",
-    "mobile-tablet": "digital",
-    "mobile-phones": "digital",
-    "tablet": "digital",
-    "computers": "digital",
-    "laptops": "digital",
-    "game-consoles-and-video-games": "digital",
-    "audio-video": "digital",
-    "home-kitchen": "home",
-    "furniture-wood": "home",
-    "services": "services",
-    "jobs": "jobs",
-    "personal": "personal",
-    "clothing-and-shoes": "personal",
-    "entertainment": "entertainment",
-    "social-services": "social",
-    "tools-materials-equipment": "industrial",
-    "animals": "home",
-}
-
 
 def normalize_slug(raw: Optional[str]) -> str:
     s = (raw or "").strip().lower().strip("/")
@@ -250,6 +212,20 @@ def public_list() -> List[Dict[str, str]]:
         out.append(d)
     return out
 
+def public_list_non_estate() -> List[Dict[str, str]]:
+    """لیست بدون املاک — برای پنل نهایی (حوزه املاک کار نمی‌کنیم)."""
+    out: List[Dict[str, str]] = []
+    for c in CATEGORIES:
+        if is_real_estate(c.get("slug")):
+            continue
+        d = dict(c)
+        if c.get("parent"):
+            d["label"] = " └ " + c["title"]
+        else:
+            d["label"] = c["title"]
+        out.append(d)
+    return out
+
 
 def platform_slug(canonical: Optional[str], platform: str = "divar") -> str:
     """اسلاگ دستهٔ همان پلتفرم از روی انتخاب واحد کاربر."""
@@ -259,8 +235,6 @@ def platform_slug(canonical: Optional[str], platform: str = "divar") -> str:
         return ""
     if plat == "sheypoor":
         return SHEYPOOR_SLUG.get(s, s)
-    if plat == "ring":
-        return RING_SLUG.get(s, s)
     return s
 
 
@@ -307,6 +281,8 @@ def search_slug(canonical: Optional[str], platform: str = "divar") -> str:
         s = "mobile-phones"
     elif s in LAPTOP_BRANDS:
         s = "laptops"
+    elif s == "vacuum-cleaner":
+        s = "home-kitchen"
     return platform_slug(s, platform)
 
 

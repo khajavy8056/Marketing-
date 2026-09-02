@@ -67,10 +67,19 @@ class TestEmptyContactStaysPending(unittest.TestCase):
         mon = Monitor(cfg, [{"keyword": "kw"}], db_path=db, accounts_dir=acc,
                       interactive=False)
         fake = MagicMock()
+        # خطای خالی کپچا نیست — اکانت نباید قفل شود
         fake.get_phone.return_value = {"status": "error", "message": "خالی"}
         mon.client_for = lambda name: fake
         self.assertEqual(mon._fetch_one(), "done")
-        self.assertEqual(mon._fetch_one(), "wait")
+        self.assertEqual(mon._fetch_one(), "done")
+        st = next(a for a in mon.mgr.snapshot(db) if a["name"] == "ac1")
+        self.assertNotEqual(st["status"], "captcha")
+        # کپچا واقعی بعد از چند خطای بلاک
+        fake.get_phone.return_value = {"status": "error", "message": "captcha required"}
+        for _ in range(3):
+            r = mon._fetch_one()
+            if r == "wait":
+                break
         st = next(a for a in mon.mgr.snapshot(db) if a["name"] == "ac1")
         self.assertEqual(st["status"], "captcha")
 

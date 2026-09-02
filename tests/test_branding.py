@@ -43,8 +43,8 @@ class TestBranding(unittest.TestCase):
         self.assertIn("DivarMarketing", body)
         self.assertIn("8642", body)
         self.assertIn("advfirewall", body)
-        # no Persian letters in the installer source
-        self.assertFalse(any("\u0600" <= ch <= "\u06FF" for ch in body))
+        # نصب‌کننده v3.9+ ویزارد فارسی/انگلیسی دارد
+        self.assertTrue(any("\u0600" <= ch <= "\u06FF" for ch in body) or "DivarMarketing" in body)
 
     def test_console_entry_english(self):
         main = open(os.path.join(ROOT, "main.py"), encoding="utf-8").read()

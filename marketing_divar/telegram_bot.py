@@ -222,6 +222,16 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
     if mapped == "export":
         _data, name, n = export_excel_bytes(db_path)
         return f"خروجی اکسل آماده است ({n} ردیف) — {name}"
+    # تیرا — دستور آزاد از تلگرام/بله/روبیکا (قالب، پایش دسته، راهنمای پیامک، جاروبرقی)
+    if not mapped:
+        try:
+            from .tira_commands import classify_intent, handle_tira_from_bot
+            looks_cmd = (raw or "").startswith("/")
+            intent = classify_intent(raw)
+            if intent.get("kind") or not looks_cmd:
+                return handle_tira_from_bot(raw, db_path=db_path, session_id="bot")
+        except Exception:
+            pass
     if (raw.split()[0].lower() if raw else "") == "/release" and len(raw.split()) > 1:
         name = raw.split()[1]
         from .accounts import AccountManager

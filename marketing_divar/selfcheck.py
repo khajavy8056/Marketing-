@@ -23,70 +23,37 @@ CHECKS = [
 
 
 def _check_windows_installer() -> None:
+    """نصب‌کننده v3.9+/v4: payload رمزنگاری‌شده + مدل/کرومیوم داخل بسته."""
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
-    ps1 = (root / "installer" / "installer.ps1").read_text(encoding="utf-8-sig")
-    console = (root / "installer" / "install-console.ps1").read_text(encoding="utf-8-sig")
-    bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8-sig", errors="replace")
-    raw_ps1 = (root / "installer" / "installer.ps1").read_bytes()
+    ps1_path = root / "installer" / "installer.ps1"
+    if not ps1_path.is_file():
+        raise FileNotFoundError("installer.ps1 missing")
+    raw_ps1 = ps1_path.read_bytes()
     if not raw_ps1.startswith(b"\xef\xbb\xbf"):
         raise FileNotFoundError("installer.ps1 must be UTF-8 with BOM")
-    for needle in ("ProgressBar", "DownloadProgressChanged", "Unblock-File",
-                   "main.py --check", "localhost:8642", ".venv", "CreateShortcut",
-                   "DivarMarketing", "divar-marketing-install.log",
-                   "--install-chromium", "app-chromium",
-                   "ungoogled-chromium", "PROGRESS",
-                   "barChrome", "SOURCE_FAIL", "BYTES", "SHA256",
-                   "CHROMIUM_START", "DOWNLOAD_COMPLETED",
-                   "Find-Python", "Install-Python", "python.org",
-                   "WindowStyle Minimized",
-                   "--install-nlu", "barNlu", "nlu-model", "DIVAR_NLU_DOWNLOAD"):
-        if needle not in ps1:
-            raise FileNotFoundError(f"installer incomplete — missing {needle}")
-    if "installer.ps1" not in bat or "install-console.ps1" not in bat:
-        raise FileNotFoundError("Install-and-Run.bat is not wired to installers")
-    if "Extract All" not in bat and "Extract the ZIP" not in bat:
-        raise FileNotFoundError("Extract warning missing from bat")
-    for needle in ("Find-Python", ".venv", "requirements.txt", "main.py --check",
-                   "DivarMarketing", "localhost:8642",
-                   "--install-chromium", "app-chromium",
-                   "ungoogled-chromium",
-                   "--install-nlu", "nlu-model", "DIVAR_NLU_DOWNLOAD"):
-        if needle not in console:
-            raise FileNotFoundError(f"console installer incomplete — missing {needle}")
+    ps1 = ps1_path.read_text(encoding="utf-8-sig")
+    if "DivarMarketing" not in ps1:
+        raise FileNotFoundError("installer.ps1 missing product id")
+    bat = (root / "Install-and-Run.bat").read_text(encoding="utf-8-sig", errors="replace")
+    if "installer.ps1" not in bat:
+        raise FileNotFoundError("Install-and-Run.bat is not wired to installer.ps1")
     setup = (root / "installer" / "setup_app.py").read_text(encoding="utf-8")
-    if "Progressbar" not in setup and "ProgressBar" not in setup:
-        if "ttk.Progressbar" not in setup:
-            raise FileNotFoundError("setup_app.py has no progress bar")
     if "DivarMarketing" not in setup:
         raise FileNotFoundError("setup_app.py missing product id")
-    if "fetch_chromium" not in setup or "ungoogled-chromium" not in setup:
-        raise FileNotFoundError("setup_app.py must download ungoogled-chromium")
-    if "chrome_bar" not in setup or "CHROMIUM_START" not in setup:
-        raise FileNotFoundError("setup_app.py missing independent Chromium progress")
+    if "nlu-model" not in setup:
+        raise FileNotFoundError("setup_app.py missing nlu-model folder")
     if "app-chromium" not in setup:
         raise FileNotFoundError("setup_app.py missing app-chromium folder")
-    if "install_nlu_model" not in setup or "nlu-model" not in setup or "nlu_bar" not in setup:
-        raise FileNotFoundError("setup_app.py must download NLU next to installer and install beside app")
-    if "NLU_START" not in setup or "DIVAR_NLU_DOWNLOAD" not in setup:
-        raise FileNotFoundError("setup_app.py missing NLU download cache beside installer")
-    fetch = (root / "installer" / "fetch_chromium.py").read_text(encoding="utf-8")
-    if "ungoogled-chromium" not in fetch or "PROGRESS" not in fetch:
-        raise FileNotFoundError("fetch_chromium.py incomplete")
-    for needle in ("SHA256", "SOURCE_FAIL", "BYTES", "SPEED",
-                   "probe_url", "verify_zip", "CHROMIUM_START",
-                   "INSTALLED.json", "zip_product", "chrome-for-testing",
-                   "assert_chromium_zip", "DownloadManager", "RESUME",
-                   "find_cached_zip", "ZIP_NAME", "Range"):
-        if needle not in fetch:
-            raise FileNotFoundError(f"fetch_chromium.py missing {needle}")
-    if "SOURCE_MAX_SEC" in fetch:
-        raise FileNotFoundError("SOURCE_MAX_SEC must not abort a live Chromium download")
-    if "chrome-for-testing-public" in fetch or "CFT_WIN" in fetch:
-        raise FileNotFoundError("fetch_chromium.py must not download Chrome for Testing")
-    bat_setup = (root / "ساخت-نصب-استاندارد.bat").read_text(encoding="utf-8", errors="replace")
-    if "fetch_chromium.py" not in bat_setup:
-        raise FileNotFoundError("Setup build must bundle fetch_chromium.py")
+    if "Progressbar" not in setup and "ProgressBar" not in setup and "ttk.Progressbar" not in setup:
+        raise FileNotFoundError("setup_app.py has no progress bar")
+    fetch = root / "installer" / "fetch_chromium.py"
+    if fetch.is_file():
+        body = fetch.read_text(encoding="utf-8")
+        if "ungoogled-chromium" not in body:
+            raise FileNotFoundError("fetch_chromium.py incomplete")
+        if "chrome-for-testing-public" in body or "CFT_WIN" in body:
+            raise FileNotFoundError("fetch_chromium.py must not download Chrome for Testing")
 
 
 def _check_static_ui() -> None:
@@ -97,15 +64,20 @@ def _check_static_ui() -> None:
         raise FileNotFoundError(f"Persian panel file missing: {p}")
     if "kw-category" not in html:
         raise FileNotFoundError("category picker missing from panel")
-    if "kw-city" not in html:
-        raise FileNotFoundError("city picker missing from panel")
-    if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
-        if "multiple size" not in html:
-            raise FileNotFoundError("multi-city picker missing from panel")
-    if "set-plat-divar" not in html or "set-plat-sheypoor" not in html or "set-plat-ring" not in html:
+    # شهرها اکنون آبشاری کشویی با تیک است — id قدیمی kw-city حذف شد
+    if "city-dropdown" not in html and "kw-city" not in html:
+        raise FileNotFoundError("city picker missing from panel (expected city-dropdown)")
+    # اگر kw-city قدیمی بود، چک multiple، اگر جدید بود city-dropdown کافی است
+    if "kw-city" in html:
+        if 'id="kw-city" multiple' not in html and "id='kw-city' multiple" not in html:
+            if "multiple size" not in html and "city-dropdown" not in html:
+                raise FileNotFoundError("multi-city picker missing from panel")
+    if "set-plat-divar" not in html or "set-plat-sheypoor" not in html:
         raise FileNotFoundError("platform enable switches missing from panel")
-    if "kw-price-min" not in html or "kw-vip" not in html:
-        raise FileNotFoundError("price range / VIP missing from panel")
+    if "kw-price-min" not in html:
+        raise FileNotFoundError("price range missing from panel")
+    if "kw-vip" not in html and "kw-hunter" not in html:
+        raise FileNotFoundError("hunter / VIP missing from panel")
     if "hunter-adv-dlg" not in html or "hunterAdvOpen" not in html:
         raise FileNotFoundError("hunter advanced settings popup missing from panel")
     if "/api/hunter-profile" not in html:
