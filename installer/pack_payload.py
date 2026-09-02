@@ -28,7 +28,7 @@ SKIP_DIR = {
 }
 SKIP_FILE = {"install-log.txt", "payload.zip", "payload.zip.enc", "payload.zip.enc.tmp"}
 
-ENCRYPTION_KEY = b"DivarMarketing-2024-Secure-Key-Tira-v3.8"
+ENCRYPTION_KEY = b"DivarMarketing-2024-Secure-Key-Tira-v3.9-Final-Ultimate"
 
 def _keep(path: Path) -> bool:
     rel = path.relative_to(ROOT)
