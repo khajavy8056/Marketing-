@@ -295,8 +295,25 @@ def _create_native_gui():
 
     root = tk.Tk()
     root.title(APP_TITLE)
-    root.geometry("1200x800")
-    root.minsize(1000, 600)
+    # Responsive minimal fix - was 1200x800 fixed, now fits any screen
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except:
+        sw, sh = 1920, 1080
+    if sw <= 1024 or sh <= 768:
+        ww, wh = min(1000, sw - 20), min(650, sh - 20)
+    elif sw <= 1366:
+        ww, wh = min(1100, sw - 20), min(700, sh - 30)
+    else:
+        ww, wh = 1200, 800
+    ww = max(720, ww)
+    wh = max(540, wh)
+    x = max(0, (sw - ww)//2)
+    y = max(0, (sh - wh)//2)
+    root.geometry(f"{ww}x{wh}+{x}+{y}")
+    root.minsize(720, 540)
+    root.resizable(True, True)
     root.configure(bg="#f0f4f8")
     
     try:
@@ -434,7 +451,7 @@ def _create_native_gui():
 
     tira_chat = scrolledtext.ScrolledText(tira_frame, font=("Segoe UI", 10), bg="#f8fafc", fg="#1a202c", wrap="word", height=20)
     tira_chat.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0,10))
-    tira_chat.insert("1.0", "🧠 سلام! من تیرا هستم — دستیار شکار حرفه‌ای v4.1\n\nمی‌تونی بهم بگی:\n• جاروبرقی بوش می‌خوام\n• یخچال ساید بای ساید\n• پراید 131 تمیز\n• سری 13 14 15 شکار کن\n• هرچی موبایل وجود داره پیام بره\n• متن پیامک رو بذار: سلام...\n• چطور پنل پیامکی رو تنظیم کنم؟\n• آیا تیرا از طریق ربات بله دستور می‌گیره؟\n\nهرچی بگی، تحقیق می‌کنم و تنظیمات شکارچی رو می‌سازم! 🚀\n\n")
+    tira_chat.insert("1.0", "🧠 سلام! من تیرا هستم — دستیار شکار حرفه‌ای v4.1\n\nمی‌تونی بهم بگی:\n• برای لوازم خانگی شکار تنظیم کن\n• دسته‌بندی موبایل و تبلت\n• قیمت‌گذاری هوشمند\n• کمپین جدید خودرو بساز\n• پیام خوش‌آمدگویی حرفه‌ای بنویس\n• متن پیام حرفه‌ای\n• چطور پنل پیامکی رو تنظیم کنم؟\n• آیا تیرا از طریق ربات بله دستور می‌گیره؟\n\nهرچی بگی، تحقیق می‌کنم و تنظیمات شکارچی رو می‌سازم! 🚀\n\n")
     tira_chat.configure(state="disabled")
 
     tira_input_frame = tk.Frame(tira_frame, bg="white")
@@ -497,10 +514,10 @@ def _create_native_gui():
     quick_frame = tk.Frame(tira_frame, bg="white")
     quick_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
     quick_msgs = [
-        "جاروبرقی بوش می‌خوام",
-        "سری 13 14 15 شکار کن",
-        "هرچی موبایل وجود داره",
-        "متن پیامک رو بذار",
+        "برای لوازم خانگی شکار تنظیم کن",
+        "کمپین جدید خودرو بساز",
+        "قیمت‌گذاری هوشمند",
+        "کمپین خودرو بساز",
         "چطور پنل پیامکی رو تنظیم کنم؟",
         "آیا تیرا از طریق ربات بله دستور می‌گیره؟"
     ]

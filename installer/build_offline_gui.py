@@ -80,9 +80,26 @@ def gui_main():
         return 1
 
     root = tk.Tk()
-    root.title(f"Divar Marketing — سازنده نصب‌کننده v{APP_VERSION} — FIXED No Freeze")
-    root.geometry("960x900")
-    root.minsize(900, 850)
+    root.title(f"Divar Marketing Builder - v{APP_VERSION}")
+    # Responsive minimal fix - was 960x900 fixed, now fits any screen
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except:
+        sw, sh = 1920, 1080
+    if sw <= 1024 or sh <= 768:
+        ww, wh = min(900, sw - 20), min(680, sh - 20)
+    elif sw <= 1366:
+        ww, wh = 880, min(720, sh - 30)
+    else:
+        ww, wh = 920, 800
+    ww = max(720, ww)
+    wh = max(580, wh)
+    x = max(0, (sw - ww)//2)
+    y = max(0, (sh - wh)//2)
+    root.geometry(f"{ww}x{wh}+{x}+{y}")
+    root.minsize(720, 580)
+    root.resizable(True, True)
     root.configure(bg="#f0f4f8")
 
     style = ttk.Style()

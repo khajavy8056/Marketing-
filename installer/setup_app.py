@@ -424,9 +424,27 @@ def gui_wizard() -> int:
         return 2
 
     root = tk.Tk()
-    root.title(f"{APP_NAME} Setup - {APP_VERSION} - Native Windows")
-    root.geometry("860x780")
-    root.resizable(False, False)
+    root.title(f"{APP_NAME} Setup - {APP_VERSION}")
+    # Responsive: fits any screen 1024x768 to 4K
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except:
+        sw, sh = 1920, 1080
+    # Adaptive size - minimal change from v4.2 but responsive
+    if sw <= 1024 or sh <= 768:
+        ww, wh = min(840, sw - 20), min(700, sh - 20)
+    elif sw <= 1366:
+        ww, wh = 820, min(720, sh - 40)
+    else:
+        ww, wh = 860, 760
+    ww = max(680, ww)
+    wh = max(540, wh)
+    x = max(0, (sw - ww)//2)
+    y = max(0, (sh - wh)//2)
+    root.geometry(f"{ww}x{wh}+{x}+{y}")
+    root.minsize(680, 540)
+    root.resizable(True, True)
     root.configure(bg="#f0f4f8")
     try:
         ico = app_icon()
@@ -460,9 +478,9 @@ def gui_wizard() -> int:
     header.pack_propagate(False)
     left_hdr = tk.Frame(header, bg="#0f2a4a")
     left_hdr.pack(side="left", padx=20, pady=12, fill="y")
-    tk.Label(left_hdr, text=f"🧠 {APP_NAME_FA}", font=("Segoe UI", 16, "bold"), bg="#0f2a4a", fg="white").pack(anchor="w")
-    tk.Label(left_hdr, text=f"{APP_NAME} - تیرا v{APP_VERSION} - نیتیو ویندوز", font=("Segoe UI", 9, "bold"), bg="#0f2a4a", fg="#8ec0f0").pack(anchor="w")
-    tk.Label(left_hdr, text="پنجره استاندارد ویندوز مثل Office - بدون کنسول سیاه", font=("Segoe UI", 8), bg="#0f2a4a", fg="#a78bfa").pack(anchor="w")
+    tk.Label(left_hdr, text=f"{APP_NAME_FA}", font=("Segoe UI", 14, "bold"), bg="#0f2a4a", fg="white").pack(anchor="w")
+    tk.Label(left_hdr, text=f"{APP_NAME} - Professional Edition", font=("Segoe UI", 9), bg="#0f2a4a", fg="#8ec0f0").pack(anchor="w")
+    tk.Label(left_hdr, text="Professional Lead Management System", font=("Segoe UI", 8), bg="#0f2a4a", fg="#a78bfa").pack(anchor="w")
     right_hdr = tk.Frame(header, bg="#0f2a4a")
     right_hdr.pack(side="right", padx=20, pady=12)
     tk.Label(right_hdr, text=f"v{APP_VERSION}", font=("Segoe UI", 10, "bold"), bg="#0f2a4a", fg="#a78bfa").pack(anchor="e")
@@ -485,26 +503,26 @@ def gui_wizard() -> int:
 
     step_frames = []
 
-    # Step 0: Welcome
+    # Step 0: Welcome - Professional
     f0 = tk.Frame(content_frame, bg="white")
-    tk.Label(f0, text="🪟", font=("Segoe UI", 52), bg="white").pack(pady=(25,5))
-    tk.Label(f0, text="به نصب‌کننده نیتیو ویندوز خوش آمدید", font=("Segoe UI", 18, "bold"), bg="white", fg="#0f2a4a").pack(pady=5)
-    tk.Label(f0, text=f"{APP_NAME} {APP_VERSION}\nنسخه نهایی نیتیو ویندوز - پنجره استاندارد (نه مرورگر)\nتیرا v4.1: جاروبرقی، یخچال، لباسشویی، پراید، موبایل، سری 13 14 15\nدیوار + شیپور + شکارچی + ملی‌پیامک کامل + روبیکا + DownloadManager", font=("Segoe UI", 11), bg="white", fg="#334", justify="center").pack(pady=8)
+    tk.Label(f0, text=APP_NAME, font=("Segoe UI", 18, "bold"), bg="white", fg="#0f2a4a").pack(pady=(25,5))
+    tk.Label(f0, text="Professional Lead Management System", font=("Segoe UI", 11), bg="white", fg="#475569").pack(pady=5)
+    tk.Label(f0, text=f"{APP_NAME} {APP_VERSION}\nProfessional native Windows application\nSmart automation platform for lead collection", font=("Segoe UI", 10), bg="white", fg="#334155", justify="center").pack(pady=8)
     feat_frame = tk.Frame(f0, bg="white")
     feat_frame.pack(pady=12)
     features = [
-        "🪟 برنامه اصلی: پنجره نیتیو ویندوز استاندارد - نه مرورگر! (داشبورد/تیرا/دانلودها/تنظیمات)",
-        "📦 یک فایل تکی رمزنگاری شده - بدون نیاز به اینترنت (1-2GB) - بدون نمایش کد",
-        "🌐 کرومیوم اختصاصی + مدل تیرا داخل فایل نصب - DownloadManager سریع با resume",
-        "🧠 تیرا v4.1: جاروبرقی بوش، یخچال، پراید، سری 13 14 15، هرچی موبایل bulk",
-        "💬 متن پیامک رو بذار، متن چت، راهنمای ملی‌پیامک کامل (Send/Pattern/Delivery/Inbox)",
-        "🤖 ربات‌های بله/روبیکا/تلگرام -> تیرا - دستورات از ربات‌ها",
-        "📱 هرچی موبایل: پیام خودکار + استخراج شماره‌ها + اطلاع روبیکا",
-        "🛡️ IP ریست خودکار + سودآوری هزار پارامتری + بدون کنسول سیاه",
+        "Automated ad monitoring and lead extraction",
+        "Intelligent messaging and negotiation assistant",
+        "Multi-account and multi-platform support",
+        "Secure data management with backup options",
+        "Native Windows application with offline capabilities",
+        "Chromium engine + AI model included - no internet required",
+        "SMS gateway integration + Chat automation",
+        "Professional installer - single encrypted file",
     ]
     for feat in features:
-        tk.Label(feat_frame, text=feat, font=("Segoe UI", 9), bg="white", fg="#2d3748", anchor="w", wraplength=720, justify="left").pack(anchor="w", pady=2, padx=15)
-    tk.Label(f0, text="برای ادامه Next را بزنید - نصب استاندارد ویندوز مثل Office - بدون کنسول", font=("Segoe UI", 10, "bold"), bg="white", fg="#1976d2").pack(pady=12)
+        tk.Label(feat_frame, text=f"• {feat}", font=("Segoe UI", 9), bg="white", fg="#2d3748", anchor="w", wraplength=700, justify="left").pack(anchor="w", pady=2, padx=15)
+    tk.Label(f0, text="Click Next to continue installation", font=("Segoe UI", 10, "bold"), bg="white", fg="#2563eb").pack(pady=12)
     step_frames.append(f0)
 
     # Step 1: License
