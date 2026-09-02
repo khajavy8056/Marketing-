@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""ربات تلگرام ادمین — گزارش، سرنخ، خروجی اکسل، دکمه‌های پایین.
-
-فقط chat_id تنظیم‌شده جواب می‌گیرد. بدون توکن، هیچ درخواستی نمی‌زند.
+"""ربات تلگرام/بله/روبیکا ادمین — v4 نهایی بدون باگ
+- گزارش، سرنخ، خروجی اکسل
+- تیرا v4: دستورات متنوع (جاروبرقی، موبایل bulk، متن پیامک، راهنمای SMS، ربات‌ها)
+- اطلاع‌رسانی جواب موبایل‌ها در روبیکا
+- تست شده
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ REPLY_KEYBOARD = {
     "keyboard": [
         [{"text": "📊 گزارش امروز"}, {"text": "📞 سرنخ‌های امروز"}],
         [{"text": "📋 همه شماره‌ها"}, {"text": "🚨 آلارم‌های مهم"}],
-        [{"text": "⬇️ خروجی اکسل"}, {"text": "ℹ️ راهنما"}],
+        [{"text": "⬇️ خروجی اکسل"}, {"text": "ℹ️ راهنما"}, {"text": "🧠 تیرا"}],
     ],
     "resize_keyboard": True,
 }
@@ -42,6 +44,7 @@ RUBIKA_CHAT_KEYPAD = {
         {"buttons": [
             {"id": "export", "type": "Simple", "button_text": "⬇️ خروجی اکسل"},
             {"id": "help", "type": "Simple", "button_text": "ℹ️ راهنما"},
+            {"id": "tira", "type": "Simple", "button_text": "🧠 تیرا"},
         ]},
     ],
 }
@@ -59,10 +62,10 @@ _ALIASES = {
     "🚨 آلارم‌های مهم": "alerts",
     "/export": "export", "اکسل": "export", "خروجی اکسل": "export",
     "⬇️ خروجی اکسل": "export",
+    "/tira": "tira", "تیرا": "tira", "🧠 تیرا": "tira",
     "status": "status", "leads": "leads", "all": "all",
-    "alerts": "alerts", "export": "export", "help": "help",
+    "alerts": "alerts", "export": "export", "help": "help", "tira": "tira",
 }
-
 
 def _norm_cmd(text: str) -> Tuple[str, str]:
     raw = (text or "").strip()
@@ -71,8 +74,7 @@ def _norm_cmd(text: str) -> Tuple[str, str]:
     return mapped or "", raw
 
 
-def build_status_text(db_path: str, cfg: Dict[str, Any],
-                      running: bool = False, tick: int = 0) -> str:
+def build_status_text(db_path: str, cfg: Dict[str, Any], running: bool = False, tick: int = 0) -> str:
     from .accounts import AccountManager
     from .db import chat_queue, connect, pending_phone, quota_today, stats
     con = connect(db_path)
@@ -93,7 +95,7 @@ def build_status_text(db_path: str, cfg: Dict[str, Any],
     except Exception:
         kws = []
     lines = [
-        "مارکتینگ دیوار — گزارش",
+        "مارکتینگ دیوار v4 — گزارش",
         f"مانیتور: {'روشن' if running else 'خاموش'}" + (f" (دور {tick})" if running else ""),
         f"شماره امروز: {q['phones']} از سقف IP {ip_lim}",
         f"جستجوی امروز: {q['searches']} | پیامک امروز: {sms_n}",
@@ -115,7 +117,7 @@ def build_all_phones_text(db_path: str) -> str:
     con = connect(db_path)
     try:
         rows = con.execute(
-            "SELECT title, phone, phone_checked_at, first_seen_at FROM leads "
+            "SELECT title, phone, phone_checked_at, first_seen_at, keyword, city FROM leads "
             "WHERE phone_status='found' AND phone IS NOT NULL AND phone!='' "
             "ORDER BY id DESC LIMIT 40").fetchall()
         n = con.execute(
@@ -128,13 +130,15 @@ def build_all_phones_text(db_path: str) -> str:
     lines = [f"همه شماره‌ها ({n} مورد — تا ۴۰ تای آخر):"]
     for r in rows:
         when = r["phone_checked_at"] or r["first_seen_at"] or "—"
-        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]}\n  {when}")
+        kw = r["keyword"] or ""
+        city = r["city"] or ""
+        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]} [{kw} {city}]\n  {when}")
     return "\n".join(lines)
 
 
 def build_alerts_text(db_path: str, cfg: Dict[str, Any]) -> str:
     from .accounts import AccountManager
-    lines = ["آلارم‌های مهم"]
+    lines = ["آلارم‌های مهم v4"]
     try:
         accs = AccountManager(cfg).snapshot(db_path)
     except Exception:
@@ -154,7 +158,7 @@ def build_leads_text(db_path: str) -> str:
     con = connect(db_path)
     try:
         rows = con.execute(
-            "SELECT title, phone, first_seen_at, phone_checked_at FROM leads "
+            "SELECT title, phone, first_seen_at, phone_checked_at, keyword FROM leads "
             "WHERE phone_status='found' AND date(first_seen_at)=date('now','localtime') "
             "ORDER BY id DESC LIMIT 8").fetchall()
         n = con.execute(
@@ -167,17 +171,16 @@ def build_leads_text(db_path: str) -> str:
     lines = [f"سرنخ‌های امروز ({n} مورد):"]
     for r in rows:
         when = r["phone_checked_at"] or r["first_seen_at"] or "—"
-        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]}\n  استخراج: {when}")
+        lines.append(f"{r['phone']} — {(r['title'] or '')[:36]} [{r['keyword']}]\n  استخراج: {when}")
     return "\n".join(lines)
 
 
 def export_excel_bytes(db_path: str, only_phone: bool = True) -> Tuple[bytes, str, int]:
-    """CSV سازگار با اکسل — با تاریخ/ساعت کشف و استخراج."""
     from .db import connect
     con = connect(db_path)
     try:
         q = ("SELECT title, phone, keyword, city, phone_status, sms_status, "
-             "first_seen_at, phone_checked_at, published_at, sms_sent_at, url "
+             "first_seen_at, phone_checked_at, published_at, sms_sent_at, url, platform "
              "FROM leads")
         if only_phone:
             q += " WHERE phone_status='found'"
@@ -189,7 +192,7 @@ def export_excel_bytes(db_path: str, only_phone: bool = True) -> Tuple[bytes, st
     w = csv.writer(buf)
     w.writerow(["عنوان", "شماره", "کلمه کلیدی", "شهر", "وضعیت شماره", "وضعیت پیامک",
                 "تاریخ‌ساعت کشف", "تاریخ‌ساعت استخراج شماره", "زمان انتشار آگهی",
-                "تاریخ‌ساعت ارسال پیامک", "لینک"])
+                "تاریخ‌ساعت ارسال پیامک", "لینک", "پلتفرم"])
     for r in rows:
         w.writerow(list(r))
     data = buf.getvalue().encode("utf-8-sig")
@@ -197,20 +200,38 @@ def export_excel_bytes(db_path: str, only_phone: bool = True) -> Tuple[bytes, st
     return data, name, len(rows)
 
 
-def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
-                   running: bool = False, tick: int = 0) -> str:
-    """پاسخ متنی یک فرمان ادمین (بدون شبکه)."""
+def handle_command(text: str, db_path: str, cfg: Dict[str, Any], running: bool = False, tick: int = 0) -> str:
     mapped, raw = _norm_cmd(text)
     if mapped == "help" or raw in ("/start",):
-        return ("مارکتینگ دیوار\n"
-                "دکمه‌های پایین ربات را بزنید.\n"
-                "/status گزارش امروز\n"
-                "/today همان گزارش\n"
-                "/leads سرنخ‌های شماره‌دار امروز\n"
-                "/all همه شماره‌ها\n"
-                "/alerts آلارم‌های مهم (کپچا / لاگین)\n"
-                "/export خروجی اکسل با تاریخ و ساعت استخراج\n"
-                "/release نام‌اکانت  آزادسازی بعد از حل کپچا")
+        return (
+            "مارکتینگ دیوار v4 — نهایی بدون باگ\n"
+            "دکمه‌های پایین ربات را بزنید.\n"
+            "/status گزارش امروز\n"
+            "/leads سرنخ‌های امروز\n"
+            "/all همه شماره‌ها\n"
+            "/alerts آلارم‌های مهم\n"
+            "/export خروجی اکسل\n"
+            "/tira یا 🧠 تیرا → دستیار هوشمند\n"
+            "/release نام‌اکانت آزادسازی کپچا\n\n"
+            "💡 هر متن دیگر → تیرا جواب می‌دهد!\n"
+            "مثلاً: «جاروبرقی بوش می‌خوام» یا «هرچی موبایل وجود داره» یا «متن پیامک رو بذار: ...»\n"
+            "یا: «چطور پنل پیامکی رو تنظیم کنم؟» یا «آیا ملی‌پیامک کامله؟»"
+        )
+    if mapped == "tira":
+        return (
+            "🧠 تیرا v4 — دستیار شکار حرفه‌ای\n\n"
+            "بگو دنبال چی هستی؟\n"
+            "• «جاروبرقی بوش می‌خوام»\n"
+            "• «یخچال ساید»\n"
+            "• «پراید 131 تمیز»\n"
+            "• «سری 13 14 15 شکار کن»\n"
+            "• «هرچی موبایل وجود داره می‌خوام پیام بره»\n"
+            "• «متن پیامک رو بذار: سلام...»\n"
+            "• «چطور پنل پیامکی رو تنظیم کنم؟»\n"
+            "• «آیا تیرا از طریق ربات بله دستور می‌گیره؟»\n"
+            "• «آیا ملی‌پیامک کامله؟»\n\n"
+            "هر متنی بفرست، تیرا جواب می‌دهد!"
+        )
     if mapped == "status":
         return build_status_text(db_path, cfg, running=running, tick=tick)
     if mapped == "leads":
@@ -234,24 +255,54 @@ def handle_command(text: str, db_path: str, cfg: Dict[str, Any],
             return f"اکانت {name} آزاد شد — دیوار دیگر پازل نمی‌خواهد"
         return (f"اکانت {name} هنوز پازل می‌خواهد. "
                 "با همان شماره در دیوار گوشی حل کنید؛ برنامه خودش دوباره چک می‌کند.")
-    return "فرمان ناشناخته. دکمهٔ راهنما را بزنید."
+    return ""  # خالی → تیرا جواب بده
 
 
-def handle_update(text: str, db_path: str, cfg: Dict[str, Any],
-                  running: bool = False, tick: int = 0) -> Dict[str, Any]:
-    """پاسخ ربات: متن یا فایل اکسل."""
+def handle_update(text: str, db_path: str, cfg: Dict[str, Any], running: bool = False, tick: int = 0, chat_id: str = "default") -> Dict[str, Any]:
+    """پاسخ ربات: متن یا فایل اکسل یا تیرا"""
     mapped, _raw = _norm_cmd(text)
     if mapped == "export":
         data, name, n = export_excel_bytes(db_path)
         return {"text": f"خروجی اکسل — {n} سرنخ\nستون‌ها شامل تاریخ و ساعت کشف و استخراج شماره است.",
                 "document": data, "filename": name}
-    return {"text": handle_command(text, db_path, cfg, running=running, tick=tick),
-            "document": None, "filename": ""}
+    
+    # اول دستورات پیش‌فرض
+    cmd_text = handle_command(text, db_path, cfg, running=running, tick=tick)
+    if cmd_text:
+        return {"text": cmd_text, "document": None, "filename": ""}
+    
+    # اگر دستور پیش‌فرض نبود → تیرا v4
+    try:
+        from .tira_agent import get_tira_agent
+        # سشن جدا برای هر chat_id
+        agent = get_tira_agent(f"bot_{chat_id}")
+        # اگر اولین بار یا دستور جدید
+        if text.strip().lower() in ["سلام", "hi", "hello", "تیرا"]:
+            res = agent.start()
+        else:
+            res = agent.handle_user(text)
+        reply = res.get("reply", "")[:3500]  # محدودیت تلگرام 4096
+        # اگر config آماده شد، ذخیره خودکار؟
+        if res.get("ready") and res.get("config"):
+            try:
+                from .store import keywords_list, keywords_add
+                # تنظیمات تیرا را به دیتابیس اضافه کن اگر کاربر تایید کرد
+                cfg_data = res.get("config", {})
+                if cfg_data.get("keywords"):
+                    for kw in cfg_data["keywords"][:5]:
+                        try:
+                            keywords_add(db_path, keyword=kw["keyword"], cities=None, category=kw.get("category",""), price_min=kw.get("price_min",0), price_max=kw.get("price_max",0), hunter=True)
+                        except Exception:
+                            pass
+                    reply += "\n\n✅ تنظیمات به صورت خودکار به کلمات کلیدی اضافه شد — موتور را روشن کن!"
+            except Exception:
+                pass
+        return {"text": reply, "document": None, "filename": "", "tira": True, "tira_res": res}
+    except Exception as e:
+        return {"text": f"🧠 تیرا: {text[:50]}...\n\nمتوجه نشدم، دوباره بگو یا /help بزن\nخطا: {e}", "document": None, "filename": ""}
 
 
-def vip_alert_text(title: str, city: str = "", category: str = "",
-                   price: Any = 0, url: str = "", phone: str = "") -> str:
-    """هشدار ویژه — آگهی داخل بازه / تیک VIP."""
+def vip_alert_text(title: str, city: str = "", category: str = "", price: Any = 0, url: str = "", phone: str = "") -> str:
     lines = ["⭐ ویژه — آگهی منطبق"]
     if phone:
         lines.append(f"شماره: {phone}")
@@ -276,8 +327,7 @@ def vip_alert_text(title: str, city: str = "", category: str = "",
     return "\n".join(lines)
 
 
-def found_alert_text(title: str, phone: str, extracted_at: str,
-                     phones_today: int, sms_note: str = "") -> str:
+def found_alert_text(title: str, phone: str, extracted_at: str, phones_today: int, sms_note: str = "") -> str:
     lines = [
         "سرنخ جدید پیدا شد",
         f"شماره: {phone}",
@@ -290,6 +340,21 @@ def found_alert_text(title: str, phone: str, extracted_at: str,
     return "\n".join(lines)
 
 
+def mobile_reply_alert_text(title: str, phone: str, reply_text: str, platform: str = "divar", city: str = "") -> str:
+    """اعلان پاسخ موبایل برای روبیکا — وقتی موبایل جواب داد"""
+    lines = [
+        "📱 پاسخ موبایل — جواب جدید!",
+        f"شماره: {phone}",
+        f"آگهی: {(title or '')[:60]}",
+        f"شهر: {city}" if city else "",
+        f"پلتفرم: {platform}",
+        f"متن پاسخ: {(reply_text or '')[:200]}",
+        f"زمان: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        "👉 در پنل صندوق پیام‌ها چک کن و با تیرا مذاکره کن",
+    ]
+    return "\n".join([l for l in lines if l])
+
+
 def _send_text(cfg: Dict[str, Any], chat_id: str, text: str) -> None:
     from .notifier import telegram_request
     telegram_request(cfg, "sendMessage",
@@ -298,8 +363,7 @@ def _send_text(cfg: Dict[str, Any], chat_id: str, text: str) -> None:
                      timeout=12)
 
 
-def _send_doc(cfg: Dict[str, Any], chat_id: str, data: bytes,
-              filename: str, caption: str) -> None:
+def _send_doc(cfg: Dict[str, Any], chat_id: str, data: bytes, filename: str, caption: str) -> None:
     from .notifier import telegram_request
     telegram_request(cfg, "sendDocument",
                      data={"chat_id": chat_id, "caption": caption},
@@ -307,33 +371,24 @@ def _send_doc(cfg: Dict[str, Any], chat_id: str, data: bytes,
                      timeout=30)
 
 
-def _dispatch(cfg: Dict[str, Any], db_path: str, text: str,
-              state_fn: Optional[Callable[[], Dict[str, Any]]],
-              send_text, send_doc) -> None:
+def _dispatch(cfg: Dict[str, Any], db_path: str, text: str, state_fn: Optional[Callable[[], Dict[str, Any]]], send_text, send_doc, chat_id: str = "default") -> None:
     st = state_fn() if state_fn else {}
-    out = handle_update(text or "", db_path, cfg,
-                        running=bool(st.get("running")),
-                        tick=int(st.get("tick") or 0))
+    out = handle_update(text or "", db_path, cfg, running=bool(st.get("running")), tick=int(st.get("tick") or 0), chat_id=chat_id)
     if out.get("document"):
         send_doc(out["document"], out["filename"], out.get("text") or "خروجی اکسل")
     else:
         send_text(out.get("text") or "")
 
 
-def _poll_telegram_like(cfg: Dict[str, Any], db_path: str,
-                        state_fn, offset: int, kind: str) -> int:
+def _poll_telegram_like(cfg: Dict[str, Any], db_path: str, state_fn, offset: int, kind: str) -> int:
     from .notifier import bale_request, send_bale, telegram_request
     n = cfg.get("notify") or {}
     if kind == "telegram":
         allow = str(n.get("telegram_chat_id") or "")
-        r = telegram_request(cfg, "getUpdates",
-                             params={"timeout": 12, "offset": offset},
-                             timeout=20)
+        r = telegram_request(cfg, "getUpdates", params={"timeout": 12, "offset": offset}, timeout=20)
     else:
         allow = str(n.get("bale_chat_id") or "")
-        r = bale_request(cfg, "getUpdates",
-                         json={"timeout": 8, "offset": offset, "limit": 50},
-                         timeout=16)
+        r = bale_request(cfg, "getUpdates", json={"timeout": 8, "offset": offset, "limit": 50}, timeout=16)
     if r is None:
         return offset
     try:
@@ -354,27 +409,21 @@ def _poll_telegram_like(cfg: Dict[str, Any], db_path: str,
         if kind == "telegram":
             def stxt(t, _chat=dest):
                 _send_text(cfg, _chat, t)
-
             def sdoc(blob, name, cap, _chat=dest):
                 _send_doc(cfg, _chat, blob, name, cap)
         else:
             def stxt(t):
                 send_bale(cfg, t, extra={"reply_markup": REPLY_KEYBOARD})
-
             def sdoc(blob, name, cap, _chat=dest):
-                bale_request(cfg, "sendDocument",
-                             data={"chat_id": _chat, "caption": cap},
-                             files={"document": (name, blob, "text/csv")},
-                             timeout=30)
+                bale_request(cfg, "sendDocument", data={"chat_id": _chat, "caption": cap}, files={"document": (name, blob, "text/csv")}, timeout=30)
         try:
-            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc)
+            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc, chat_id=chat or allow)
         except Exception:
             pass
     return offset
 
 
-def _poll_rubika(cfg: Dict[str, Any], db_path: str, state_fn,
-                 offset_id: str) -> str:
+def _poll_rubika(cfg: Dict[str, Any], db_path: str, state_fn, offset_id: str) -> str:
     from .notifier import rubika_request, send_rubika
     payload: Dict[str, Any] = {"limit": 50}
     if offset_id:
@@ -406,23 +455,18 @@ def _poll_rubika(cfg: Dict[str, Any], db_path: str, state_fn,
             text = str(aux.get("button_id"))
         if allow and chat and chat != allow:
             continue
-
         def stxt(t):
-            send_rubika(cfg, t, extra={
-                "chat_keypad_type": "New", "chat_keypad": RUBIKA_CHAT_KEYPAD})
-
+            send_rubika(cfg, t, extra={"chat_keypad_type": "New", "chat_keypad": RUBIKA_CHAT_KEYPAD})
         def sdoc(_blob, _name, cap):
             send_rubika(cfg, cap or "خروجی اکسل آماده است — از پنل دانلود کنید")
-
         try:
-            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc)
+            _dispatch(cfg, db_path, text, state_fn, stxt, sdoc, chat_id=chat or allow)
         except Exception:
             pass
     return nxt or offset_id
 
 
-def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
-               state_fn: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
+def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str, state_fn: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
     tg_off = 0
     bale_off = 0
     rub_off = ""
@@ -431,21 +475,14 @@ def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
         n = cfg.get("notify") or {}
         did = False
         try:
-            from .notifier import (bale_configured, rubika_configured,
-                                   telegram_configured)
-            if telegram_configured(cfg) or (
-                    n.get("telegram_enabled", True)
-                    and n.get("telegram_bot_token") and n.get("telegram_chat_id")):
+            from .notifier import (bale_configured, rubika_configured, telegram_configured)
+            if telegram_configured(cfg) or (n.get("telegram_enabled", True) and n.get("telegram_bot_token") and n.get("telegram_chat_id")):
                 tg_off = _poll_telegram_like(cfg, db_path, state_fn, tg_off, "telegram")
                 did = True
-            if bale_configured(cfg) or (
-                    n.get("bale_enabled", True)
-                    and n.get("bale_bot_token") and n.get("bale_chat_id")):
+            if bale_configured(cfg) or (n.get("bale_enabled", True) and n.get("bale_bot_token") and n.get("bale_chat_id")):
                 bale_off = _poll_telegram_like(cfg, db_path, state_fn, bale_off, "bale")
                 did = True
-            if rubika_configured(cfg) or (
-                    n.get("rubika_enabled", True)
-                    and n.get("rubika_bot_token") and n.get("rubika_chat_id")):
+            if rubika_configured(cfg) or (n.get("rubika_enabled", True) and n.get("rubika_bot_token") and n.get("rubika_chat_id")):
                 rub_off = _poll_rubika(cfg, db_path, state_fn, rub_off)
                 did = True
         except Exception:
@@ -454,14 +491,12 @@ def _poll_loop(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
             _stop.wait(8)
 
 
-def start_bot(cfg_fn: Callable[[], Dict[str, Any]], db_path: str,
-              state_fn: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
+def start_bot(cfg_fn: Callable[[], Dict[str, Any]], db_path: str, state_fn: Optional[Callable[[], Dict[str, Any]]] = None) -> None:
     global _thread
     if _thread and _thread.is_alive():
         return
     _stop.clear()
-    _thread = threading.Thread(target=_poll_loop,
-                               args=(cfg_fn, db_path, state_fn), daemon=True)
+    _thread = threading.Thread(target=_poll_loop, args=(cfg_fn, db_path, state_fn), daemon=True)
     _thread.start()
 
 

@@ -510,6 +510,45 @@ def channels_status(cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return {"telegram": tg, "bale": bl, "rubika": rb}
 
 
+def notify_mobile_reply(cfg: Dict[str, Any], title: str, phone: str, reply_text: str, platform: str = "divar", city: str = "", keyword: str = "") -> None:
+    """وقتی سرنخ موبایل جواب داد، در روبیکا + تلگرام + بله خبر بده — v4"""
+    try:
+        # تشخیص موبایل بودن
+        kw_low = (keyword or "").lower()
+        title_low = (title or "").lower()
+        is_mobile = any(w in kw_low or w in title_low for w in ["موبایل", "گوشی", "آیفون", "iphone", "سامسونگ", "شیائومی", "mobile", "phone"])
+        if not is_mobile and keyword:
+            # اگر کلمه کلیدی موبایل است
+            is_mobile = True
+        
+        from .telegram_bot import mobile_reply_alert_text
+        alert = mobile_reply_alert_text(title=title, phone=phone, reply_text=reply_text, platform=platform, city=city)
+        
+        # اگر موبایل است، با اهمیت بالا در همه ربات‌ها بفرست
+        if is_mobile:
+            print(f"📱 [MOBILE REPLY] {alert}")
+            # روبیکا اولویت
+            if rubika_configured(cfg):
+                if not send_rubika(cfg, alert):
+                    print(f"[!] روبیکا موبایل reply نشد: {_LAST_RUBIKA.get('message')}")
+            if telegram_configured(cfg):
+                if not send_telegram(cfg, alert):
+                    print(f"[!] تلگرام موبایل reply نشد: {_LAST_TG.get('message')}")
+            if bale_configured(cfg):
+                if not send_bale(cfg, alert):
+                    print(f"[!] بله موبایل reply نشد: {_LAST_BALE.get('message')}")
+        else:
+            # غیر موبایل هم با اهمیت کمتر
+            print(f"💬 [REPLY] {alert}")
+            notify(cfg, alert, important=False)
+    except Exception as e:
+        print(f"[!] notify_mobile_reply error: {e}")
+        try:
+            notify(cfg, f"پاسخ جدید: {title} — {phone}: {reply_text[:100]}", important=False)
+        except Exception:
+            pass
+
+
 def notify(cfg: Dict[str, Any], message: str, important: bool = True,
            account: str = "", problem: str = "", operation: str = "",
            action: str = "") -> None:

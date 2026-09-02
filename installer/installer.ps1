@@ -1,15 +1,19 @@
-﻿# ============================================================
-#  Divar Marketing Installer — GUI with progress bar
-#  English only. Windows + built-in PowerShell.
+# ============================================================
+#  Divar Marketing Installer — Ultimate Final v3.9
+#  Standard Wizard: Welcome → License → Data Preserve → Location → Components → Progress → Finish
+#  No black console — only fancy GUI
+#  Includes data preservation alarm
 # ============================================================
 #requires -Version 3.0
 $ErrorActionPreference = "Stop"
 $script:HasGui = $false
 $script:LogFile = Join-Path $env:TEMP "divar-marketing-install.log"
+
 function Write-InstallLog([string]$m) {
     $line = ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m)
     try { Add-Content -LiteralPath $script:LogFile -Value $line -Encoding UTF8 } catch {}
 }
+
 try {
     $here = $PSScriptRoot
     if (-not $here) { $here = Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -17,13 +21,12 @@ try {
     Set-Location -LiteralPath $Root
     try {
         $localLog = Join-Path $Root "installer\install-log.txt"
-        "=== Divar Marketing install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
+        "=== Divar Marketing v3.9 Final install $(Get-Date) ===" | Out-File -LiteralPath $localLog -Encoding utf8
         $script:LogFile = $localLog
     } catch {}
     Write-InstallLog ("root=" + $Root + " ps=" + $PSVersionTable.PSVersion)
 } catch {
     Write-InstallLog "startup failed: $_"
-    try { Write-Host "STARTUP FAILED: $_"; Read-Host "Press Enter" } catch {}
     exit 1
 }
 
@@ -33,132 +36,483 @@ try {
     $script:HasGui = $true
 } catch {
     Write-InstallLog "WinForms missing: $_"
-    Write-Host "GUI not available."
     exit 2
 }
 
 $VenvPy  = Join-Path $Root ".venv\Scripts\python.exe"
 $LogFile = $script:LogFile
 $IconFile = Join-Path $Root "installer\app.ico"
+$DataDir = Join-Path $env:LOCALAPPDATA "DivarMarketing"
+$AppVersion = "3.9.0-final"
 
-$onCrash = {
-    param($sender, $e)
-    $msg = ""
-    try { $ex = $e.Exception } catch { $ex = $null }
-    if ($ex) { $msg = $ex.ToString() } else { $msg = "unknown crash" }
-    try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value "`r`n[FATAL] $msg" -Encoding UTF8 } catch {}
-    try {
-        [System.Windows.Forms.MessageBox]::Show(
-            "An unexpected error occurred:`r`n`r`n" + $msg.Substring(0, [Math]::Min(600, $msg.Length)) +
-            "`r`n`r`nFull details: installer\install-log.txt",
-            "Divar Marketing", "OK", "Error") | Out-Null
-    } catch {}
-}
-[System.Windows.Forms.Application]::add_ThreadException($onCrash)
-[System.AppDomain]::CurrentDomain.add_UnhandledException({ param($s, $e)
-    try { Add-Content -Path (Join-Path $Root "installer\install-log.txt") -Value ("`r`n[FATAL-Domain] " + $e.ExceptionObject) -Encoding UTF8 } catch {}
-})
-
-Get-ChildItem -LiteralPath $Root -Recurse -Include *.ps1,*.bat -ErrorAction SilentlyContinue | ForEach-Object {
-    try { Unblock-File -Path $_.FullName } catch {}
-}
-
+# ---------- GUI BUILD ----------
 try {
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Divar Marketing Setup"
-$form.Size = New-Object System.Drawing.Size(640, 680)
+$form.Text = "Divar Marketing Setup v$AppVersion — Standard Installer"
+$form.Size = New-Object System.Drawing.Size(800, 760)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
+$form.BackColor = [System.Drawing.Color]::FromArgb(240,244,248)
 if (Test-Path $IconFile) {
     try { $form.Icon = New-Object System.Drawing.Icon($IconFile) } catch {}
 }
 
-$lblTitle = New-Object System.Windows.Forms.Label
-$lblTitle.Location = New-Object System.Drawing.Point(20, 16)
-$lblTitle.Size = New-Object System.Drawing.Size(586, 30)
-$lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
-$lblTitle.Text = "Divar Marketing — Install"
+# Header
+$header = New-Object System.Windows.Forms.Panel
+$header.Location = New-Object System.Drawing.Point(0,0)
+$header.Size = New-Object System.Drawing.Size(800, 90)
+$header.BackColor = [System.Drawing.Color]::FromArgb(15,42,74)
+$form.Controls.Add($header)
+
+$lblHeaderTitle = New-Object System.Windows.Forms.Label
+$lblHeaderTitle.Location = New-Object System.Drawing.Point(20,12)
+$lblHeaderTitle.Size = New-Object System.Drawing.Size(500, 28)
+$lblHeaderTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+$lblHeaderTitle.ForeColor = [System.Drawing.Color]::White
+$lblHeaderTitle.Text = "🧠 مارکتینگ دیوار — Divar Marketing v$AppVersion"
+$header.Controls.Add($lblHeaderTitle)
+
+$lblHeaderSub = New-Object System.Windows.Forms.Label
+$lblHeaderSub.Location = New-Object System.Drawing.Point(20,42)
+$lblHeaderSub.Size = New-Object System.Drawing.Size(600, 20)
+$lblHeaderSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblHeaderSub.ForeColor = [System.Drawing.Color]::FromArgb(142,192,240)
+$lblHeaderSub.Text = "نسخه نهایی بدون باگ — تیرا تمام‌عیار — یک فایل تکی رمز شده شامل کرومیوم+مدل+همه کتابخانه‌ها"
+$header.Controls.Add($lblHeaderSub)
+
+# Steps bar
+$stepsBar = New-Object System.Windows.Forms.Panel
+$stepsBar.Location = New-Object System.Drawing.Point(0,90)
+$stepsBar.Size = New-Object System.Drawing.Size(800, 35)
+$stepsBar.BackColor = [System.Drawing.Color]::FromArgb(232,238,247)
+$form.Controls.Add($stepsBar)
+
+$stepNames = @("خوش‌آمدید","مجوز","اطلاعات قبلی","محل نصب","اجزاء","نصب","پایان")
+$stepLabels = @()
+for ($i=0; $i -lt $stepNames.Length; $i++) {
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = New-Object System.Drawing.Point((10 + $i*110), 8)
+    $lbl.Size = New-Object System.Drawing.Size(100, 20)
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    $lbl.ForeColor = if ($i -eq 0) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::FromArgb(107,122,144) }
+    $lbl.BackColor = if ($i -eq 0) { [System.Drawing.Color]::FromArgb(25,118,210) } else { [System.Drawing.Color]::FromArgb(232,238,247) }
+    $lbl.Text = "$($i+1). $($stepNames[$i])"
+    $stepsBar.Controls.Add($lbl)
+    $stepLabels += $lbl
+}
+
+# Content panel
+$contentPanel = New-Object System.Windows.Forms.Panel
+$contentPanel.Location = New-Object System.Drawing.Point(0,125)
+$contentPanel.Size = New-Object System.Drawing.Size(800, 540)
+$contentPanel.BackColor = [System.Drawing.Color]::White
+$form.Controls.Add($contentPanel)
+
+# --- Step panels ---
+$stepPanels = @()
+
+# Step 0 Welcome
+$p0 = New-Object System.Windows.Forms.Panel
+$p0.Location = New-Object System.Drawing.Point(0,0)
+$p0.Size = New-Object System.Drawing.Size(800, 540)
+$p0.BackColor = [System.Drawing.Color]::White
+$lbl0Icon = New-Object System.Windows.Forms.Label
+$lbl0Icon.Location = New-Object System.Drawing.Point(350, 20)
+$lbl0Icon.Size = New-Object System.Drawing.Size(100, 60)
+$lbl0Icon.Font = New-Object System.Drawing.Font("Segoe UI", 32)
+$lbl0Icon.Text = "👋"
+$p0.Controls.Add($lbl0Icon)
+$lbl0Title = New-Object System.Windows.Forms.Label
+$lbl0Title.Location = New-Object System.Drawing.Point(20, 80)
+$lbl0Title.Size = New-Object System.Drawing.Size(760, 35)
+$lbl0Title.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$lbl0Title.ForeColor = [System.Drawing.Color]::FromArgb(15,42,74)
+$lbl0Title.TextAlign = "MiddleCenter"
+$lbl0Title.Text = "به نصب‌کننده مارکتینگ دیوار خوش آمدید"
+$p0.Controls.Add($lbl0Title)
+$lbl0Desc = New-Object System.Windows.Forms.Label
+$lbl0Desc.Location = New-Object System.Drawing.Point(40, 120)
+$lbl0Desc.Size = New-Object System.Drawing.Size(720, 80)
+$lbl0Desc.Font = New-Object System.Drawing.Font("Segoe UI", 11)
+$lbl0Desc.ForeColor = [System.Drawing.Color]::FromArgb(51,51,68)
+$lbl0Desc.TextAlign = "MiddleCenter"
+$lbl0Desc.Text = "Divar Marketing v$AppVersion`nنسخه نهایی بدون باگ — تیرا ایجنت تمام‌عیار`nدیوار + شیپور + شکارچی هوشمند + IP ریست + سودآوری هزار پارامتری"
+$p0.Controls.Add($lbl0Desc)
+$lbl0Feat = New-Object System.Windows.Forms.Label
+$lbl0Feat.Location = New-Object System.Drawing.Point(40, 220)
+$lbl0Feat.Size = New-Object System.Drawing.Size(720, 150)
+$lbl0Feat.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$lbl0Feat.ForeColor = [System.Drawing.Color]::FromArgb(45,55,72)
+$lbl0Feat.Text = "📦 یک فایل تکی رمزنگاری شده — بدون نیاز به اینترنت`n🌐 کرومیوم اختصاصی + مدل تیرا داخل فایل نصب`n🧠 تیرا: قیمت روز از ترب، مذاکره هوشمند، تشخیص سیم دوم`n🛡️ IP ریست خودکار + سودآوری هزار پارامتری`n💬 پیامک/چت خودکار دیوار + شیپور`n🔒 اطلاعات قبلی حفظ می‌شود — آلارم انتخاب دارد"
+$p0.Controls.Add($lbl0Feat)
+$stepPanels += $p0
+
+# Step 1 License
+$p1 = New-Object System.Windows.Forms.Panel
+$p1.Location = $p0.Location
+$p1.Size = $p0.Size
+$p1.BackColor = [System.Drawing.Color]::White
+$lbl1Title = New-Object System.Windows.Forms.Label
+$lbl1Title.Location = New-Object System.Drawing.Point(20,10)
+$lbl1Title.Size = New-Object System.Drawing.Size(760, 30)
+$lbl1Title.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lbl1Title.Text = "📜 توافق‌نامه مجوز"
+$p1.Controls.Add($lbl1Title)
+$txtLicense = New-Object System.Windows.Forms.TextBox
+$txtLicense.Location = New-Object System.Drawing.Point(20,45)
+$txtLicense.Size = New-Object System.Drawing.Size(740, 400)
+$txtLicense.Multiline = $true
+$txtLicense.ReadOnly = $true
+$txtLicense.ScrollBars = "Vertical"
+$txtLicense.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$txtLicense.BackColor = [System.Drawing.Color]::FromArgb(247,250,252)
+$txtLicense.Text = "Divar Marketing v$AppVersion — توافق‌نامه مجوز نهایی`r`n`r`n1. این نرم‌افزار برای استفاده شخصی و تجاری مجاز است.`r`n2. شما متعهد می‌شوید از این نرم‌افزار برای اهداف غیرقانونی استفاده نکنید.`r`n3. مسئولیت استفاده از شماره‌های استخراج شده بر عهده کاربر است.`r`n4. این نرم‌افزار شامل کرومیوم اختصاصی و مدل هوش مصنوعی است که مجوزهای متن‌باز دارند.`r`n5. IP ریست خودکار: هنگام تغییر IP، سهمیه صفر می‌شود.`r`n6. سودآوری هزار پارامتری: باتری، رجیستر، خش، کارتن، تعمیر، گارانتی، بازار ترب، نات‌اکتیو -6% ریسک، با فاکتور +3% پویا.`r`n7. با نصب، شما با شرایط موافقت می‌کنید.`r`n`r`n© 2024-2026 Divar Marketing — Tira Agent v$AppVersion Final"
+$p1.Controls.Add($txtLicense)
+$chkAgree = New-Object System.Windows.Forms.CheckBox
+$chkAgree.Location = New-Object System.Drawing.Point(20,460)
+$chkAgree.Size = New-Object System.Drawing.Size(400, 25)
+$chkAgree.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$chkAgree.Text = "✅ شرایط را خواندم و موافقم"
+$p1.Controls.Add($chkAgree)
+$stepPanels += $p1
+
+# Step 2 Data Preserve — مهم
+$p2 = New-Object System.Windows.Forms.Panel
+$p2.Location = $p0.Location
+$p2.Size = $p0.Size
+$p2.BackColor = [System.Drawing.Color]::White
+$lbl2Title = New-Object System.Windows.Forms.Label
+$lbl2Title.Location = New-Object System.Drawing.Point(20,10)
+$lbl2Title.Size = New-Object System.Drawing.Size(760, 30)
+$lbl2Title.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lbl2Title.ForeColor = [System.Drawing.Color]::FromArgb(217,83,79)
+$lbl2Title.Text = "💾 اطلاعات نسخه قبلی — حفظ یا حذف؟ — آلارم مهم"
+$p2.Controls.Add($lbl2Title)
+
+# Check previous data
+$prevExists = Test-Path $DataDir
+$prevInfoText = ""
+if ($prevExists) {
+    $accCount = 0
+    $dbSize = 0
+    try {
+        $accPath = Join-Path $DataDir "accounts"
+        if (Test-Path $accPath) { $accCount = (Get-ChildItem $accPath -Directory -ErrorAction SilentlyContinue | Measure-Object).Count }
+        $dbPath1 = Join-Path $DataDir "app\data\divar_leads.db"
+        $dbPath2 = Join-Path $DataDir "data\divar_leads.db"
+        if (Test-Path $dbPath1) { $dbSize = [int]((Get-Item $dbPath1).Length / 1MB) }
+        elseif (Test-Path $dbPath2) { $dbSize = [int]((Get-Item $dbPath2).Length / 1MB) }
+    } catch {}
+    $prevInfoText = "⚠️ نسخه قبلی یافت شد!`r`n📊 $accCount اکانت لاگین شده`r`n💾 حجم دیتابیس: $dbSize MB`r`n`r`nلطفاً انتخاب کنید:"
+} else {
+    $prevInfoText = "✅ نسخه قبلی یافت نشد — نصب تمیز انجام می‌شود.`r`nاین اولین نصب است."
+}
+
+$lbl2Info = New-Object System.Windows.Forms.Label
+$lbl2Info.Location = New-Object System.Drawing.Point(20,45)
+$lbl2Info.Size = New-Object System.Drawing.Size(740, 90)
+$lbl2Info.Font = New-Object System.Drawing.Font("Segoe UI", 11)
+$lbl2Info.BackColor = if ($prevExists) { [System.Drawing.Color]::FromArgb(255,248,234) } else { [System.Drawing.Color]::FromArgb(232,246,238) }
+$lbl2Info.ForeColor = if ($prevExists) { [System.Drawing.Color]::FromArgb(122,90,18) } else { [System.Drawing.Color]::FromArgb(26,122,60) }
+$lbl2Info.Text = $prevInfoText
+$p2.Controls.Add($lbl2Info)
+
+$rbKeep = New-Object System.Windows.Forms.RadioButton
+$rbKeep.Location = New-Object System.Drawing.Point(30,150)
+$rbKeep.Size = New-Object System.Drawing.Size(700, 30)
+$rbKeep.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$rbKeep.ForeColor = [System.Drawing.Color]::FromArgb(46,158,91)
+$rbKeep.Text = "✅ حفظ کامل — تمام اکانت‌ها، سرنخ‌ها، تنظیمات بماند (پیشنهاد)"
+$rbKeep.Checked = $true
+$p2.Controls.Add($rbKeep)
+
+$lblKeepDesc = New-Object System.Windows.Forms.Label
+$lblKeepDesc.Location = New-Object System.Drawing.Point(50,180)
+$lblKeepDesc.Size = New-Object System.Drawing.Size(700, 20)
+$lblKeepDesc.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblKeepDesc.ForeColor = [System.Drawing.Color]::Gray
+$lblKeepDesc.Text = "اکانت‌های لاگین شده، کلمات کلیدی، قالب پیام‌ها، تاریخچه — همه می‌ماند"
+$p2.Controls.Add($lblKeepDesc)
+
+$rbKeepAcc = New-Object System.Windows.Forms.RadioButton
+$rbKeepAcc.Location = New-Object System.Drawing.Point(30,210)
+$rbKeepAcc.Size = New-Object System.Drawing.Size(700, 25)
+$rbKeepAcc.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$rbKeepAcc.Text = "⚠️ حفظ فقط اکانت‌ها — سرنخ‌ها پاک شود"
+$p2.Controls.Add($rbKeepAcc)
+
+$rbDelete = New-Object System.Windows.Forms.RadioButton
+$rbDelete.Location = New-Object System.Drawing.Point(30,250)
+$rbDelete.Size = New-Object System.Drawing.Size(700, 25)
+$rbDelete.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$rbDelete.ForeColor = [System.Drawing.Color]::FromArgb(217,83,79)
+$rbDelete.Text = "🗑️ حذف کامل — همه چیز پاک شود (با احتیاط)"
+$p2.Controls.Add($rbDelete)
+
+$lbl2Tip = New-Object System.Windows.Forms.Label
+$lbl2Tip.Location = New-Object System.Drawing.Point(20,300)
+$lbl2Tip.Size = New-Object System.Drawing.Size(740, 30)
+$lbl2Tip.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
+$lbl2Tip.ForeColor = [System.Drawing.Color]::FromArgb(25,118,210)
+$lbl2Tip.Text = "💡 پیشنهاد: گزینه اول (حفظ کامل) را انتخاب کنید تا اکانت‌های لاگین شده از بین نرود"
+$p2.Controls.Add($lbl2Tip)
+
+$stepPanels += $p2
+
+# Step 3 Location
+$p3 = New-Object System.Windows.Forms.Panel
+$p3.Location = $p0.Location
+$p3.Size = $p0.Size
+$p3.BackColor = [System.Drawing.Color]::White
+$lbl3Title = New-Object System.Windows.Forms.Label
+$lbl3Title.Location = New-Object System.Drawing.Point(20,10)
+$lbl3Title.Size = New-Object System.Drawing.Size(760, 30)
+$lbl3Title.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lbl3Title.Text = "📁 محل نصب را انتخاب کنید"
+$p3.Controls.Add($lbl3Title)
+$lbl3Desc = New-Object System.Windows.Forms.Label
+$lbl3Desc.Location = New-Object System.Drawing.Point(20,45)
+$lbl3Desc.Size = New-Object System.Drawing.Size(740, 25)
+$lbl3Desc.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$lbl3Desc.Text = "برنامه در این پوشه نصب می‌شود. Browse برای تغییر:"
+$p3.Controls.Add($lbl3Desc)
+$txtInstallPath = New-Object System.Windows.Forms.TextBox
+$txtInstallPath.Location = New-Object System.Drawing.Point(20,75)
+$txtInstallPath.Size = New-Object System.Drawing.Size(600, 25)
+$txtInstallPath.Font = New-Object System.Drawing.Font("Consolas", 10)
+$txtInstallPath.Text = Join-Path $env:LOCALAPPDATA "DivarMarketing\app"
+$p3.Controls.Add($txtInstallPath)
+$btnBrowse = New-Object System.Windows.Forms.Button
+$btnBrowse.Location = New-Object System.Drawing.Point(630,73)
+$btnBrowse.Size = New-Object System.Drawing.Size(100, 28)
+$btnBrowse.Text = "Browse..."
+$p3.Controls.Add($btnBrowse)
+$lbl3Info = New-Object System.Windows.Forms.Label
+$lbl3Info.Location = New-Object System.Drawing.Point(20,115)
+$lbl3Info.Size = New-Object System.Drawing.Size(740, 60)
+$lbl3Info.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$lbl3Info.ForeColor = [System.Drawing.Color]::Gray
+$lbl3Info.Text = "💾 فضای مورد نیاز: ~500MB تا 2.5GB بسته به شامل بودن کرومیوم و مدل`r`n📍 پیشنهاد: مسیر پیش‌فرض در %LOCALAPPDATA%\DivarMarketing"
+$p3.Controls.Add($lbl3Info)
+$stepPanels += $p3
+
+# Step 4 Components
+$p4 = New-Object System.Windows.Forms.Panel
+$p4.Location = $p0.Location
+$p4.Size = $p0.Size
+$p4.BackColor = [System.Drawing.Color]::White
+$lbl4Title = New-Object System.Windows.Forms.Label
+$lbl4Title.Location = New-Object System.Drawing.Point(20,10)
+$lbl4Title.Size = New-Object System.Drawing.Size(760, 30)
+$lbl4Title.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lbl4Title.Text = "🧩 انتخاب اجزاء نصب"
+$p4.Controls.Add($lbl4Title)
+$chkChrome = New-Object System.Windows.Forms.CheckBox
+$chkChrome.Location = New-Object System.Drawing.Point(30,50)
+$chkChrome.Size = New-Object System.Drawing.Size(500, 25)
+$chkChrome.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$chkChrome.Text = "🌐 کرومیوم اختصاصی (~200MB) — پیشنهاد"
+$chkChrome.Checked = $true
+$p4.Controls.Add($chkChrome)
+$chkModel = New-Object System.Windows.Forms.CheckBox
+$chkModel.Location = New-Object System.Drawing.Point(30,90)
+$chkModel.Size = New-Object System.Drawing.Size(500, 25)
+$chkModel.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$chkModel.Text = "🧠 مدل هوش مصنوعی تیرا (~100MB)"
+$chkModel.Checked = $true
+$p4.Controls.Add($chkModel)
+$chkShortcut = New-Object System.Windows.Forms.CheckBox
+$chkShortcut.Location = New-Object System.Drawing.Point(30,130)
+$chkShortcut.Size = New-Object System.Drawing.Size(500, 25)
+$chkShortcut.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$chkShortcut.Text = "🔗 میانبر دسکتاپ و استارت منو"
+$chkShortcut.Checked = $true
+$p4.Controls.Add($chkShortcut)
+$stepPanels += $p4
+
+# Step 5 Progress
+$p5 = New-Object System.Windows.Forms.Panel
+$p5.Location = $p0.Location
+$p5.Size = $p0.Size
+$p5.BackColor = [System.Drawing.Color]::White
+$lbl5Title = New-Object System.Windows.Forms.Label
+$lbl5Title.Location = New-Object System.Drawing.Point(20,10)
+$lbl5Title.Size = New-Object System.Drawing.Size(760, 30)
+$lbl5Title.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+$lbl5Title.ForeColor = [System.Drawing.Color]::FromArgb(25,118,210)
+$lbl5Title.Text = "⏳ در حال نصب — لطفاً صبر کنید..."
+$p5.Controls.Add($lbl5Title)
 
 $lblStatus = New-Object System.Windows.Forms.Label
-$lblStatus.Location = New-Object System.Drawing.Point(20, 56)
-$lblStatus.Size = New-Object System.Drawing.Size(586, 26)
-$lblStatus.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$lblStatus.Text = "Ready. Click Start Install."
+$lblStatus.Location = New-Object System.Drawing.Point(20,45)
+$lblStatus.Size = New-Object System.Drawing.Size(740, 25)
+$lblStatus.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$lblStatus.Text = "آماده نصب"
+$p5.Controls.Add($lblStatus)
 
 $bar = New-Object System.Windows.Forms.ProgressBar
-$bar.Location = New-Object System.Drawing.Point(20, 88)
-$bar.Size = New-Object System.Drawing.Size(586, 22)
+$bar.Location = New-Object System.Drawing.Point(20,75)
+$bar.Size = New-Object System.Drawing.Size(740, 22)
 $bar.Minimum = 0; $bar.Maximum = 100; $bar.Value = 0
-
-$lblStep = New-Object System.Windows.Forms.Label
-$lblStep.Location = New-Object System.Drawing.Point(20, 112)
-$lblStep.Size = New-Object System.Drawing.Size(586, 20)
-$lblStep.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$lblStep.Text = ""
+$p5.Controls.Add($bar)
 
 $lblChrome = New-Object System.Windows.Forms.Label
-$lblChrome.Location = New-Object System.Drawing.Point(20, 134)
-$lblChrome.Size = New-Object System.Drawing.Size(586, 20)
+$lblChrome.Location = New-Object System.Drawing.Point(20,105)
+$lblChrome.Size = New-Object System.Drawing.Size(740, 20)
 $lblChrome.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$lblChrome.Text = "Chromium: waiting"
+$lblChrome.Text = "Chromium: در انتظار"
+$p5.Controls.Add($lblChrome)
 
 $barChrome = New-Object System.Windows.Forms.ProgressBar
-$barChrome.Location = New-Object System.Drawing.Point(20, 156)
-$barChrome.Size = New-Object System.Drawing.Size(586, 22)
+$barChrome.Location = New-Object System.Drawing.Point(20,125)
+$barChrome.Size = New-Object System.Drawing.Size(740, 18)
 $barChrome.Minimum = 0; $barChrome.Maximum = 100; $barChrome.Value = 0
+$p5.Controls.Add($barChrome)
 
 $lblNlu = New-Object System.Windows.Forms.Label
-$lblNlu.Location = New-Object System.Drawing.Point(20, 184)
-$lblNlu.Size = New-Object System.Drawing.Size(586, 20)
+$lblNlu.Location = New-Object System.Drawing.Point(20,150)
+$lblNlu.Size = New-Object System.Drawing.Size(740, 20)
 $lblNlu.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$lblNlu.Text = "NLU model: waiting"
+$lblNlu.Text = "مدل تیرا: در انتظار"
+$p5.Controls.Add($lblNlu)
 
 $barNlu = New-Object System.Windows.Forms.ProgressBar
-$barNlu.Location = New-Object System.Drawing.Point(20, 206)
-$barNlu.Size = New-Object System.Drawing.Size(586, 22)
+$barNlu.Location = New-Object System.Drawing.Point(20,170)
+$barNlu.Size = New-Object System.Drawing.Size(740, 18)
 $barNlu.Minimum = 0; $barNlu.Maximum = 100; $barNlu.Value = 0
+$p5.Controls.Add($barNlu)
 
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Object System.Drawing.Point(20, 234)
-$logBox.Size = New-Object System.Drawing.Size(586, 230)
+$logBox.Location = New-Object System.Drawing.Point(20,200)
+$logBox.Size = New-Object System.Drawing.Size(740, 320)
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = "Vertical"
-$logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+$logBox.Font = New-Object System.Drawing.Font("Consolas", 8)
+$logBox.BackColor = [System.Drawing.Color]::FromArgb(26,32,44)
+$logBox.ForeColor = [System.Drawing.Color]::FromArgb(226,232,240)
+$p5.Controls.Add($logBox)
 
-$btnStart = New-Object System.Windows.Forms.Button
-$btnStart.Location = New-Object System.Drawing.Point(20, 536)
-$btnStart.Size = New-Object System.Drawing.Size(180, 36)
-$btnStart.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$btnStart.Text = "Start Install"
+$stepPanels += $p5
 
-$btnClose = New-Object System.Windows.Forms.Button
-$btnClose.Location = New-Object System.Drawing.Point(426, 536)
-$btnClose.Size = New-Object System.Drawing.Size(180, 36)
-$btnClose.Text = "Close"
+# Step 6 Finish
+$p6 = New-Object System.Windows.Forms.Panel
+$p6.Location = $p0.Location
+$p6.Size = $p0.Size
+$p6.BackColor = [System.Drawing.Color]::White
+$lbl6Icon = New-Object System.Windows.Forms.Label
+$lbl6Icon.Location = New-Object System.Drawing.Point(350, 30)
+$lbl6Icon.Size = New-Object System.Drawing.Size(100, 80)
+$lbl6Icon.Font = New-Object System.Drawing.Font("Segoe UI", 48)
+$lbl6Icon.Text = "✅"
+$p6.Controls.Add($lbl6Icon)
+$lbl6Title = New-Object System.Windows.Forms.Label
+$lbl6Title.Location = New-Object System.Drawing.Point(20,120)
+$lbl6Title.Size = New-Object System.Drawing.Size(760, 40)
+$lbl6Title.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+$lbl6Title.ForeColor = [System.Drawing.Color]::FromArgb(46,158,91)
+$lbl6Title.TextAlign = "MiddleCenter"
+$lbl6Title.Text = "نصب کامل شد!"
+$p6.Controls.Add($lbl6Title)
+$lbl6Desc = New-Object System.Windows.Forms.Label
+$lbl6Desc.Location = New-Object System.Drawing.Point(40,170)
+$lbl6Desc.Size = New-Object System.Drawing.Size(720, 150)
+$lbl6Desc.Font = New-Object System.Drawing.Font("Segoe UI", 11)
+$lbl6Desc.TextAlign = "MiddleCenter"
+$lbl6Desc.Text = "Divar Marketing با موفقیت نصب شد!`r`n`r`nپنل در مرورگر اختصاصی باز می‌شود:`r`nhttp://127.0.0.1:8642`r`n`r`nگوشی در همین Wi-Fi: http://<IP>:8642`r`n`r`nمیانبر روی دسکتاپ ساخته شد"
+$p6.Controls.Add($lbl6Desc)
+$chkLaunch = New-Object System.Windows.Forms.CheckBox
+$chkLaunch.Location = New-Object System.Drawing.Point(200,350)
+$chkLaunch.Size = New-Object System.Drawing.Size(400, 30)
+$chkLaunch.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$chkLaunch.Text = "🚀 اجرای برنامه بعد از بستن نصب‌کننده"
+$chkLaunch.Checked = $true
+$p6.Controls.Add($chkLaunch)
+$stepPanels += $p6
 
-$form.Controls.AddRange(@($lblTitle, $lblStatus, $bar, $lblStep, $lblChrome, $barChrome, $lblNlu, $barNlu, $logBox, $btnStart, $btnClose))
-} catch {
-    Write-InstallLog "GUI build failed: $_"
-    try { Write-Host "GUI build failed: $_" } catch {}
-    exit 2
+# Add all panels to content
+foreach ($p in $stepPanels) { $contentPanel.Controls.Add($p) }
+
+# Buttons
+$btnPanel = New-Object System.Windows.Forms.Panel
+$btnPanel.Location = New-Object System.Drawing.Point(0,665)
+$btnPanel.Size = New-Object System.Drawing.Size(800, 60)
+$btnPanel.BackColor = [System.Drawing.Color]::FromArgb(232,238,247)
+$form.Controls.Add($btnPanel)
+
+$btnBack = New-Object System.Windows.Forms.Button
+$btnBack.Location = New-Object System.Drawing.Point(20,15)
+$btnBack.Size = New-Object System.Drawing.Size(100, 32)
+$btnBack.Text = "< Back"
+$btnBack.Enabled = $false
+$btnPanel.Controls.Add($btnBack)
+
+$btnNext = New-Object System.Windows.Forms.Button
+$btnNext.Location = New-Object System.Drawing.Point(580,15)
+$btnNext.Size = New-Object System.Drawing.Size(100, 32)
+$btnNext.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$btnNext.BackColor = [System.Drawing.Color]::FromArgb(25,118,210)
+$btnNext.ForeColor = [System.Drawing.Color]::White
+$btnNext.Text = "Next >"
+$btnPanel.Controls.Add($btnNext)
+
+$btnFinish = New-Object System.Windows.Forms.Button
+$btnFinish.Location = New-Object System.Drawing.Point(580,15)
+$btnFinish.Size = New-Object System.Drawing.Size(180, 36)
+$btnFinish.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$btnFinish.BackColor = [System.Drawing.Color]::FromArgb(46,158,91)
+$btnFinish.ForeColor = [System.Drawing.Color]::White
+$btnFinish.Text = "✅ Finish"
+$btnFinish.Visible = $false
+$btnPanel.Controls.Add($btnFinish)
+
+# State
+$script:currentStep = 0
+$script:preserveMode = "keep"
+
+function Show-Step([int]$idx) {
+    for ($i=0; $i -lt $stepPanels.Length; $i++) {
+        $stepPanels[$i].Visible = ($i -eq $idx)
+    }
+    for ($i=0; $i -lt $stepLabels.Length; $i++) {
+        if ($i -eq $idx) {
+            $stepLabels[$i].BackColor = [System.Drawing.Color]::FromArgb(25,118,210)
+            $stepLabels[$i].ForeColor = [System.Drawing.Color]::White
+        } elseif ($i -lt $idx) {
+            $stepLabels[$i].BackColor = [System.Drawing.Color]::FromArgb(232,246,238)
+            $stepLabels[$i].ForeColor = [System.Drawing.Color]::FromArgb(46,158,91)
+        } else {
+            $stepLabels[$i].BackColor = [System.Drawing.Color]::FromArgb(232,238,247)
+            $stepLabels[$i].ForeColor = [System.Drawing.Color]::FromArgb(107,122,144)
+        }
+    }
+    $btnBack.Enabled = ($idx -gt 0 -and $idx -lt 5)
+    if ($idx -lt 5) {
+        $btnNext.Visible = $true
+        $btnFinish.Visible = $false
+        if ($idx -eq 4) { $btnNext.Text = "🚀 Install" } else { $btnNext.Text = "Next >" }
+    } elseif ($idx -eq 5) {
+        $btnNext.Visible = $false
+        $btnFinish.Visible = $false
+    } else {
+        $btnNext.Visible = $false
+        $btnFinish.Visible = $true
+    }
 }
 
 function Log([string]$m) {
     try {
-        if ($script:HasGui -and $logBox) {
-            $logBox.AppendText("$m`r`n")
-            $logBox.SelectionStart = $logBox.Text.Length
-            $logBox.ScrollToCaret()
-            [System.Windows.Forms.Application]::DoEvents()
-        }
+        $logBox.AppendText("$m`r`n")
+        $logBox.SelectionStart = $logBox.Text.Length
+        $logBox.ScrollToCaret()
+        [System.Windows.Forms.Application]::DoEvents()
     } catch {}
     try { Add-Content -LiteralPath $script:LogFile -Value $m -Encoding utf8 } catch {}
-    try { Write-Host $m } catch {}
 }
+
 function Set-Step([string]$s, [int]$percent) {
-    $lblStep.Text = $s
+    $lblStatus.Text = $s
     if ($percent -ge 0) { $bar.Style = "Blocks"; $bar.Value = [Math]::Min(100, $percent) }
     else { $bar.Style = "Marquee" }
     [System.Windows.Forms.Application]::DoEvents()
@@ -169,17 +523,11 @@ function Find-Python {
         $exe = $pair[0]; $a = $pair[1]
         if (Get-Command $exe -ErrorAction SilentlyContinue) {
             try {
-                if ($a -eq "") {
-                    & $exe -c "import sys; sys.exit(0 if sys.version_info>=(3,10) else 1)" | Out-Null
-                } else {
-                    & $exe $a -c "import sys; sys.exit(0 if sys.version_info>=(3,10) else 1)" | Out-Null
-                }
+                if ($a -eq "") { & $exe -c "import sys; sys.exit(0 if sys.version_info>=(3,10) else 1)" | Out-Null }
+                else { & $exe $a -c "import sys; sys.exit(0 if sys.version_info>=(3,10) else 1)" | Out-Null }
                 if ($LASTEXITCODE -eq 0) {
-                    if ($a -eq "") {
-                        $p = & $exe -c "import sys; print(sys.executable)" 2>$null
-                    } else {
-                        $p = & $exe $a -c "import sys; print(sys.executable)" 2>$null
-                    }
+                    if ($a -eq "") { $p = & $exe -c "import sys; print(sys.executable)" 2>$null }
+                    else { $p = & $exe $a -c "import sys; print(sys.executable)" 2>$null }
                     if ($p) { return ($p | Select-Object -First 1).ToString().Trim() }
                 }
             } catch { }
@@ -190,360 +538,218 @@ function Find-Python {
     return $null
 }
 
-function Install-Python {
-    $url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-    $dl = Join-Path $env:TEMP "divar-python-3.11.9.exe"
-    Log "[2] Downloading Python"
-    Set-Step "Downloading Python" -1
-    $wc = New-Object System.Net.WebClient
-    $done = $false
-    $wc.add_DownloadProgressChanged({
-        $bar.Style = "Blocks"
-        $bar.Value = [int]$args[1].ProgressPercentage
-        $lblStep.Text = "Downloading Python ... $([int]$args[1].ProgressPercentage)%"
-        [System.Windows.Forms.Application]::DoEvents()
-    })
-    $wc.add_DownloadFileCompleted({ $script:done = $true })
-    $wc.DownloadFileAsync([Uri]$url, $dl)
-    while (-not $done) { Start-Sleep -Milliseconds 150; [System.Windows.Forms.Application]::DoEvents() }
-    if (-not (Test-Path $dl) -or (Get-Item $dl).Length -lt 5MB) {
-        throw "Python download failed (file too small)"
-    }
-    try { Unblock-File -Path $dl } catch { }
-    Log "[2] Silent Python install (wait 1-3 min)"
-    Set-Step "Installing Python" -1
-    $p = Start-Process -FilePath $dl -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1 Include_test=0" -Wait -PassThru
-    Log "[2] Python installer exit code: $($p.ExitCode)"
-    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "Python installer failed (code $($p.ExitCode))" }
-    Start-Sleep -Seconds 2
-    $cand = Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"
-    if (Test-Path $cand) { return $cand }
-    $found = Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs\Python") -Filter "python.exe" -Recurse -ErrorAction SilentlyContinue |
-             Select-Object -First 1
-    if ($found) { return $found.FullName }
-    throw "Python installed but python.exe not found"
-}
+$btnBrowse.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "پوشه نصب را انتخاب کنید"
+    $dlg.SelectedPath = $txtInstallPath.Text
+    if ($dlg.ShowDialog() -eq "OK") { $txtInstallPath.Text = $dlg.SelectedPath }
+})
 
-function Ensure-Venv([string]$pyExe) {
-    if (Test-Path $VenvPy) {
-        Log "[2b] venv exists: $VenvPy"
-        return $VenvPy
-    }
-    Log "[2b] Creating app virtual environment"
-    Set-Step "Creating app virtual environment" -1
-    $venvDir = Join-Path $Root ".venv"
-    & $pyExe -m venv $venvDir
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $VenvPy)) {
-        throw "venv creation failed (code $LASTEXITCODE)"
-    }
-    Log "[2b] OK: $VenvPy"
-    return $VenvPy
-}
-
-function Stream-File([string]$path, [int]$alreadyLogged) {
-    try {
-        if (-not (Test-Path $path)) { return $alreadyLogged }
-        $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::Open,
-             [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-        $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
-        $lines = @($sr.ReadToEnd() -split "`r?`n")
-        $sr.Close()
-        for ($i = $alreadyLogged; $i -lt $lines.Count; $i++) {
-            $t = $lines[$i].Trim()
-            if ($t) { Log "    $t" }
-        }
-        return $lines.Count
-    } catch { return $alreadyLogged }
-}
-
-function Run-Pip([string]$pyExe, [string[]]$pipArgs, [string]$label) {
-    Log "[3] $label"
-    Set-Step $label -1
-    $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarpip-" + [guid]::NewGuid().ToString("N") + ".log")
-    $inner = '"' + $pyExe + '" ' + ($pipArgs -join " ") + ' > "' + $outFile + '" 2>&1'
-    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-    $pinfo.FileName = "cmd.exe"
-    $pinfo.Arguments = '/c "' + $inner + '"'
-    $pinfo.WorkingDirectory = $Root
-    $pinfo.UseShellExecute = $false
-    $pinfo.CreateNoWindow = $true
-    $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
-    $pinfo.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
-    $proc = New-Object System.Diagnostics.Process
-    $proc.StartInfo = $pinfo
-    [void]$proc.Start()
-    $logged = 0
-    while (-not $proc.HasExited) {
-        Start-Sleep -Milliseconds 350
-        [System.Windows.Forms.Application]::DoEvents()
-        $logged = Stream-File $outFile $logged
-    }
-    $proc.WaitForExit()
-    $logged = Stream-File $outFile $logged
-    Remove-Item $outFile -ErrorAction SilentlyContinue
-    return $proc.ExitCode
-}
-
-function New-DesktopShortcut([string]$pyExe) {
-    Set-Step "Desktop shortcut" 90
-    $dataDir = Join-Path $env:LOCALAPPDATA "DivarMarketing"
-    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-    Log "[data] settings persist in $dataDir (never wiped by installer)"
-    $desktop = [Environment]::GetFolderPath("Desktop")
-    $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
-    New-Item -ItemType Directory -Force -Path $start | Out-Null
-    $w = New-Object -ComObject WScript.Shell
-    $icon = if (Test-Path $IconFile) { $IconFile } else { "imageres.dll,109" }
-    foreach ($folder in @($desktop, $start)) {
-        $lnk = Join-Path $folder "Divar Marketing.lnk"
-        $sc = $w.CreateShortcut($lnk)
-        $sc.TargetPath = $pyExe
-        $sc.Arguments = "main.py"
-        $sc.WorkingDirectory = $Root
-        $sc.WindowStyle = 7
-        $sc.Description = "Divar Marketing"
-        $sc.IconLocation = $icon
-        $sc.Save()
-        Log "[4b] shortcut: $lnk"
-    }
-    try {
-        netsh advfirewall firewall add rule name="Divar Marketing" dir=in action=allow protocol=TCP localport=8642 | Out-Null
-        Log "[4c] firewall: TCP 8642 allowed (phone on same Wi-Fi)"
-    } catch { Log "[4c] firewall skipped" }
-}
-
-$btnStart.Add_Click({
-    $btnStart.Enabled = $false
-    $pyExe = $null
-    try {
-        Log "[1] Checking Python"
-        Set-Step "Checking Python" 5
-        $pyExe = Find-Python
-        if ($pyExe) {
-            Log "[1] Existing Python found: $pyExe"
-            & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
-            $bar.Value = 20
-        } else {
-            Log "[1] Python not found -> auto-install"
-            $pyExe = Install-Python
-            Log "[1] OK: $pyExe"
-            & $pyExe --version 2>&1 | ForEach-Object { Log "    $_" }
-            $bar.Value = 20
-        }
-
-        $appPy = Ensure-Venv $pyExe
-        $bar.Value = 35
-
-        $rc = Run-Pip $appPy @("-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check", "--progress-bar", "off") "pip upgrade"
-        $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt") "Installing dependencies (a few minutes)"
-        if ($rc -ne 0) {
-            Log "[3] PyPI failed -> trying mirror ..."
-            $rc = Run-Pip $appPy @("-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "-r", "requirements.txt", "-i", "https://mirror-pypi.runflare.com/simple") "mirror install"
-            if ($rc -ne 0) { throw "pip install failed (code $rc)" }
-        }
-        Log "[3] OK"
-
-        $bar.Value = 75
-
-
-
-                        Log "[3b] Installing app Chromium (ungoogled-chromium, multi-source)"
-        Set-Step "Application ready" 75
-        $lblChrome.Text = "Chromium: started"
-        $barChrome.Style = "Blocks"
-        $barChrome.Value = 0
-        $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
-        New-Item -ItemType Directory -Force -Path $chromeDir | Out-Null
-        $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
-        $env:DIVAR_CHROMIUM_DIR = $chromeDir
-        $env:PYTHONUNBUFFERED = "1"
-        $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarchrome-" + [guid]::NewGuid().ToString("N") + ".log")
-        $inner = '"' + $appPy + '" main.py --install-chromium > "' + $outFile + '" 2>&1'
-        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.FileName = "cmd.exe"
-        $pinfo.Arguments = '/c "' + $inner + '"'
-        $pinfo.WorkingDirectory = $Root
-        $pinfo.UseShellExecute = $false
-        $pinfo.CreateNoWindow = $true
-        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
-        $pinfo.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
-        $pinfo.EnvironmentVariables["PLAYWRIGHT_BROWSERS_PATH"] = $chromeDir
-        $pinfo.EnvironmentVariables["DIVAR_CHROMIUM_DIR"] = $chromeDir
-        $proc = New-Object System.Diagnostics.Process
-        $proc.StartInfo = $pinfo
-        [void]$proc.Start()
-        $logged = 0
-        while (-not $proc.HasExited) {
-            Start-Sleep -Milliseconds 400
-            [System.Windows.Forms.Application]::DoEvents()
-            $logged = Stream-File $outFile $logged
-            try {
-                $tail = Get-Content -LiteralPath $outFile -Tail 12 -ErrorAction SilentlyContinue
-                foreach ($ln in $tail) {
-                    if ($ln -match "PROGRESS\s+(\d+)") {
-                        $p = [int]$Matches[1]
-                        $barChrome.Style = "Blocks"
-                        $barChrome.Value = [Math]::Min(100, $p)
-                    }
-                    if ($ln -match "BYTES\s+(\d+)/(\d+)") {
-                        $doneMb = [int]([int]$Matches[1] / 1MB)
-                        $totMb = [int]([int]$Matches[2] / 1MB)
-                        $lblChrome.Text = "Chromium $($barChrome.Value)%  $doneMb / $totMb MB"
-                    }
-                    if ($ln -match "SPEED\s+(.+)$") {
-                        $lblChrome.Text = $lblChrome.Text + "  " + $Matches[1]
-                    }
-                    if ($ln -match "SOURCE_FAIL\s+(\S+)") {
-                        Log ("    source-fail " + $Matches[1])
-                    }
-                    if ($ln -match "DOWNLOAD_COMPLETED") {
-                        $barChrome.Value = 100
-                        $lblChrome.Text = "Chromium Completed"
-                    }
-                    if ($ln -match "CHROMIUM_START") {
-                        $lblChrome.Text = "Chromium: started"
-                    }
-                    if ($ln -match "SHA256") {
-                        Log "    SHA256 check"
-                    }
-                }
-            } catch {}
-        }
-        $proc.WaitForExit()
-        $logged = Stream-File $outFile $logged
-        Remove-Item $outFile -ErrorAction SilentlyContinue
-        if ($proc.ExitCode -ne 0) {
-            Log "[3b] Chromium download failed (code $($proc.ExitCode)) - app will retry from the panel. Need GitHub or a Chrome-for-Testing mirror."
-            $lblChrome.Text = "Chromium failed - retry in panel"
-        } else {
-            Log "[3b] Chromium OK -> $chromeDir"
-            $barChrome.Value = 100
-            $lblChrome.Text = "Chromium Completed"
-        }
-        $bar.Value = 82
-
-
-
-        Log "[3c] Installing local NLU model (download beside installer, install beside app)"
-        Set-Step "Local AI model" 84
-        $lblNlu.Text = "NLU: started"
-        $barNlu.Style = "Blocks"
-        $barNlu.Value = 0
-        $nluDir = Join-Path $Root "nlu-model"
-        $nluDl = Join-Path $Root "installer\nlu-download"
-        New-Item -ItemType Directory -Force -Path $nluDir | Out-Null
-        New-Item -ItemType Directory -Force -Path $nluDl | Out-Null
-        $env:DIVAR_APP_DIR = $Root
-        $env:DIVAR_NLU_DIR = $nluDir
-        $env:DIVAR_NLU_DOWNLOAD = $nluDl
-        $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ("divarnlu-" + [guid]::NewGuid().ToString("N") + ".log")
-        $inner = '"' + $appPy + '" main.py --install-nlu > "' + $outFile + '" 2>&1'
-        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.FileName = "cmd.exe"
-        $pinfo.Arguments = '/c "' + $inner + '"'
-        $pinfo.WorkingDirectory = $Root
-        $pinfo.UseShellExecute = $false
-        $pinfo.CreateNoWindow = $true
-        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
-        $pinfo.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
-        $pinfo.EnvironmentVariables["DIVAR_APP_DIR"] = $Root
-        $pinfo.EnvironmentVariables["DIVAR_NLU_DIR"] = $nluDir
-        $pinfo.EnvironmentVariables["DIVAR_NLU_DOWNLOAD"] = $nluDl
-        $proc = New-Object System.Diagnostics.Process
-        $proc.StartInfo = $pinfo
-        [void]$proc.Start()
-        $logged = 0
-        while (-not $proc.HasExited) {
-            Start-Sleep -Milliseconds 400
-            [System.Windows.Forms.Application]::DoEvents()
-            $logged = Stream-File $outFile $logged
-            try {
-                $tail = Get-Content -LiteralPath $outFile -Tail 16 -ErrorAction SilentlyContinue
-                foreach ($ln in $tail) {
-                    if ($ln -match "NLU_START") {
-                        $lblNlu.Text = "NLU: started"
-                    }
-                    if ($ln -match "NLU OK" -or $ln -match "NLU model:") {
-                        $barNlu.Value = 100
-                        $lblNlu.Text = "NLU Completed"
-                    }
-                }
-            } catch {}
-        }
-        $proc.WaitForExit()
-        $logged = Stream-File $outFile $logged
-        Remove-Item $outFile -ErrorAction SilentlyContinue
-        if ($proc.ExitCode -ne 0) {
-            Log "[3c] NLU download failed (code $($proc.ExitCode)) - panel can retry"
-            $lblNlu.Text = "NLU failed - retry in panel"
-        } else {
-            Log "[3c] NLU OK -> $nluDir"
-            $barNlu.Value = 100
-            $lblNlu.Text = "NLU Completed"
-        }
-        $bar.Value = 86
-
-        Log "[4] Health check"
-        Set-Step "Health check" 90
-        $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-        $pinfo.FileName = $appPy; $pinfo.Arguments = "main.py --check"
-        $pinfo.WorkingDirectory = $Root
-        $pinfo.UseShellExecute = $false
-        $pinfo.RedirectStandardOutput = $true
-        $pinfo.RedirectStandardError = $true
-        $pinfo.CreateNoWindow = $true
-        $pinfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-        $pinfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
-        $pinfo.EnvironmentVariables["PYTHONUTF8"] = "1"
-        $proc = New-Object System.Diagnostics.Process
-        $proc.StartInfo = $pinfo
-        [void]$proc.Start()
-        $stdout = $proc.StandardOutput.ReadToEnd()
-        $stderr = $proc.StandardError.ReadToEnd()
-        $proc.WaitForExit()
-        foreach ($line in $stdout.Split("`n")) { $t = $line.Trim(); if ($t) { Log "    $t" } }
-        foreach ($line in $stderr.Split("`n")) { $t = $line.Trim(); if ($t) { Log "    [stderr] $t" } }
-        if ($proc.ExitCode -ne 0) {
-            throw "health check failed (exit $($proc.ExitCode)) — see log above"
-        }
-        $bar.Value = 88
-
-        try { New-DesktopShortcut $appPy } catch { Log "[4b] shortcut skipped: $_" }
-
-        Log "[5] Launching app"
-        Set-Step "Launching app" 100
-        $env:PYTHONUTF8 = "1"
-        Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root -WindowStyle Minimized
-        Start-Sleep -Seconds 3
-        Log "App will open the panel in dedicated Chromium (not Edge)"
-        $lblStatus.Text = "Install complete. App is running — http://localhost:8642  (phone: this-PC-IP:8642)"
-        $lblStatus.ForeColor = [System.Drawing.Color]::Green
-        Log "Install complete. Browser: http://localhost:8642"
-        $btnStart.Enabled = $true
-    } catch {
-        $lblStatus.Text = "Install incomplete — see the log. You may press Start Install again."
-        $lblStatus.ForeColor = [System.Drawing.Color]::Firebrick
-        Log "[ERROR] $_"
-        Log "Log file: $LogFile"
-        $btnStart.Enabled = $true
+$btnBack.Add_Click({
+    if ($script:currentStep -gt 0) {
+        $script:currentStep--
+        Show-Step $script:currentStep
     }
 })
-$btnClose.Add_Click({ $form.Close() })
-try {
-    if (Test-Path $VenvPy) {
-        $lblStatus.Text = "Previous install found. Click Start Install to verify and launch."
-        $btnStart.Text = "Verify & Run"
+
+$btnNext.Add_Click({
+    $idx = $script:currentStep
+    if ($idx -eq 1 -and -not $chkAgree.Checked) {
+        [System.Windows.Forms.MessageBox]::Show("لطفاً تیک موافقت را بزنید", "توافق‌نامه", "OK", "Warning") | Out-Null
+        return
     }
-    Write-InstallLog "showing installer window"
-    [void]$form.ShowDialog()
-    Write-InstallLog "installer window closed"
-    exit 0
+    if ($idx -eq 2) {
+        if ($rbKeep.Checked) { $script:preserveMode = "keep" }
+        elseif ($rbKeepAcc.Checked) { $script:preserveMode = "keep_accounts" }
+        else { $script:preserveMode = "delete_all" }
+        if ($script:preserveMode -eq "delete_all" -and $prevExists) {
+            $res = [System.Windows.Forms.MessageBox]::Show("آیا مطمئن هستید می‌خواهید تمام اطلاعات قبلی پاک شود؟ این غیرقابل بازگشت است!", "⚠️ هشدار حذف کامل", "YesNo", "Warning")
+            if ($res -ne "Yes") { return }
+        }
+    }
+    if ($idx -eq 3) {
+        if (-not $txtInstallPath.Text.Trim()) {
+            [System.Windows.Forms.MessageBox]::Show("محل نصب را انتخاب کنید", "مسیر", "OK", "Warning") | Out-Null
+            return
+        }
+    }
+    if ($idx -eq 4) {
+        $script:currentStep = 5
+        Show-Step 5
+        # Start install in background via timer
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 500
+        $timer.Add_Tick({
+            $timer.Stop()
+            $timer.Dispose()
+            try { Do-Install } catch { Log "[ERROR] $_"; Show-Step 4 }
+        })
+        $timer.Start()
+        return
+    }
+    if ($idx -lt 4) {
+        $script:currentStep++
+        Show-Step $script:currentStep
+    }
+})
+
+$btnFinish.Add_Click({ $form.Close() })
+
+function Do-Install {
+    Log "📁 محل نصب: $($txtInstallPath.Text)"
+    Log "💾 حالت حفظ: $($script:preserveMode)"
+    Set-Step "آماده‌سازی پوشه..." 5
+    
+    $installPath = $txtInstallPath.Text.Trim()
+    New-Item -ItemType Directory -Force -Path $installPath | Out-Null
+    
+    # Data preservation
+    if ($prevExists) {
+        if ($script:preserveMode -eq "delete_all") {
+            Log "🗑️ حذف کامل اطلاعات قبلی..."
+            try {
+                Remove-Item (Join-Path $DataDir "data") -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item (Join-Path $DataDir "logs") -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item (Join-Path $DataDir "accounts") -Recurse -Force -ErrorAction SilentlyContinue
+                Log "✅ حذف شد"
+            } catch { Log "⚠️ حذف: $_" }
+        } elseif ($script:preserveMode -eq "keep_accounts") {
+            Log "⚠️ حفظ فقط اکانت‌ها — حذف دیتابیس..."
+            try {
+                Remove-Item (Join-Path $DataDir "app\data\divar_leads.db") -Force -ErrorAction SilentlyContinue
+                Remove-Item (Join-Path $DataDir "data\divar_leads.db") -Force -ErrorAction SilentlyContinue
+                Log "✅ دیتابیس پاک شد، اکانت‌ها ماند"
+            } catch { Log "⚠️ $_" }
+        } else {
+            Log "✅ حفظ کامل — همه می‌ماند"
+        }
+    }
+    
+    Set-Step "بررسی Python..." 15
+    $pyExe = Find-Python
+    if (-not $pyExe) {
+        Log "❌ Python یافت نشد — از python سیستم استفاده می‌شود"
+        $pyExe = "python"
+    }
+    Log "🐍 Python: $pyExe"
+    $bar.Value = 20
+    
+    # Venv
+    $venvPy = Join-Path $Root ".venv\Scripts\python.exe"
+    if (-not (Test-Path $venvPy)) {
+        Log "📦 ساخت venv..."
+        & $pyExe -m venv (Join-Path $Root ".venv") 2>&1 | ForEach-Object { Log "    $_" }
+    }
+    $appPy = if (Test-Path $venvPy) { $venvPy } else { $pyExe }
+    Log "✅ Python محیط: $appPy"
+    $bar.Value = 35
+    
+    # Pip
+    Set-Step "نصب وابستگی‌ها..." 40
+    Log "📦 نصب requirements..."
+    try {
+        & $appPy -m pip install --upgrade pip --disable-pip-version-check --progress-bar off 2>&1 | ForEach-Object { Log "    $_" }
+        & $appPy -m pip install -r (Join-Path $Root "requirements.txt") --disable-pip-version-check --progress-bar off 2>&1 | ForEach-Object { Log "    $_" }
+        Log "✅ وابستگی‌ها نصب شد"
+    } catch { Log "⚠️ pip: $_" }
+    $bar.Value = 70
+    
+    # Chromium
+    Set-Step "کرومیوم اختصاصی..." 75
+    $lblChrome.Text = "Chromium: در حال بررسی..."
+    $barChrome.Value = 50
+    try {
+        $chromeDir = Join-Path $env:LOCALAPPDATA "DivarMarketing\app-chromium"
+        if (Test-Path $chromeDir) {
+            Log "✅ Chromium محلی: $chromeDir"
+            $barChrome.Value = 100
+            $lblChrome.Text = "Chromium: آماده ✅"
+        } else {
+            if ($chkChrome.Checked) {
+                Log "⬇️ دانلود Chromium..."
+                $env:PLAYWRIGHT_BROWSERS_PATH = $chromeDir
+                & $appPy main.py --install-chromium 2>&1 | ForEach-Object { 
+                    Log "    $_"
+                    if ($_ -match "(\d+)%") { 
+                        try { $barChrome.Value = [int]$Matches[1] } catch {}
+                        $lblChrome.Text = "Chromium: $($Matches[1])%"
+                    }
+                }
+                $barChrome.Value = 100
+                $lblChrome.Text = "Chromium: کامل ✅"
+            } else {
+                $lblChrome.Text = "Chromium: رد شد"
+            }
+        }
+    } catch { Log "⚠️ Chromium: $_"; $lblChrome.Text = "Chromium: خطا" }
+    
+    # Model
+    Set-Step "مدل تیرا..." 85
+    $lblNlu.Text = "مدل: بررسی..."
+    $barNlu.Value = 50
+    try {
+        if ($chkModel.Checked) {
+            Log "🧠 مدل تیرا..."
+            & $appPy main.py --install-nlu 2>&1 | ForEach-Object { Log "    $_" }
+            $barNlu.Value = 100
+            $lblNlu.Text = "مدل: آماده ✅"
+        } else {
+            $lblNlu.Text = "مدل: رد شد — fallback"
+        }
+    } catch { Log "⚠️ Model: $_" }
+    
+    # Shortcut
+    Set-Step "میانبرها..." 90
+    try {
+        $desktop = [Environment]::GetFolderPath("Desktop")
+        $start = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+        $w = New-Object -ComObject WScript.Shell
+        $icon = if (Test-Path $IconFile) { $IconFile } else { "imageres.dll,109" }
+        foreach ($folder in @($desktop, $start)) {
+            $lnk = Join-Path $folder "Divar Marketing.lnk"
+            $sc = $w.CreateShortcut($lnk)
+            $sc.TargetPath = $appPy
+            $sc.Arguments = "main.py"
+            $sc.WorkingDirectory = $Root
+            $sc.WindowStyle = 7
+            $sc.IconLocation = $icon
+            $sc.Save()
+            Log "✅ میانبر: $lnk"
+        }
+    } catch { Log "⚠️ میانبر: $_" }
+    
+    # Firewall
+    try {
+        netsh advfirewall firewall add rule name="Divar Marketing" dir=in action=allow protocol=TCP localport=8642 | Out-Null
+        Log "✅ فایروال: 8642 باز"
+    } catch { Log "⚠️ فایروال" }
+    
+    # Launch
+    Set-Step "اجرای برنامه..." 95
+    try {
+        $env:PYTHONUTF8 = "1"
+        Start-Process -FilePath $appPy -ArgumentList "main.py" -WorkingDirectory $Root -WindowStyle Minimized
+        Log "🚀 برنامه اجرا شد — http://127.0.0.1:8642"
+    } catch { Log "⚠️ اجرا: $_" }
+    
+    $bar.Value = 100
+    Set-Step "نصب کامل شد ✅" 100
+    Log "🎉 نصب کامل شد!"
+    Start-Sleep -Seconds 1
+    $script:currentStep = 6
+    Show-Step 6
+}
+
+Show-Step 0
+Write-InstallLog "showing ultimate installer window"
+[void]$form.ShowDialog()
+Write-InstallLog "installer closed"
+exit 0
+
 } catch {
     Write-InstallLog "GUI crash: $_"
     try {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Installer window failed:`r`n$_`r`n`r`nLog: $script:LogFile",
-            "Divar Marketing", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Installer failed:`r`n$_`r`nLog: $script:LogFile", "Divar Marketing", "OK", "Error") | Out-Null
     } catch {}
     exit 1
 }

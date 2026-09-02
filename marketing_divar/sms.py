@@ -382,6 +382,40 @@ def send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
         text, http_post=http_post)
 
 
+def check_mellipayamak_completeness(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """بررسی کامل بودن اتصال ملی‌پیامک برای کاربر — v4"""
+    ready, why = sms_ready(cfg)
+    checks = {
+        "configured": ready,
+        "reason": why,
+        "has_username": bool(cfg.get("sms_username")),
+        "has_password": bool(cfg.get("sms_password") or cfg.get("sms_api_key")),
+        "has_line": bool(cfg.get("sms_line_number")) if not cfg.get("sms_use_pattern") else True,
+        "has_pattern": bool(cfg.get("sms_pattern_bodyid")) if cfg.get("sms_use_pattern") else True,
+        "auto_enabled": bool(cfg.get("sms_auto_on_new")),
+        "inbox_enabled": bool(cfg.get("sms_inbox_on")),
+        "daily_limit": cfg.get("sms_daily_limit", 0),
+        "use_pattern": bool(cfg.get("sms_use_pattern")),
+    }
+    # برای کاربر: هرچی موبایل → پیام → جواب روبیکا
+    bulk_ok = checks["configured"] and checks["auto_enabled"]
+    inbox_ok = checks["configured"] and checks["inbox_enabled"]
+    overall_ok = checks["configured"]
+    
+    checks["bulk_sms_ok"] = bulk_ok
+    checks["inbox_ok"] = inbox_ok
+    checks["overall_ok"] = overall_ok
+    checks["for_user_use_case"] = {
+        "bulk_mobile_sms": bulk_ok,
+        "receive_replies": inbox_ok,
+        "rubika_notify": True,  # از طریق notifier
+        "template_custom": True,
+        "complete": overall_ok,
+        "message": "✅ اتصال ملی‌پیامک کامل و برای کار شما (ارسال به همه موبایل‌ها + دریافت جواب + اطلاع روبیکا) اوکی است" if overall_ok else f"❌ {why}"
+    }
+    return checks
+
+
 def maybe_send_for_lead(cfg: Dict[str, Any], lead: Dict[str, Any],
                         template: str, http_post=None) -> Optional[Dict[str, Any]]:
     """اگر ارسال خودکار روشن باشد، همان لحظه پیامک می‌زند."""

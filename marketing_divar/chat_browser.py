@@ -63,7 +63,7 @@ def _chat_click_labels(platform: str) -> list:
     if platform == "sheypoor":
         return ["چت", "گفتگو", "ارسال پیام", "پیام", "شروع گفتگو",
                 "پیام به فروشنده", "Chat", "Message"]
-    if platform == "ring":
+    if platform == "disabled_platform":
         return ["چت", "گفتگو", "پیام", "ارسال پیام", "Message", "Chat"]
     return ["چت", "گفتگو", "ارسال پیام", "پیام", "شروع گفتگو",
             "چت با", "Chat", "Message"]

@@ -196,6 +196,7 @@ def mgr() -> AccountManager:
 class OtpRequest(BaseModel):
     name: str
     phone: str
+    platform: str = "divar"  # divar | sheypoor
 
 
 class OtpConfirm(BaseModel):
@@ -250,13 +251,30 @@ def accounts_list():
 
 @app.post("/api/accounts/otp")
 def accounts_otp(req: OtpRequest):
-    """گام ۱ لاگین: ارسال کد پیامکی به شماره."""
+    """گام ۱ لاگین: ارسال کد پیامکی — دیوار via API، شیپور via Chromium."""
     name = req.name.strip().lower().replace(" ", "-")
     if not name:
         raise HTTPException(400, "نام اکانت الزامی است")
     if not (req.phone.startswith("09") and len(req.phone) == 11
             and req.phone.isdigit()):
         raise HTTPException(400, "شماره باید ۱۱ رقم و با ۰۹ شروع شود")
+    plat = (req.platform or "divar").strip().lower()
+    if plat == "sheypoor":
+        # شیپور OTP رسمی ندارد — پروفایل Chromium باز می‌شود روی صفحه لاگین شیپور
+        from ..chromium_profile import SHEYPOOR_LOGIN_URL, create_and_open, profile_ready, open_profile
+        try:
+            if not profile_ready(ACCOUNTS_DIR, name):
+                res = create_and_open(ACCOUNTS_DIR, name, req.phone, primary_url=SHEYPOOR_LOGIN_URL)
+            else:
+                res = open_profile(ACCOUNTS_DIR, name, SHEYPOOR_LOGIN_URL)
+            mgr().set_status(name, "active", note="پروفایل شیپور باز شد — لاگین کنید")
+            log("info", f"پروفایل شیپور «{name}» باز شد برای {req.phone}")
+            return {"ok": True, "platform": "sheypoor",
+                    "message": "پروفایل شیپور باز شد — شماره را وارد و کد را بزنید، بعد ذخیره پروفایل",
+                    **res}
+        except Exception as e:
+            raise HTTPException(400, f"باز کردن شیپور ناموفق: {e}")
+    # دیوار — API رسمی
     cl = DivarClient(session_path=str(mgr().session_path(name)),
                      base_url=_base_url())
     try:
@@ -265,8 +283,8 @@ def accounts_otp(req: OtpRequest):
         log("error", f"ارسال کد برای {req.phone} ناموفق: {e}")
         raise HTTPException(429, f"ارسال کد ناموفق: {e}")
     _state["pending_logins"][name] = req.phone
-    log("info", f"کد تایید برای اکانت «{name}» به {req.phone} ارسال شد")
-    return {"ok": True, "message": "کد تایید پیامک شد؛ گام بعدی را انجام دهید"}
+    log("info", f"کد تایید دیوار برای اکانت «{name}» به {req.phone} ارسال شد")
+    return {"ok": True, "platform": "divar", "message": "کد تایید دیوار پیامک شد؛ کد را وارد و تأیید کنید"}
 
 
 @app.post("/api/accounts/confirm")
@@ -299,6 +317,7 @@ class AccountCollect(BaseModel):
 class ProfileReq(BaseModel):
     name: str
     phone: str = ""
+    platform: str = "divar"  # divar | sheypoor
 
 
 def _profile_name(raw: str) -> str:
@@ -311,18 +330,20 @@ def _profile_name(raw: str) -> str:
 
 @app.post("/api/accounts/profile/create")
 def accounts_profile_create(req: ProfileReq):
-    """پوشهٔ chromium جدا + باز کردن همیشه تهران."""
-    from ..chromium_profile import create_and_open
+    """پوشهٔ chromium جدا + باز کردن دیوار+شیپور."""
+    from ..chromium_profile import HOME_URL, SHEYPOOR_LOGIN_URL, create_and_open
     name = _profile_name(req.name)
     phone = (req.phone or "").strip()
     if phone and not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
         raise HTTPException(400, "شماره باید ۱۱ رقم و با ۰۹ شروع شود (یا خالی بماند)")
+    plat = (req.platform or "divar").lower()
+    primary = SHEYPOOR_LOGIN_URL if plat == "sheypoor" else HOME_URL
     try:
-        res = create_and_open(ACCOUNTS_DIR, name, phone)
+        res = create_and_open(ACCOUNTS_DIR, name, phone, primary_url=primary)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
-    mgr().set_status(name, "active", note="پروفایل ساخته شد — لاگین دیوار در Chromium")
-    log("info", f"پروفایل Chromium «{name}» ساخته شد و تهران باز شد")
+    mgr().set_status(name, "active", note="پروفایل ساخته شد — لاگین دیوار+شیپور در Chromium")
+    log("info", f"پروفایل Chromium «{name}» ساخته شد — {plat}")
     return res
 
 
@@ -337,7 +358,7 @@ def accounts_profile_save(req: ProfileReq):
     if res.get("ready"):
         mgr().set_site_verified(name, True, note="پروفایل Chromium ذخیره شد")
         mgr().set_status(name, "active", note="پروفایل آماده")
-        log("success", f"پروفایل «{name}» ذخیره شد")
+        log("success", f"پروفایل «{name}» ذخیره شد — {res.get('platforms')}")
     else:
         mgr().set_site_verified(name, False)
         log("warning", f"ذخیره پروفایل «{name}»: لاگین دیده نشد")
@@ -346,13 +367,15 @@ def accounts_profile_save(req: ProfileReq):
 
 @app.post("/api/accounts/profile/open")
 def accounts_profile_open(req: ProfileReq):
-    from ..chromium_profile import HOME_URL, open_profile
+    from ..chromium_profile import HOME_URL, SHEYPOOR_LOGIN_URL, open_profile
     name = _profile_name(req.name)
+    plat = (req.platform or "divar").lower()
+    target = SHEYPOOR_LOGIN_URL if plat == "sheypoor" else HOME_URL
     try:
-        res = open_profile(ACCOUNTS_DIR, name, HOME_URL)
+        res = open_profile(ACCOUNTS_DIR, name, target)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
-    log("info", f"پروفایل Chromium «{name}» روی تهران باز شد")
+    log("info", f"پروفایل Chromium «{name}» روی {plat} باز شد")
     return res
 
 
@@ -641,8 +664,10 @@ def accounts_puzzle_click(req: PuzzleClick):
 
 # --------------------------------------------------------- API کلمات کلیدی --
 @app.get("/api/categories")
-def categories_get():
-    from ..categories import public_list
+def categories_get(exclude_estate: bool = True):
+    from ..categories import public_list, public_list_non_estate
+    if exclude_estate:
+        return {"categories": public_list_non_estate(), "note": "املاک حذف شد — حوزه املاک کار نمی‌کنیم"}
     return {"categories": public_list()}
 
 
@@ -709,6 +734,460 @@ def keywords_hunter_adv(kw_id: int, req: HunterAdvUpdate):
     return {"ok": True, "message": "تنظیمات پیشرفته شکارچی ذخیره شد"}
 
 
+@app.get("/api/hunter/analyze/{token}")
+def hunter_analyze_token(token: str):
+    """آنالیز حرفه‌ای یک آگهی — بازار سالم + اطمینان + مذاکره."""
+    from ..hunter import collect_samples_detailed, evaluate
+    from ..hunter_profile import default_profile, merge_overrides
+    import json as _json
+
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        kw = row["keyword"] if "keyword" in row.keys() else ""
+        city = row["city"] if "city" in row.keys() else ""
+        plat = row["platform"] if "platform" in row.keys() else "divar"
+        cat = ""
+        adv = {}
+        try:
+            kwrow = con.execute("SELECT category, hunter_adv FROM keywords WHERE keyword=?", (kw,)).fetchone()
+            if kwrow:
+                cat = kwrow["category"] or ""
+                raw = kwrow["hunter_adv"] or ""
+                if raw:
+                    adv = _json.loads(raw)
+        except Exception:
+            pass
+        prof = merge_overrides(default_profile(cat, kw), adv)
+        extra = dict(row)
+        extra["keyword"] = kw
+        extra["category"] = cat
+        blob = " ".join(str(row[k] or "") for k in ("title", "subtitle", "description", "inspect_summary") if k in row.keys())
+        samples = collect_samples_detailed(con, kw, city, plat, limit=80)
+        sc = evaluate(int(row["price"] if "price" in row.keys() else 0), samples, extra=extra, profile=prof, text=blob)
+        # مذاکره
+        history = []
+        try:
+            raw_hist = row["negotiation_history"] if "negotiation_history" in row.keys() else ""
+            if raw_hist:
+                history = _json.loads(raw_hist)
+        except Exception:
+            history = []
+        return {"ok": True, "analysis": sc, "negotiation_history": history, "lead": dict(row)}
+    finally:
+        con.close()
+
+
+@app.post("/api/hunter/negotiate/{token}")
+def hunter_negotiate_trigger(token: str):
+    """شروع/ادامه مذاکره دستی برای یک آگهی شکار."""
+    con = connect(DB_PATH)
+    try:
+        row = con.execute("SELECT * FROM leads WHERE token=?", (token,)).fetchone()
+        if not row:
+            raise HTTPException(404, "آگهی پیدا نشد")
+        # اگر مانیتور در حال اجراست، از متدش استفاده کن، وگرنه فقط رویداد بزن
+        mon = _state.get("monitor")
+        if mon:
+            try:
+                mon._maybe_hunter_negotiate(con, row, phone=row["phone"] if "phone" in row.keys() else "")
+                return {"ok": True, "message": "مذاکره ارسال شد"}
+            except Exception as e:
+                raise HTTPException(400, str(e))
+        else:
+            # بدون مانیتور — فقط تحلیل مذاکره را برگردان
+            from ..hunter_negotiator import generate_negotiation_message
+
+            context = {
+                "price": int(row["price"] if "price" in row.keys() else 0),
+                "fair": int(row["hunter_fair_price"] if "hunter_fair_price" in row.keys() else 0),
+                "healthy_median": int(row["hunter_market_median"] if "hunter_market_median" in row.keys() else 0),
+                "discount_pct": float(row["hunter_discount_pct"] if "hunter_discount_pct" in row.keys() else 0),
+                "title": str(row["title"] if "title" in row.keys() else ""),
+                "level": str(row["hunter_level"] if "hunter_level" in row.keys() else ""),
+            }
+            msg = generate_negotiation_message(context, [], stage="opener")
+            return {"ok": True, "message": msg, "text": msg}
+    finally:
+        con.close()
+
+
+@app.get("/api/hunter/vip")
+def hunter_vip_list(limit: int = 50):
+    """لیست شکارهای ویژه — VIP آلارم‌ها."""
+    con = connect(DB_PATH)
+    try:
+        rows = con.execute(
+            "SELECT token,title,price,hunter_level,hunter_fair_price,hunter_market_median,hunter_discount_pct,"
+            "hunter_confidence,negotiated_price,negotiation_status,url,phone,city,platform "
+            "FROM leads WHERE hunter_level IN ('good','great') ORDER BY id DESC LIMIT ?",
+            (min(limit, 200),),
+        ).fetchall()
+        return {"ok": True, "vip": [dict(r) for r in rows]}
+    finally:
+        con.close()
+
+
+@app.get("/api/hunter/recheck-week")
+def hunter_recheck_week(limit: int = 20):
+    """هفته گذشته — شکارهایی که پیام نرفته یا مذاکره نیمه‌کاره است."""
+    from ..monitor import recheck_week_old_leads
+    res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 100))
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/recheck-week/run")
+def hunter_recheck_week_run(limit: int = 12):
+    """اجرای مذاکره/استعلام برای آگهی‌های هفته گذشته که پیام نرفته."""
+    mon = _state.get("monitor")
+    if mon:
+        stats = mon.drain_week_old(max_items=min(limit, 30))
+        return {"ok": True, "ran": True, "stats": stats, "message": f"{stats.get('negotiated',0)} مذاکره و {stats.get('inquired',0)} استعلام ارسال شد"}
+    else:
+        # بدون مانیتور — فقط لیست را برگردان، ارسال دستی از طریق negotiate/inquire
+        from ..monitor import recheck_week_old_leads
+        res = recheck_week_old_leads(DB_PATH, max_items=min(limit, 30))
+        need = [x for x in res.get("items", []) if x.get("needs_action")]
+        return {"ok": True, "ran": False, "needs_action": len(need), "items": need,
+                "message": f"مانیتور خاموش است — {len(need)} مورد نیاز به اقدام دستی دارد. مانیتور را روشن کن یا دکمه مذاکره را بزن"}
+
+
+# --------------------------------------------------- AI شکارچی — تنظیمات با کمک AI --
+class HunterAIChatReq(BaseModel):
+    message: str = ""
+    session_id: str = "default"
+    reset: bool = False
+
+
+class HunterAIApplyReq(BaseModel):
+    session_id: str = "default"
+    config: Optional[Dict[str, Any]] = None  # اگر مستقیم بفرستد
+    city_ids: Optional[List[int]] = None  # شهرهای پیش‌فرض برای پایش
+
+
+@app.post("/api/hunter/ai-start")
+def hunter_ai_start(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    res = wiz.start()
+    return {"ok": True, **res}
+
+
+@app.post("/api/hunter/ai-chat")
+def hunter_ai_chat(req: HunterAIChatReq):
+    from ..hunter_ai_wizard import get_wizard
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+    if req.reset:
+        wiz.reset()
+        start = wiz.start()
+        return {"ok": True, **start}
+    # اگر هنوز start نشده، start کن
+    if not wiz.state.get("messages"):
+        wiz.start()
+    result = wiz.handle_user(req.message or "")
+    return {"ok": True, **result}
+
+
+@app.get("/api/hunter/ai-config")
+def hunter_ai_config(session_id: str = "default"):
+    from ..hunter_ai_wizard import get_wizard
+    wiz = get_wizard(session_id or "default")
+    cfg = wiz.build_config()
+    return {"ok": True, "config": cfg, "state": wiz.get_state(), "ready": bool(wiz.state.get("done"))}
+
+
+@app.post("/api/hunter/ai-apply")
+def hunter_ai_apply(req: HunterAIApplyReq):
+    """ست کردن تنظیمات AI — خودکار کلمات کلیدی + hunter_adv می‌سازد"""
+    from ..hunter_ai_wizard import get_wizard
+    from ..cities import parse_city_ids
+    sid = (req.session_id or "default").strip() or "default"
+    wiz = get_wizard(sid)
+
+    cfg = req.config or wiz.build_config()
+    if not cfg or not cfg.get("keywords"):
+        raise HTTPException(400, "هنوز تنظیماتی آماده نیست — اول با AI چت کن")
+
+    cities = parse_city_ids(req.city_ids) if req.city_ids else None
+    # اگر شهر نداده، از تنظیمات قبلی یا None (همه ایران)
+    if cities is None:
+        try:
+            specs = store.keywords_active_specs(DB_PATH)
+            if specs and specs[0].get("cities"):
+                cities = specs[0].get("cities")
+        except Exception:
+            cities = None
+
+    added = 0
+    for kw in cfg.get("keywords", []):
+        keyword = kw.get("keyword") or kw.get("model") or ""
+        category = kw.get("category") or "mobile-phones"
+        price_min = int(kw.get("price_min") or 0)
+        price_max = int(kw.get("price_max") or 0)
+        hunter_adv = kw.get("hunter_adv") or {}
+        # تضمین vip+hunter
+        ok = store.keywords_add(
+            DB_PATH, keyword, cities, category,
+            price_min=price_min, price_max=price_max,
+            vip=True, hunter=True, hunter_adv=hunter_adv
+        )
+        if ok:
+            added += 1
+
+    log("success", f"تنظیمات AI شکارچی اعمال شد — {added} کلمه کلیدی: {', '.join([k['keyword'] for k in cfg.get('keywords',[])])}")
+    return {
+        "ok": True,
+        "added": added,
+        "message": f"{added} تنظیم شکارچی ست شد ✅ دیوار و شیپور هر دو فعال — مانیتور را شروع کن",
+        "config": cfg,
+        "warnings": cfg.get("warnings", []),
+    }
+
+
+class TiraPriceReq(BaseModel):
+    query: str = ""
+    models: List[str] = []
+
+@app.get("/api/tira/price")
+def tira_price(query: str = "", models: str = ""):
+    """قیمت روز آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو از اینترنت — ترب + کش."""
+    from ..hunter_ai_wizard import get_market_price_for_model, extract_products_from_text
+    from ..price_knowledge import fetch_market_price_from_web
+    q = (query or models or "").strip()
+    if not q:
+        return {"ok": False, "message": "query خالی است"}
+    # استخراج مدل‌ها
+    prods = extract_products_from_text(q)
+    model_names = [p["model"] for p in prods] if prods else [q]
+    # اگر مدل آیفون 13/14/15 پرو/پرومکس/نات‌اکتیو جدا باشد، هر کدام را جدا قیمت بگیر
+    prices = []
+    for mn in model_names:
+        try:
+            price = get_market_price_for_model(mn)
+            # تشخیص نات‌اکتیو
+            is_not_active = any(w in mn.lower() for w in ["نات اکتیو", "not active", "پلمپ"]) or any(w in q.lower() for w in ["نات اکتیو", "not active"])
+            prices.append({
+                "model": mn,
+                "price": int(price) if price else 0,
+                "price_million": (int(price)//1_000_000) if price else 0,
+                "is_not_active": bool(is_not_active),
+                "source": "torob" if price else "none",
+                "has_price": bool(price),
+            })
+        except Exception as e:
+            prices.append({"model": mn, "price": 0, "error": str(e), "has_price": False})
+    # اگر هیچ مدلی استخراج نشد ولی query آیفون دارد، برای 13/14/15 پرو/پرومکس جدا قیمت بگیر
+    if not prices or (len(prices)==1 and not prices[0]["has_price"]):
+        # تلاش برای مدل‌های رایج
+        common = []
+        for base in ["13", "13 Pro", "13 Pro Max", "14", "14 Pro", "14 Pro Max", "15", "15 Pro", "15 Pro Max"]:
+            if base.split()[0] in q or "آیفون" in q.lower() or "iphone" in q.lower():
+                common.append(f"آیفون {base}")
+        # اگر query کلی آیفون است، همه را برگردان
+        if "آیفون" in q or "iphone" in q.lower():
+            if not common:
+                common = [f"آیفون {b}" for b in ["13", "13 Pro", "13 Pro Max", "14", "14 Pro", "14 Pro Max", "15", "15 Pro", "15 Pro Max"]]
+            for mn in common[:9]:
+                if mn not in [p["model"] for p in prices]:
+                    try:
+                        price = get_market_price_for_model(mn)
+                        prices.append({"model": mn, "price": int(price) if price else 0, "price_million": (int(price)//1_000_000) if price else 0, "source": "torob" if price else "none", "has_price": bool(price)})
+                    except Exception:
+                        pass
+    return {"ok": True, "query": q, "prices": prices, "message": f"{len([p for p in prices if p.get('has_price')])} قیمت از اینترنت پیدا شد"}
+
+
+# ---------------- تیرا ایجنت تمام‌عیار v3.6
+class TiraAgentReq(BaseModel):
+    message: str = ""
+    session_id: str = "default"
+    reset: bool = False
+    topic: str = ""  # برای guide
+
+
+@app.get("/api/tira/guide")
+def tira_guide(topic: str = "general"):
+    from ..tira_agent import get_system_guide
+    guide = get_system_guide(topic)
+    return {"ok": True, "topic": topic, "guide": guide}
+
+
+@app.post("/api/tira/agent")
+def tira_agent_chat(req: TiraAgentReq):
+    """تیرا ایجنت — تسلط کامل به سیستم + تحقیق بازار + شکار"""
+    from ..tira_agent import get_tira_agent, get_system_guide, research_any_product
+    sid = (req.session_id or "default").strip() or "default"
+    ag = get_tira_agent(sid)
+    if req.reset:
+        ag.reset()
+        start = ag.start()
+        return {"ok": True, **start, "session_id": sid}
+    # اگر هنوز شروع نشده
+    if not ag.state.get("messages"):
+        ag.start()
+    # اگر topic guide خواسته
+    if req.topic and not req.message:
+        guide = get_system_guide(req.topic)
+        return {"ok": True, "reply": guide, "messages": ag.state["messages"], "guide": guide, "session_id": sid}
+    result = ag.handle_user(req.message or "")
+    result["session_id"] = sid
+    result["ok"] = True
+    return result
+
+
+class TiraResearchReq(BaseModel):
+    keyword: str = ""
+
+
+@app.post("/api/tira/research")
+def tira_research(req: TiraResearchReq):
+    from ..tira_agent import research_any_product
+    kw = (req.keyword or "").strip()
+    if not kw:
+        raise HTTPException(400, "کلمه کلیدی خالی است")
+    res = research_any_product(kw)
+    prices = res.get("prices") or []
+    market_price = prices[0]["price"] if prices else None
+    source = prices[0]["source"] if prices else res.get("type")
+    variant = None
+    # تشخیص واریانت آیفون از keyword
+    low = kw.lower()
+    if "پرو مکس" in kw or "promax" in low or "pro max" in low:
+        variant = {"model": "Pro Max", "type": "پرو مکس"}
+    elif "پرو" in kw:
+        variant = {"model": "Pro", "type": "پرو"}
+    elif "مینی" in kw or "mini" in low:
+        variant = {"model": "Mini", "type": "مینی"}
+    elif "پلاس" in kw or "plus" in low:
+        variant = {"model": "Plus", "type": "پلاس"}
+    else:
+        variant = {"model": res.get("variants", [kw])[0] if res.get("variants") else kw, "type": res.get("type")}
+    # اگر نات‌اکتیو
+    if any(w in low for w in ["نات اکتیو", "not active", "پلمپ", "آکبند"]):
+        variant["not_active"] = True
+        variant["extra"] = "+8% گران‌تر از کارکرده سالم"
+    return {"ok": True, "market_price": market_price, "source": source, "variant": variant, "all_prices": prices, **res}
+
+
+class TiraTestReq(BaseModel):
+    phone: str = ""  # شماره تست خود کاربر
+    title: str = ""  # عنوان آگهی فرضی
+    price: int = 0
+    scenario: str = "negotiate"  # negotiate | second_sim | opener | full
+    incoming_phone: str = ""  # برای تست سیم دوم
+    original_phone: str = ""
+    incoming_text: str = ""  # متن ورودی فروشنده برای تست شما؟
+
+
+@app.post("/api/tira/test")
+def tira_test(req: TiraTestReq):
+    """🧪 تست تیرا — مذاکره آزمایشی + سیم دوم + تحقیق قیمت"""
+    from ..tira_agent import generate_polite_negotiation, detect_second_sim_reply, detect_ambiguous_text_reply, research_any_product
+    phone = (req.phone or "").strip()
+    if phone and not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
+        raise HTTPException(400, "شماره تست باید 11 رقم و با 09 شروع شود")
+    title = (req.title or "آیفون 13 پرو مکس تمیز").strip()
+    price = int(req.price or 25_000_000)
+    scenario = (req.scenario or "negotiate").lower()
+
+    if scenario == "second_sim":
+        inc = (req.incoming_phone or "09120000000").strip()
+        orig = (req.original_phone or "09121111111").strip()
+        inc_text = (req.incoming_text or "").strip() or "شما؟"
+        det_phone = detect_second_sim_reply(inc, orig, ad_token="test-token", ad_title=title, incoming_text=inc_text)
+        det_text = detect_ambiguous_text_reply(inc_text, ad_title=title)
+        return {"ok": True, "scenario": "second_sim", "detection": det_phone, "text_detection": det_text, "second_sim_test": {"incoming": inc_text, "needs_clarify": det_phone.get("need_clarify") or det_text.get("need_clarify"), "response": det_phone.get("message") or det_text.get("message")}, "message": det_phone.get("message") or det_text.get("message"), "note": "اگر فروشنده با سیم دوم یا با متن «شما؟» جواب داد، تیرا گیج نمی‌زند"}
+
+    # سناریو مذاکره
+    context = {
+        "title": title,
+        "price": price,
+        "fair": int(price * 1.15),
+        "healthy_median": int(price * 1.2),
+        "discount_pct": 12,
+        "model": title,
+        "factors": [],
+    }
+    if scenario == "opener":
+        msg = generate_polite_negotiation(context, stage="opener")
+    elif scenario == "offer":
+        msg = generate_polite_negotiation(context, stage="offer")
+    elif scenario == "final":
+        msg = generate_polite_negotiation(context, stage="final")
+    elif scenario == "full":
+        research = research_any_product(title)
+        opener = generate_polite_negotiation({**context, "fair": research.get("prices", [{}])[0].get("price", context["fair"]) if research.get("prices") else context["fair"]}, stage="opener")
+        offer = generate_polite_negotiation(context, stage="offer")
+        closer = generate_polite_negotiation(context, stage="final")
+        second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test-full", ad_title=title, incoming_text="شما؟")
+        analysis = None
+        try:
+            from ..hunter import analyze_lead
+            lead_mock = {"title": title, "price": price, "description": title, "city": "تهران"}
+            analysis = analyze_lead(lead_mock, keyword=title)
+        except Exception as e:
+            analysis = {"note": f"hunter analyze not available: {e}", "price": price, "fair": context["fair"], "level": "good"}
+        return {"ok": True, "scenario": "full", "analysis": analysis, "negotiation": {"opener": opener, "offer": offer, "closer": closer, "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": "تست کامل تیرا"}
+    else:
+        msg = generate_polite_negotiation(context, stage="opener")
+        try:
+            from ..hunter import analyze_lead
+            analysis = analyze_lead({"title": title, "price": price, "description": title, "city": "تهران"}, keyword=title)
+        except Exception:
+            analysis = {"price": price, "fair": context["fair"], "median": context["healthy_median"], "level": "good", "raw_level": "good", "discount_pct": 12, "flags": {}, "missing": []}
+        offer = generate_polite_negotiation(context, stage="offer")
+        closer = generate_polite_negotiation(context, stage="final")
+        second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test-neg", ad_title=title, incoming_text="شما؟")
+        research = research_any_product(title)
+        return {"ok": True, "scenario": scenario, "analysis": analysis, "negotiation": {"opener": msg, "offer": offer, "closer": closer, "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": msg}
+
+    try:
+        from ..hunter import analyze_lead
+        analysis = analyze_lead({"title": title, "price": price, "description": title, "city": "تهران"}, keyword=title)
+    except Exception:
+        analysis = {"price": price, "fair": context["fair"], "median": context["healthy_median"], "level": "good", "discount_pct": 5, "flags": {}, "missing": []}
+    second = detect_second_sim_reply("09120000000", "09121111111", ad_token="test", ad_title=title, incoming_text="شما؟")
+    research = research_any_product(title)
+    return {"ok": True, "scenario": scenario, "analysis": analysis, "negotiation": {"opener": msg if scenario=="opener" else "", "offer": msg if scenario=="offer" else "", "closer": msg if scenario=="final" else "", "fair_price": context["fair"]}, "second_sim_test": {"incoming": "شما؟", "needs_clarify": second.get("need_clarify"), "response": second.get("message")}, "market_research": research, "message": msg}
+
+
+@app.post("/api/accounts/platform/toggle")
+def accounts_platform_toggle(req: PlatformToggleReq):
+    """toggle آیکون دیوار/شیپور کنار اکانت‌ها — روشن/خاموش پلتفرم per-account"""
+    from ..chromium_profile import get_platforms_enabled, set_platform_enabled, toggle_platform_enabled, safe_name
+    try:
+        name = safe_name(req.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    plat = (req.platform or "").lower().strip()
+    if plat not in ("divar", "sheypoor"):
+        raise HTTPException(400, "platform باید divar یا sheypoor باشد")
+    if req.enabled is None:
+        en = toggle_platform_enabled(ACCOUNTS_DIR, name, plat)
+    else:
+        en = set_platform_enabled(ACCOUNTS_DIR, name, plat, bool(req.enabled))
+    log("info", f"پلتفرم «{plat}» برای اکانت «{name}» → {'روشن' if en.get(plat) else 'خاموش'}")
+    return {"ok": True, "name": name, "platform": plat, "enabled": bool(en.get(plat)), "platforms_enabled": en, "message": f"{plat} برای {name} {'روشن' if en.get(plat) else 'خاموش'} شد"}
+
+
+@app.get("/api/platforms")
+def platforms_status():
+    from ..platforms import active_platforms, enabled_from_settings, TITLES
+    s = store.settings_all(DB_PATH)
+    enabled = enabled_from_settings(s)
+    return {
+        "ok": True,
+        "active_default": list(active_platforms()),
+        "enabled": enabled,
+        "titles": TITLES,
+        "settings": {f"platform_{pid}": bool(s.get(f"platform_{pid}", pid in active_platforms())) for pid in ("divar", "sheypoor")},
+        "note": " غیرفعال پیش‌فرض — فقط دیوار و شیپور فعال",
+    }
+
+
 # ------------------------------------------------------------- API پیام‌ها --
 @app.get("/api/templates")
 def templates_get():
@@ -744,7 +1223,6 @@ def _apply_sms_to_monitor() -> None:
               "per_account_daily_limit", "adaptive_until_captcha",
               "ip_daily_limit", "phone_delay_sec",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
-              "platform_divar", "platform_sheypoor", "platform_ring",
               "sms_inbox_on", "nlu_use_local",
               "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",
               "sms_pattern_text"):
@@ -829,8 +1307,7 @@ def robot_status():
             "platforms": {
                 "divar": bool(s.get("platform_divar", True)),
                 "sheypoor": bool(s.get("platform_sheypoor", True)),
-                "ring": bool(s.get("platform_ring", True)),
-            },
+                            },
             "nlu": nlu_st(),
             "chats_today": quota_today(con).get("chats", 0),
             "sms_today": quota_today(con).get("sms", 0),
@@ -865,11 +1342,65 @@ def nlu_status():
 
 
 @app.post("/api/nlu/install")
-def nlu_install():
+def nlu_install(small: bool = False):
     from ..nlu_model import start_install_async
-    st = start_install_async()
+    st = start_install_async(small=small)
     log("info", "دانلود مدل محلی درک متن شروع شد")
     return {"ok": True, "message": "دانلود مدل محلی شروع شد — کنار برنامه نصب می‌شود", **st}
+
+
+@app.post("/api/nlu/install-dummy")
+def nlu_install_dummy():
+    """نصب مدل تستی 10MB برای تست صفر تا صد بدون دانلود 1.5GB — fallback هوشمند فعال."""
+    from ..nlu_model import ensure_dummy_model_for_test, status as nlu_st
+    try:
+        ensure_dummy_model_for_test()
+        log("success", "مدل تستی نصب شد — fallback هوشمند فعال")
+        return {"ok": True, "message": "مدل تستی نصب شد — سیستم کامل با fallback هوشمند کار می‌کند", **nlu_st()}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/nlu/memory")
+def nlu_memory():
+    from ..nlu_memory import get_memory, get_stats
+    return {"memory": get_memory(), "stats": get_stats()}
+
+
+@app.get("/api/nlu/events")
+def nlu_events(limit: int = 50):
+    from ..events import recent
+    return {"events": recent(limit)}
+
+
+@app.get("/api/nlu/engine")
+def nlu_engine_status():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.status()
+
+
+@app.post("/api/nlu/selftest")
+def nlu_selftest():
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    res = eng.full_selftest()
+    log("success" if res.get("ok") else "warning", f"تست صفر تا صد: {res.get('summary')}")
+    return res
+
+
+class NluAnalyzeReq(BaseModel):
+    text: str = ""
+    keyword: str = ""
+    category: str = ""
+    platform: str = "divar"
+
+
+@app.post("/api/nlu/analyze")
+def nlu_analyze(req: NluAnalyzeReq):
+    from ..nlu_engine import NluEngine
+    eng = NluEngine(db_path=DB_PATH)
+    return eng.analyze_reply(req.text, keyword=req.keyword, category=req.category, platform=req.platform)
 
 
 # ------------------------------------------------------------ API مانیتور --
@@ -981,6 +1512,24 @@ def status():
             "failed": _cnt("phone_status='error'"),
         }
         acc_snap = mgr().snapshot(DB_PATH, complete_only=False)
+        # IP info
+        current_ip = None
+        last_ip = None
+        ip_changed = False
+        try:
+            from ..netinfo import get_public_ip
+            from ..db import get_last_ip as _get_last_ip, get_ip_history as _get_ip_hist
+            # get_public_ip کش ندارد، پس از کش فایل استفاده کن برای سرعت
+            try:
+                from ..netinfo import get_current_ip_cached
+                current_ip = get_current_ip_cached(cache_sec=120)
+            except Exception:
+                current_ip = None
+            last_ip = _get_last_ip(con)
+            if last_ip and current_ip and last_ip != current_ip:
+                ip_changed = True
+        except Exception:
+            pass
         acc_break = {"active": 0, "busy": 0, "rate_limited": 0,
                      "captcha": 0, "error": 0, "disabled": 0}
         for a in acc_snap:
@@ -1228,6 +1777,15 @@ def lead_send_sms(token: str):
         con.close()
 
 
+@app.get("/api/sms/completeness")
+def sms_completeness():
+    """بررسی کامل بودن اتصال ملی‌پیامک برای کاربر — v4"""
+    from ..sms import check_mellipayamak_completeness
+    s = store.settings_all(DB_PATH)
+    res = check_mellipayamak_completeness(s)
+    return {"ok": True, **res}
+
+
 @app.post("/api/sms/delivery-check")
 def sms_delivery_check():
     """وضعیت تحویل پیامک‌های «در انتظار» را از ملی‌پیامک (GetDeliveries2) می‌پرسد.
@@ -1467,6 +2025,111 @@ def diag_run():
     log("success" if good >= 4 else "error",
         f"بررسی اتصال تمام شد: {good}/{len(result['steps'])} قدم سالم")
     return result
+
+
+
+@app.get("/api/ip/status")
+def ip_status():
+    """وضعیت IP فعلی و تاریخچه — برای نمایش در پنل + ریست خودکار سهمیه."""
+    from ..db import connect as _connect, get_last_ip, get_ip_history, quota_today
+    from ..netinfo import get_public_ip, lan_ipv4
+    con = _connect(DB_PATH)
+    try:
+        last_ip = get_last_ip(con)
+        history = []
+        try:
+            rows = get_ip_history(con, limit=20)
+            history = [dict(r) for r in rows]
+        except Exception:
+            history = []
+        q = quota_today(con)
+    finally:
+        con.close()
+    current_ip = None
+    try:
+        current_ip = get_public_ip(timeout=5)
+    except Exception:
+        current_ip = None
+    lan = []
+    try:
+        lan = lan_ipv4()
+    except Exception:
+        lan = []
+    changed = (last_ip is not None and current_ip is not None and last_ip != current_ip)
+    return {
+        "ok": True,
+        "current_ip": current_ip,
+        "last_ip": last_ip,
+        "changed": bool(changed),
+        "lan_ips": lan,
+        "history": history,
+        "quota_today": q,
+        "message": f"IP فعلی: {current_ip or 'نامشخص'} — آخرین IP ثبت: {last_ip or 'ندارد'}" + (" — IP عوض شده، سهمیه ریست می‌شود" if changed else ""),
+    }
+
+
+@app.post("/api/ip/check")
+def ip_check():
+    """چک دستی IP — اگر عوض شده باشد سهمیه صفر می‌شود."""
+    from ..db import connect as _connect, set_ip_and_check_reset, quota_today
+    from ..netinfo import get_public_ip
+    ip = get_public_ip(timeout=8)
+    if not ip:
+        raise HTTPException(400, "نتوانست IP خارجی را بگیرد — اینترنت را چک کنید")
+    con = _connect(DB_PATH)
+    try:
+        res = set_ip_and_check_reset(con, ip)
+        q = quota_today(con)
+    finally:
+        con.close()
+    if res.get("changed"):
+        log("success", f"IP عوض شد: {res.get('old_ip')} → {res.get('new_ip')} — سهمیه ریست شد")
+        return {"ok": True, "changed": True, "old_ip": res.get("old_ip"), "new_ip": res.get("new_ip"), "quota": q, "message": f"IP عوض شد ({res.get('old_ip')} → {res.get('new_ip')}) — سهمیه امروز صفر شد ✅"}
+    elif res.get("first_time"):
+        return {"ok": True, "changed": False, "first_time": True, "new_ip": ip, "quota": q, "message": f"IP ثبت شد: {ip}"}
+    else:
+        return {"ok": True, "changed": False, "ip": ip, "quota": q, "message": f"IP تغییری نکرده: {ip} — سهمیه امروز: {q.get('phones',0)} شماره"}
+
+
+@app.post("/api/ip/reset-quota")
+def ip_reset_quota(reason: str = "manual"):
+    """ریست دستی سهمیه — وقتی کاربر می‌داند IP عوض شده یا می‌خواهد دوباره شروع کند."""
+    from ..db import connect as _connect, reset_today_quota, quota_today
+    con = _connect(DB_PATH)
+    try:
+        q = reset_today_quota(con, reason=reason)
+    finally:
+        con.close()
+    log("success", f"سهمیه امروز دستی ریست شد — دلیل: {reason}")
+    return {"ok": True, "quota": q, "message": "سهمیه امروز صفر شد — می‌تونی دوباره شماره بگیری ✅"}
+
+
+
+
+class TiraProfitReq(BaseModel):
+    keyword: str = ""
+    sell_price: int = 0
+    profit_pct: float = 10
+    conditions: str = ""
+    test_improve: bool = False
+
+@app.post("/api/tira/profitability")
+def tira_profitability(req: TiraProfitReq):
+    """محاسبه سودآوری با هزاران پارامتر + تحقیق اینترنت + تست/بهبود خودکار"""
+    from ..profitability import calculate_profitability, test_and_improve_profitability
+    kw = (req.keyword or "").strip()
+    if not kw:
+        raise HTTPException(400, "کلمه کلیدی خالی است")
+    if req.test_improve:
+        res = test_and_improve_profitability(kw, iterations=3)
+        return {"ok": True, **res}
+    res = calculate_profitability(
+        title=kw,
+        sell_price_healthy=req.sell_price if req.sell_price else None,
+        desired_profit_pct=req.profit_pct or 10,
+        conditions_text=req.conditions or "",
+    )
+    return {"ok": True, **res}
 
 
 @app.post("/api/shutdown")
