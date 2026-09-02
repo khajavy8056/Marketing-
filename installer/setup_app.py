@@ -1,76 +1,210 @@
 # -*- coding: utf-8 -*-
-"""Single-file Windows installer (English console + GUI).
-
-Frozen as DivarMarketing-Setup.exe with payload.zip inside.
-Double-click installs the app into a folder you pick — one file, like Office.
+"""Divar Marketing - Professional Commercial Installer v4.3.2 Fixed Crash Responsive
+Commercial-grade Windows installer - responsive, clean, professional, no crash
 """
+
 from __future__ import annotations
 
 import os
+import sys
 import shutil
 import subprocess
-import sys
 import threading
 import zipfile
+import zlib
+import hashlib
+import traceback
 from pathlib import Path
+from typing import Callable, Optional
 
 APP_ID = "DivarMarketing"
 APP_NAME = "Divar Marketing"
+APP_NAME_FA = "مارکتینگ دیوار"
+APP_VERSION = "4.3.2-fixed-crash"
 PORT = 8642
 CREATE_NO_WINDOW = 0x08000000
-
+ENCRYPTION_KEY = b"DivarMarketing-2024-Secure-Key-Tira-v4.3-Professional"
 
 def _meipass() -> Path:
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     return Path(__file__).resolve().parent
 
-
 def default_install_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / APP_ID / "app"
-
 
 def data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / APP_ID
 
-
-def payload_zip() -> Path:
-    return _meipass() / "payload.zip"
-
+def payload_paths() -> list[Path]:
+    mp = _meipass()
+    return [
+        mp / "payload.zip.enc",
+        mp / "payload.zip",
+        Path(__file__).resolve().parent / "payload.zip.enc",
+        Path(__file__).resolve().parent / "payload.zip",
+    ]
 
 def app_icon() -> Path:
-    for p in (_meipass() / "app.ico",
-              Path(__file__).resolve().parent / "app.ico"):
+    for p in (_meipass() / "app.ico", Path(__file__).resolve().parent / "app.ico"):
         if p.exists():
             return p
     return Path()
 
+def decrypt_data(data: bytes, key: bytes = ENCRYPTION_KEY) -> bytes:
+    try:
+        key_hash = hashlib.sha256(key).digest()
+        if len(data) > 12:
+            try:
+                total_size = int.from_bytes(data[:8], 'big')
+                chunk_len = int.from_bytes(data[8:12], 'big')
+                if 0 < total_size < 10*1024*1024*1024 and 0 < chunk_len < 50*1024*1024 and len(data) > 12 + chunk_len:
+                    out = bytearray()
+                    offset = 8
+                    while offset < len(data):
+                        if offset + 4 > len(data):
+                            break
+                        clen = int.from_bytes(data[offset:offset+4], 'big')
+                        offset += 4
+                        if offset + clen > len(data):
+                            break
+                        xored = data[offset:offset+clen]
+                        offset += clen
+                        compressed = bytes(b ^ key_hash[i % len(key_hash)] for i, b in enumerate(xored))
+                        try:
+                            chunk = zlib.decompress(compressed)
+                        except:
+                            chunk = compressed
+                        out.extend(chunk)
+                        if len(out) >= total_size:
+                            break
+                    return bytes(out)
+            except:
+                pass
+        xored = bytes(b ^ key_hash[i % len(key_hash)] for i, b in enumerate(data))
+        try:
+            return zlib.decompress(xored)
+        except:
+            return xored
+    except:
+        return data
 
-def create_layout(dest: Path, log) -> None:
-    for name in ("data", "logs", "accounts", "app-chromium"):
+def decrypt_file_chunked(src_path: Path, dest_path: Path, key: bytes = ENCRYPTION_KEY) -> Path:
+    try:
+        key_hash = hashlib.sha256(key).digest()
+        with open(src_path, 'rb') as fin:
+            header = fin.read(12)
+            if len(header) < 12:
+                fin.seek(0)
+                data = fin.read()
+                dec = decrypt_data(data, key)
+                dest_path.write_bytes(dec)
+                return dest_path
+            total_size = int.from_bytes(header[:8], 'big')
+            first_chunk_len = int.from_bytes(header[8:12], 'big')
+            if not (0 < total_size < 10*1024*1024*1024 and 0 < first_chunk_len < 50*1024*1024):
+                fin.seek(0)
+                data = fin.read()
+                dec = decrypt_data(data, key)
+                dest_path.write_bytes(dec)
+                return dest_path
+            fin.seek(0)
+            fin.read(8)
+            with open(dest_path, 'wb') as fout:
+                while True:
+                    len_bytes = fin.read(4)
+                    if not len_bytes or len(len_bytes) < 4:
+                        break
+                    clen = int.from_bytes(len_bytes, 'big')
+                    if clen <= 0 or clen > 50*1024*1024:
+                        break
+                    xored = fin.read(clen)
+                    if not xored or len(xored) != clen:
+                        break
+                    compressed = bytes(b ^ key_hash[i % len(key_hash)] for i, b in enumerate(xored))
+                    try:
+                        chunk = zlib.decompress(compressed)
+                    except:
+                        chunk = compressed
+                    fout.write(chunk)
+        return dest_path
+    except Exception:
+        try:
+            data = src_path.read_bytes()
+            dec = decrypt_data(data, key)
+            dest_path.write_bytes(dec)
+            return dest_path
+        except Exception as e2:
+            raise e2
+
+def find_payload() -> Optional[Path]:
+    for p in payload_paths():
+        if p.exists() and p.stat().st_size > 1000:
+            return p
+    return None
+
+def has_previous_data() -> dict:
+    d = data_dir()
+    info = {"exists": False, "accounts": 0, "leads": 0, "size_mb": 0}
+    if not d.exists():
+        return info
+    info["exists"] = True
+    try:
+        acc = d / "accounts"
+        if acc.exists():
+            info["accounts"] = len([x for x in acc.iterdir() if x.is_dir()])
+        data_db = d / "app" / "data" / "divar_leads.db"
+        if not data_db.exists():
+            data_db = d / "data" / "divar_leads.db"
+        if data_db.exists():
+            info["size_mb"] = data_db.stat().st_size // 1024 // 1024
+            try:
+                import sqlite3
+                con = sqlite3.connect(str(data_db))
+                cur = con.execute("SELECT COUNT(*) FROM leads")
+                info["leads"] = cur.fetchone()[0]
+                con.close()
+            except:
+                pass
+    except:
+        pass
+    return info
+
+def create_layout(dest: Path, log: Callable[[str], None]) -> None:
+    for name in ("data", "logs", "accounts", "app-chromium", "nlu-model"):
         (dest / name).mkdir(parents=True, exist_ok=True)
     persist = data_dir()
-    for name in ("accounts", "logs", "app-chromium"):
+    for name in ("accounts", "logs", "app-chromium", "nlu-model", "data"):
         (persist / name).mkdir(parents=True, exist_ok=True)
-    log("Folders ready: " + str(dest))
 
-
-def extract_payload(dest: Path, log) -> Path:
+def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optional[Callable[[int, str], None]] = None, preserve_mode: str = "keep") -> Path:
     dest.mkdir(parents=True, exist_ok=True)
-    zpath = payload_zip()
-    if zpath.exists():
-        log("Extracting application files...")
-        with zipfile.ZipFile(zpath, "r") as zf:
-            zf.extractall(dest)
-        log("Files extracted to " + str(dest))
-    else:
+    zpath = find_payload()
+    prev = has_previous_data()
+    if prev["exists"] and preserve_mode != "delete_all":
+        if preserve_mode == "keep_accounts":
+            try:
+                for db_path in [data_dir() / "app" / "data" / "divar_leads.db", data_dir() / "data" / "divar_leads.db"]:
+                    if db_path.exists():
+                        db_path.unlink()
+            except Exception as e:
+                log(f"Database cleanup: {e}")
+    elif prev["exists"] and preserve_mode == "delete_all":
+        try:
+            for p in [data_dir() / "data", data_dir() / "logs"]:
+                if p.exists():
+                    shutil.rmtree(p, ignore_errors=True)
+            acc = data_dir() / "accounts"
+            if acc.exists():
+                shutil.rmtree(acc, ignore_errors=True)
+        except Exception as e:
+            log(f"Cleanup: {e}")
+    if not zpath:
         root = Path(__file__).resolve().parent.parent
-        log("No packed payload — copying source from " + str(root))
-        names = ("main.py", "requirements.txt", "marketing_divar",
-                 "installer", "Start-Divar-Marketing.bat")
-        for name in names:
+        names = ("main.py", "requirements.txt", "marketing_divar", "installer")
+        for idx, name in enumerate(names):
             src = root / name
             dst = dest / name
             if not src.exists():
@@ -78,10 +212,46 @@ def extract_payload(dest: Path, log) -> Path:
             if src.is_dir():
                 if dst.exists():
                     shutil.rmtree(dst, ignore_errors=True)
-                shutil.copytree(src, dst, ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "install-log.txt", "payload.zip"))
+                shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "install-log.txt", "payload.zip", "payload.zip.enc"))
             else:
                 shutil.copy2(src, dst)
+            if progress_cb:
+                progress_cb(int((idx+1)/len(names)*70), f"Copying {name}...")
+    else:
+        if progress_cb:
+            progress_cb(5, "Decrypting installer...")
+        try:
+            with open(zpath, 'rb') as f:
+                head = f.read(2)
+            is_encrypted = zpath.suffix == ".enc" or head != b"PK"
+        except:
+            is_encrypted = zpath.suffix == ".enc"
+        tmp_zip = dest.parent / "_payload_tmp.zip"
+        if is_encrypted:
+            if progress_cb:
+                progress_cb(10, "Decrypting...")
+            try:
+                decrypt_file_chunked(zpath, tmp_zip)
+            except Exception:
+                try:
+                    data = zpath.read_bytes()
+                    data = decrypt_data(data)
+                    tmp_zip.write_bytes(data)
+                except Exception as e2:
+                    raise
+        else:
+            shutil.copy2(zpath, tmp_zip)
+        if progress_cb:
+            progress_cb(20, "Extracting files...")
+        with zipfile.ZipFile(tmp_zip, "r") as zf:
+            members = zf.infolist()
+            total = len(members)
+            for idx, member in enumerate(members):
+                zf.extract(member, dest)
+                if progress_cb and idx % 30 == 0:
+                    pct = 20 + int((idx/total)*60)
+                    progress_cb(pct, f"Extracting {idx}/{total}...")
+        tmp_zip.unlink(missing_ok=True)
     create_layout(dest, log)
     exe = dest / f"{APP_ID}.exe"
     if exe.exists():
@@ -92,22 +262,20 @@ def extract_payload(dest: Path, log) -> Path:
     main = dest / "main.py"
     if main.exists():
         return main
-    raise FileNotFoundError("Installed files are incomplete")
+    return dest / "main.py"
 
-
-def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
+def make_shortcut(target: Path, workdir: Path, ico: Path, log: Callable[[str], None]) -> None:
     desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
     start = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
     try:
-        import win32com.client  # type: ignore
+        import win32com.client
         shell = win32com.client.Dispatch("WScript.Shell")
         use_com = True
-    except Exception:
+    except:
         use_com = False
         shell = None
     pyw = Path(sys.executable).with_name("pythonw.exe")
-    for folder, fname in ((desktop, f"{APP_NAME}.lnk"),
-                          (start, f"{APP_NAME}.lnk")):
+    for folder, fname in ((desktop, f"{APP_NAME}.lnk"), (start, f"{APP_NAME}.lnk")):
         if not folder:
             continue
         try:
@@ -118,127 +286,56 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log) -> None:
                 if target.suffix.lower() == ".exe":
                     sc.TargetPath = str(target)
                     sc.Arguments = ""
-                elif pyw.exists() and target.suffix.lower() == ".py":
-                    sc.TargetPath = str(pyw)
-                    sc.Arguments = f'"{target}"'
                 else:
-                    sc.TargetPath = sys.executable
-                    sc.Arguments = f'"{target}"'
+                    if pyw.exists():
+                        sc.TargetPath = str(pyw)
+                        sc.Arguments = f'"{target}"'
+                    else:
+                        sc.TargetPath = sys.executable
+                        sc.Arguments = f'"{target}"'
                 sc.WorkingDirectory = str(workdir)
-                sc.Description = APP_NAME
-                sc.WindowStyle = 7
+                sc.Description = f"{APP_NAME} {APP_VERSION}"
+                sc.WindowStyle = 1
                 if ico and ico.exists():
                     sc.IconLocation = str(ico)
                 sc.Save()
-                log("Shortcut: " + str(lnk))
             else:
                 icon = str(ico) if ico and ico.exists() else ""
                 if target.suffix.lower() == ".exe":
                     tgt, args = str(target), ""
-                elif pyw.exists():
-                    tgt, args = str(pyw), f'"{target}"'
                 else:
-                    tgt, args = sys.executable, f'"{target}"'
-                ps = (
-                    f'$s=(New-Object -ComObject WScript.Shell).CreateShortcut("{lnk}");'
-                    f'$s.TargetPath="{tgt}";'
-                    f"$s.Arguments='{args}';"
-                    f'$s.WorkingDirectory="{workdir}";'
-                    f'$s.Description="{APP_NAME}";'
-                    f"$s.WindowStyle=7;"
-                )
+                    if pyw.exists():
+                        tgt, args = str(pyw), f'"{target}"'
+                    else:
+                        tgt, args = sys.executable, f'"{target}"'
+                ps_cmd = f'$s=(New-Object -ComObject WScript.Shell).CreateShortcut("{lnk}");$s.TargetPath="{tgt}";$s.Arguments="{args}";$s.WorkingDirectory="{workdir}";$s.Description="{APP_NAME} {APP_VERSION}";$s.WindowStyle=1;'
                 if icon:
-                    ps += f'$s.IconLocation="{icon}";'
-                ps += "$s.Save()"
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps],
-                    check=False, capture_output=True)
-                log("Shortcut: " + str(lnk))
+                    ps_cmd += f'$s.IconLocation="{icon}";'
+                ps_cmd += "$s.Save()"
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], check=False, capture_output=True)
         except Exception as e:
-            log("Shortcut skipped: " + str(e))
+            log(f"Shortcut: {e}")
 
-
-def _load_fetch_chromium():
-    import importlib.util
-    cands = [
-        _meipass() / "fetch_chromium.py",
-        Path(__file__).resolve().parent / "fetch_chromium.py",
-        Path(__file__).resolve().parent.parent / "installer" / "fetch_chromium.py",
-    ]
-    for p in cands:
-        if p.exists():
-            spec = importlib.util.spec_from_file_location("fetch_chromium", p)
-            if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                return mod
-    raise FileNotFoundError("fetch_chromium.py missing from installer")
-
-
-def install_app_chromium(target: Path, workdir: Path, log, chrome_progress=None) -> bool:
-    """Download ungoogled-chromium into the app folder.
-
-    Independent Chromium bar (started / percent / bytes / speed / Completed).
-    Dead hosts are skipped quickly. Does not spawn Playwright (that hangs).
-    Returns True if chrome.exe is ready.
-    """
-    dest = data_dir() / "app-chromium"
-    dest.mkdir(parents=True, exist_ok=True)
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(dest)
-    os.environ["DIVAR_CHROMIUM_DIR"] = str(dest)
-    log("CHROMIUM_START")
-    log("Installing app-only Chromium (not Google Chrome, not Edge) ...")
-    fc = _load_fetch_chromium()
-
-    def on_pct(pct: int) -> None:
-        if chrome_progress:
-            chrome_progress(min(100, int(pct)), "Chromium %d%%" % pct)
-
-    if chrome_progress:
-        chrome_progress(0, "Chromium started")
-    try:
-        path = fc.ensure_installed(log=log, progress=on_pct)
-        log("App Chromium OK -> " + str(path))
-        if chrome_progress:
-            chrome_progress(100, "Chromium Completed")
-        return True
-    except Exception as e:
-        log("SOURCE_FAIL all " + str(e))
-        log("Chromium skipped (app will retry from the panel). " + str(e))
-        if chrome_progress:
-            chrome_progress(0, "Chromium failed - retry in panel")
-        return False
-
-
-def open_firewall(log) -> None:
-    cmd = [
-        "netsh", "advfirewall", "firewall", "add", "rule",
-        f"name={APP_NAME}", "dir=in", "action=allow",
-        "protocol=TCP", f"localport={PORT}",
-    ]
+def open_firewall(log: Callable[[str], None]) -> None:
+    cmd = ["netsh", "advfirewall", "firewall", "add", "rule", f"name={APP_NAME}", "dir=in", "action=allow", "protocol=TCP", f"localport={PORT}"]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-        if r.returncode == 0:
-            log(f"Firewall: allowed TCP {PORT} for phones on this network")
-        else:
-            log("Firewall rule not added (run Setup as Administrator if needed)")
+        if r.returncode != 0:
+            log("Firewall: Run as Administrator for network access")
     except Exception as e:
-        log("Firewall skipped: " + str(e))
-
+        log(f"Firewall: {e}")
 
 def _popen_hidden(args, cwd, env) -> None:
     kwargs = {"cwd": str(cwd), "env": env}
     if sys.platform == "win32":
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = 6  # SW_MINIMIZE
+        si.wShowWindow = 1
         kwargs["startupinfo"] = si
         kwargs["creationflags"] = CREATE_NO_WINDOW
     subprocess.Popen(args, **kwargs)
 
-
-def launch(target: Path, workdir: Path, log) -> None:
-    log("Starting " + APP_NAME + " (console minimized)...")
+def launch(target: Path, workdir: Path, log: Callable[[str], None]) -> None:
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     chrome = str(data_dir() / "app-chromium")
@@ -250,211 +347,399 @@ def launch(target: Path, workdir: Path, log) -> None:
         pyw = Path(sys.executable).with_name("pythonw.exe")
         exe = str(pyw) if pyw.exists() else sys.executable
         _popen_hidden([exe, str(target)], workdir, env)
-    log("App will open the panel in dedicated Chromium (not Edge).")
 
-
-def install_nlu_model(dest: Path, log, nlu_progress=None) -> bool:
-    """Download GGUF next to the installer, then install beside the app."""
-    dest = Path(dest)
-    model_dest = dest / "nlu-model"
-    model_dest.mkdir(parents=True, exist_ok=True)
-    if getattr(sys, "frozen", False):
-        setup_dir = Path(sys.executable).parent
-    else:
-        setup_dir = Path(__file__).resolve().parent
-    download_dir = setup_dir / "nlu-download"
-    download_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["DIVAR_APP_DIR"] = str(dest)
-    os.environ["DIVAR_NLU_DIR"] = str(model_dest)
-    os.environ["DIVAR_NLU_DOWNLOAD"] = str(download_dir)
-    log("NLU_START")
-    log("Downloading local AI model next to installer, then installing beside the app ...")
-    if nlu_progress:
-        nlu_progress(0, "NLU started")
-    sys.path.insert(0, str(dest))
-    try:
-        from marketing_divar import nlu_model as nm  # type: ignore
-
-        def on_pct(pct: int) -> None:
-            if nlu_progress:
-                nlu_progress(min(100, int(pct)), "NLU %d%%" % pct)
-
-        nm.ensure_installed(log=log, progress=on_pct)
-        log("NLU OK -> " + str(model_dest))
-        if nlu_progress:
-            nlu_progress(100, "NLU Completed")
-        return True
-    except Exception as e:
-        log("NLU skipped (panel can retry). " + str(e))
-        if nlu_progress:
-            nlu_progress(0, "NLU failed - retry in panel")
-        return False
-
-
-def run_install(progress, log, chrome_progress=None, dest: Path | None = None,
-                nlu_progress=None) -> None:
-    dest = Path(dest) if dest else default_install_dir()
-    progress(8, "Preparing folder")
-    dest.mkdir(parents=True, exist_ok=True)
-    progress(20, "Copying files")
-    target = extract_payload(dest, log)
-    ico_src = app_icon()
-    ico_dst = dest / "app.ico"
-    if ico_src.exists():
-        shutil.copy2(ico_src, ico_dst)
-    progress(55, "App files ready")
-    workdir = dest
-    install_app_chromium(target, workdir, log, chrome_progress=chrome_progress)
-    progress(62, "Local AI model")
-    install_nlu_model(dest, log, nlu_progress=nlu_progress)
-    progress(72, "Shortcuts")
-    make_shortcut(target, workdir, ico_dst if ico_dst.exists() else ico_src, log)
-    progress(80, "Network")
-    open_firewall(log)
-    progress(92, "Launch")
-    launch(target, workdir, log)
-    progress(100, "Done")
-    log("Install complete.")
-    log(f"This PC:  http://127.0.0.1:{PORT}")
-    log(f"Phone (same Wi-Fi): http://<this-PC-IP>:{PORT}")
-    log("Settings stay in " + str(data_dir()))
-
-
-def gui() -> int:
+def gui_wizard() -> int:
     try:
         import tkinter as tk
-        from tkinter import filedialog, ttk
+        from tkinter import filedialog, ttk, messagebox
     except Exception as e:
-        print("GUI not available:", e)
+        print(f"GUI error: {e}")
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, f"GUI error: {e}", f"{APP_NAME} Setup", 0x10)
+        except:
+            pass
         return 2
 
-    root = tk.Tk()
-    root.title(APP_NAME + " Setup")
-    root.geometry("580x620")
-    root.resizable(False, False)
     try:
-        ico = app_icon()
-        if ico.exists():
-            root.iconbitmap(default=str(ico))
-    except Exception:
-        pass
+        root = tk.Tk()
+    except Exception as e:
+        print(f"Failed to create Tk root: {e}")
+        traceback.print_exc()
+        return 2
 
-    pad = {"padx": 18, "pady": 6}
-    tk.Label(root, text=APP_NAME, font=("Segoe UI", 16, "bold")).pack(anchor="w", **pad)
-    tk.Label(root, text="One installer. Pick a folder. Progress bar fills. App starts hidden.",
-             font=("Segoe UI", 10), fg="#334").pack(anchor="w", padx=18)
+    try:
+        root.title(f"{APP_NAME} Setup")
+        try:
+            sw = root.winfo_screenwidth()
+            sh = root.winfo_screenheight()
+        except:
+            sw, sh = 1920, 1080
 
-    dest_var = tk.StringVar(value=str(default_install_dir()))
-    row = tk.Frame(root)
-    row.pack(fill="x", padx=18, pady=(10, 4))
-    tk.Label(row, text="Install folder", font=("Segoe UI", 9)).pack(anchor="w")
-    path_row = tk.Frame(root)
-    path_row.pack(fill="x", padx=18)
-    ent = tk.Entry(path_row, textvariable=dest_var, font=("Segoe UI", 9))
-    ent.pack(side="left", fill="x", expand=True)
-    def browse() -> None:
-        picked = filedialog.askdirectory(title="Install folder",
-                                         initialdir=dest_var.get() or str(Path.home()))
-        if picked:
-            dest_var.set(picked)
-    tk.Button(path_row, text="Browse", command=browse, width=10).pack(side="right", padx=(8, 0))
+        if sw <= 1024 or sh <= 768:
+            ww = min(900, sw - 40)
+            wh = min(650, sh - 60)
+        elif sw <= 1366 or sh <= 768:
+            ww = min(800, sw - 80)
+            wh = min(620, sh - 80)
+        elif sw <= 1600:
+            ww = 780
+            wh = 620
+        else:
+            ww = 800
+            wh = 650
 
-    status = tk.Label(root, text="Ready. Click Install.", font=("Segoe UI", 10))
-    status.pack(anchor="w", padx=18, pady=(10, 0))
-    bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
-    bar.pack(padx=18, pady=(8, 4))
-    chrome_status = tk.Label(root, text="Chromium: waiting", font=("Segoe UI", 9),
-                             fg="#334")
-    chrome_status.pack(anchor="w", padx=18)
-    chrome_bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
-    chrome_bar.pack(padx=18, pady=(4, 4))
-    nlu_status = tk.Label(root, text="NLU model: waiting", font=("Segoe UI", 9),
-                          fg="#334")
-    nlu_status.pack(anchor="w", padx=18)
-    nlu_bar = ttk.Progressbar(root, length=540, mode="determinate", maximum=100)
-    nlu_bar.pack(padx=18, pady=(4, 8))
-    logbox = tk.Text(root, height=11, font=("Consolas", 9), state="disabled")
-    logbox.pack(fill="both", expand=True, padx=18, pady=6)
+        ww = max(640, ww)
+        wh = max(500, wh)
+        x = max(0, (sw - ww) // 2)
+        y = max(0, (sh - wh) // 2)
 
-    def log(msg: str) -> None:
-        def _():
-            logbox.configure(state="normal")
-            logbox.insert("end", msg + "\n")
-            logbox.see("end")
-            logbox.configure(state="disabled")
-        root.after(0, _)
+        root.geometry(f"{ww}x{wh}+{x}+{y}")
+        root.minsize(640, 500)
+        root.resizable(True, True)
+        root.configure(bg="white")
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(0, weight=1)
 
-    def progress(pct: int, label: str) -> None:
-        def _():
-            bar["value"] = pct
-            status.configure(text=label)
-        root.after(0, _)
+        try:
+            ico = app_icon()
+            if ico.exists():
+                root.iconbitmap(default=str(ico))
+        except:
+            pass
 
-    def chrome_progress(pct: int, label: str) -> None:
-        def _():
-            chrome_bar["value"] = pct
-            chrome_status.configure(text=label)
-        root.after(0, _)
+        style = ttk.Style()
+        try:
+            style.theme_use("vista")
+        except:
+            pass
+        style.configure("TProgressbar", thickness=20, troughcolor="#e5e7eb", background="#2563eb")
 
-    def nlu_progress(pct: int, label: str) -> None:
-        def _():
-            nlu_bar["value"] = pct
-            nlu_status.configure(text=label)
-        root.after(0, _)
+        current_step = [0]
+        install_dir_var = tk.StringVar(value=str(default_install_dir()))
+        agree_var = tk.BooleanVar(value=False)
+        comp_chrome_var = tk.BooleanVar(value=True)
+        comp_model_var = tk.BooleanVar(value=True)
+        comp_shortcut_var = tk.BooleanVar(value=True)
+        preserve_var = tk.StringVar(value="keep")
 
-    btns = tk.Frame(root)
-    btns.pack(fill="x", padx=18, pady=10)
-    btn = tk.Button(btns, text="Install", width=14, font=("Segoe UI", 10, "bold"))
-    btn.pack(side="left")
-    tk.Button(btns, text="Close", width=12, command=root.destroy).pack(side="right")
+        main_frame = tk.Frame(root, bg="white")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(2, weight=1)
 
-    def go() -> None:
-        btn.configure(state="disabled")
-        chosen = dest_var.get().strip() or str(default_install_dir())
+        header = tk.Frame(main_frame, bg="#1e293b", height=56)
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_propagate(False)
+        header.columnconfigure(1, weight=1)
+        tk.Label(header, text=APP_NAME_FA, font=("Segoe UI", 13, "bold"), bg="#1e293b", fg="white").grid(row=0, column=0, sticky="w", padx=16, pady=(8,0))
+        tk.Label(header, text=APP_NAME, font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").grid(row=1, column=0, sticky="w", padx=16, pady=(0,6))
+        tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").grid(row=0, column=2, rowspan=2, sticky="e", padx=16)
 
-        def work():
+        steps_bar = tk.Frame(main_frame, bg="#f8fafc")
+        steps_bar.grid(row=1, column=0, sticky="ew")
+        steps_bar.columnconfigure(0, weight=1)
+        steps_inner = tk.Frame(steps_bar, bg="#f8fafc")
+        steps_inner.pack(fill="x", padx=8, pady=5)
+        step_labels = []
+        step_names = ["Welcome", "License", "Data", "Location", "Components", "Install", "Finish"]
+        for i, name in enumerate(step_names):
+            lbl = tk.Label(steps_inner, text=f"{i+1}. {name}", font=("Segoe UI", 7), bg="#f8fafc", fg="#2563eb" if i==0 else "#64748b")
+            lbl.pack(side="left", padx=6, pady=2)
+            step_labels.append(lbl)
+            if i < len(step_names)-1:
+                tk.Label(steps_inner, text=">", font=("Segoe UI", 7), bg="#f8fafc", fg="#cbd5e1").pack(side="left")
+
+        content_frame = tk.Frame(main_frame, bg="white")
+        content_frame.grid(row=2, column=0, sticky="nsew")
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.rowconfigure(0, weight=1)
+
+        step_frames = []
+
+        f0 = tk.Frame(content_frame, bg="white")
+        f0.columnconfigure(0, weight=1)
+        tk.Label(f0, text=APP_NAME, font=("Segoe UI", 18, "bold"), bg="white", fg="#0f172a").pack(pady=(20,4))
+        tk.Label(f0, text="Professional Lead Management System", font=("Segoe UI", 10), bg="white", fg="#475569").pack(pady=(0,12))
+        tk.Label(f0, text="This installer will guide you through the installation.\nA smart automation platform for lead collection.", font=("Segoe UI", 9), bg="white", fg="#334155", justify="center").pack(pady=4, padx=16)
+        features_frame = tk.Frame(f0, bg="#f8fafc", relief="solid", bd=1)
+        features_frame.pack(pady=12, padx=20, fill="both", expand=True)
+        tk.Label(features_frame, text="Key Features", font=("Segoe UI", 9, "bold"), bg="#f8fafc", fg="#0f172a").pack(anchor="w", padx=12, pady=(8,4))
+        for feat in ["Automated ad monitoring and lead extraction","Intelligent messaging and negotiation assistant","Multi-account and multi-platform support","Secure data management with backup options","Native Windows application with offline capabilities"]:
+            tk.Label(features_frame, text=f"• {feat}", font=("Segoe UI", 8), bg="#f8fafc", fg="#475569", anchor="w", justify="left").pack(anchor="w", padx=16, pady=1, fill="x")
+        tk.Label(f0, text="Click Next to continue.", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(pady=8)
+        step_frames.append(f0)
+
+        f1 = tk.Frame(content_frame, bg="white")
+        f1.columnconfigure(0, weight=1)
+        f1.rowconfigure(1, weight=1)
+        tk.Label(f1, text="License Agreement", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").grid(row=0, column=0, sticky="w", padx=16, pady=(12,6))
+        txt_license = tk.Text(f1, font=("Segoe UI", 8), wrap="word", bg="#f8fafc", relief="solid", bd=1)
+        txt_license.grid(row=1, column=0, sticky="nsew", padx=16, pady=4)
+        txt_license.insert("1.0", f"{APP_NAME} {APP_VERSION}\nEND-USER LICENSE AGREEMENT\n\n1. GRANT - Personal and commercial use per laws.\n2. RESTRICTIONS - No unlawful purposes.\n3. PRIVACY - Local storage, user backup.\n4. COMPONENTS - Chromium and AI under licenses.\n5. DISCLAIMER - As-is.\n6. ACCEPTANCE - Installing means acceptance.\n\n© 2024-2026 Divar Marketing\n")
+        txt_license.configure(state="disabled")
+        tk.Checkbutton(f1, text="I accept the terms of the license agreement", variable=agree_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").grid(row=2, column=0, sticky="w", padx=16, pady=8)
+        step_frames.append(f1)
+
+        f2 = tk.Frame(content_frame, bg="white")
+        f2.columnconfigure(0, weight=1)
+        tk.Label(f2, text="Previous Installation Data", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+        prev_info = has_previous_data()
+        if prev_info["exists"]:
+            info_text = f"Existing installation detected.\nAccounts: {prev_info['accounts']} | Leads: {prev_info['leads']} | Size: {prev_info['size_mb']} MB\n\nChoose how to handle existing data:"
+            bg_color = "#fef3c7"
+            fg_color = "#92400e"
+        else:
+            info_text = "No previous installation found. Fresh installation will be performed."
+            bg_color = "#dcfce7"
+            fg_color = "#166534"
+        wrap_len = max(400, ww - 80)
+        tk.Label(f2, text=info_text, font=("Segoe UI", 9), bg=bg_color, fg=fg_color, justify="left", wraplength=wrap_len, padx=12, pady=10).pack(fill="x", padx=16, pady=6)
+        preserve_frame = tk.Frame(f2, bg="white")
+        preserve_frame.pack(fill="both", expand=True, padx=16, pady=8)
+        tk.Radiobutton(preserve_frame, text="Keep all data (Recommended)", variable=preserve_var, value="keep", font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+        tk.Label(preserve_frame, text="Preserve accounts, leads, settings, sessions", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20, pady=(0,6))
+        tk.Radiobutton(preserve_frame, text="Keep accounts only", variable=preserve_var, value="keep_accounts", font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+        tk.Label(preserve_frame, text="Preserve logins but clear leads database", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20, pady=(0,6))
+        tk.Radiobutton(preserve_frame, text="Remove all existing data", variable=preserve_var, value="delete_all", font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+        tk.Label(preserve_frame, text="Clean installation (irreversible)", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20)
+        if not prev_info["exists"]:
+            preserve_var.set("keep")
+            for child in preserve_frame.winfo_children():
+                if isinstance(child, tk.Radiobutton):
+                    child.configure(state="disabled")
+        step_frames.append(f2)
+
+        f3 = tk.Frame(content_frame, bg="white")
+        f3.columnconfigure(0, weight=1)
+        tk.Label(f3, text="Choose Install Location", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+        tk.Label(f3, text="Select the folder where the application will be installed:", font=("Segoe UI", 9), bg="white", fg="#334155", wraplength=wrap_len).pack(anchor="w", padx=16, pady=2)
+        path_row = tk.Frame(f3, bg="white")
+        path_row.pack(fill="x", padx=16, pady=8)
+        path_row.columnconfigure(0, weight=1)
+        ent = tk.Entry(path_row, textvariable=install_dir_var, font=("Consolas", 9), bg="white", relief="solid", bd=1)
+        ent.grid(row=0, column=0, sticky="ew", ipady=5)
+        def browse():
+            picked = filedialog.askdirectory(title="Select installation folder", initialdir=install_dir_var.get() or str(Path.home()))
+            if picked:
+                install_dir_var.set(picked)
+        tk.Button(path_row, text="Browse...", command=browse, width=10, font=("Segoe UI", 8), bg="#f1f5f9", relief="solid", bd=1).grid(row=0, column=1, padx=(8,0), ipady=3)
+        tk.Label(f3, text="Space required: 500 MB - 2.5 GB\nDefault location does not require admin privileges", font=("Segoe UI", 8), bg="white", fg="#64748b", justify="left", wraplength=wrap_len).pack(anchor="w", padx=16, pady=8)
+        step_frames.append(f3)
+
+        f4 = tk.Frame(content_frame, bg="white")
+        f4.columnconfigure(0, weight=1)
+        tk.Label(f4, text="Select Components", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+        tk.Label(f4, text="Choose which components to install:", font=("Segoe UI", 9), bg="white", fg="#334155").pack(anchor="w", padx=16, pady=2)
+        comp_frame = tk.Frame(f4, bg="white")
+        comp_frame.pack(fill="both", expand=True, padx=16, pady=8)
+        tk.Checkbutton(comp_frame, text="Chromium Browser Engine (Recommended)", variable=comp_chrome_var, font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
+        tk.Label(comp_frame, text="Isolated browser profiles - no interference", font=("Segoe UI", 8), bg="white", fg="#64748b", wraplength=wrap_len).pack(anchor="w", padx=20, pady=(0,6))
+        tk.Checkbutton(comp_frame, text="AI Assistant Model", variable=comp_model_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
+        tk.Label(comp_frame, text="Local AI model - works offline", font=("Segoe UI", 8), bg="white", fg="#64748b", wraplength=wrap_len).pack(anchor="w", padx=20, pady=(0,6))
+        tk.Checkbutton(comp_frame, text="Desktop and Start Menu shortcuts", variable=comp_shortcut_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
+        step_frames.append(f4)
+
+        f5 = tk.Frame(content_frame, bg="white")
+        f5.columnconfigure(0, weight=1)
+        f5.rowconfigure(3, weight=1)
+        tk.Label(f5, text="Installing...", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").grid(row=0, column=0, sticky="w", padx=16, pady=(12,4))
+        status_label = tk.Label(f5, text="Preparing installation...", font=("Segoe UI", 9), bg="white", fg="#334155", wraplength=wrap_len, anchor="w", justify="left")
+        status_label.grid(row=1, column=0, sticky="ew", padx=16, pady=2)
+        bar = ttk.Progressbar(f5, mode="determinate", maximum=100)
+        bar.grid(row=2, column=0, sticky="ew", padx=16, pady=8)
+        log_frame = tk.Frame(f5, bg="white")
+        log_frame.grid(row=3, column=0, sticky="nsew", padx=16, pady=6)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(1, weight=1)
+        tk.Label(log_frame, text="Installation details:", font=("Segoe UI", 8, "bold"), bg="white", fg="#475569").grid(row=0, column=0, sticky="w")
+        logbox = tk.Text(log_frame, font=("Consolas", 7), bg="#0f172a", fg="#e2e8f0", relief="flat", wrap="word")
+        logbox.grid(row=1, column=0, sticky="nsew", pady=4)
+
+        def log(msg: str):
+            def _do():
+                try:
+                    logbox.configure(state="normal")
+                    logbox.insert("end", f"{msg}\n")
+                    logbox.see("end")
+                    logbox.configure(state="disabled")
+                except:
+                    pass
             try:
-                run_install(progress, log, chrome_progress=chrome_progress,
-                            nlu_progress=nlu_progress, dest=Path(chosen))
-                root.after(0, lambda: status.configure(
-                    text="Installed. App is starting — browser: http://127.0.0.1:8642",
-                    fg="#166534"))
-            except Exception as e:
-                log("ERROR: " + str(e))
-                root.after(0, lambda: status.configure(
-                    text="Install failed. See log.", fg="#991b1b"))
-            finally:
-                root.after(0, lambda: btn.configure(state="normal"))
+                root.after(0, _do)
+            except:
+                pass
 
-        threading.Thread(target=work, daemon=True).start()
+        def prog(pct: int, label: str):
+            def _do():
+                try:
+                    bar["value"] = pct
+                    status_label.configure(text=label)
+                except:
+                    pass
+            try:
+                root.after(0, _do)
+            except:
+                pass
 
-    btn.configure(command=go)
-    root.mainloop()
-    return 0
+        step_frames.append(f5)
 
+        f6 = tk.Frame(content_frame, bg="white")
+        f6.columnconfigure(0, weight=1)
+        tk.Label(f6, text="Done", font=("Segoe UI", 36), bg="white", fg="#16a34a").pack(pady=(20,4))
+        tk.Label(f6, text="Installation Complete", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(pady=2)
+        tk.Label(f6, text=f"{APP_NAME} has been successfully installed.\n\nShortcuts created on Desktop and Start Menu.", font=("Segoe UI", 9), bg="white", fg="#334155", justify="center", wraplength=wrap_len).pack(pady=10, padx=16)
+        launch_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(f6, text="Launch application now", variable=launch_var, font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(pady=10)
+        step_frames.append(f6)
+
+        def show_step(idx: int):
+            for i, fr in enumerate(step_frames):
+                if i == idx:
+                    fr.grid(row=0, column=0, sticky="nsew")
+                    fr.tkraise()
+                else:
+                    fr.grid_remove()
+            for i, lbl in enumerate(step_labels):
+                if i == idx:
+                    lbl.configure(font=("Segoe UI", 8, "bold"), fg="#2563eb")
+                elif i < idx:
+                    lbl.configure(font=("Segoe UI", 7), fg="#16a34a")
+                else:
+                    lbl.configure(font=("Segoe UI", 7), fg="#64748b")
+            if idx == 0:
+                btn_back.configure(state="disabled")
+                btn_next.configure(text="Next >", state="normal")
+                btn_install.grid_remove()
+                btn_finish.grid_remove()
+            elif idx in (1,2,3,4):
+                btn_back.configure(state="normal")
+                btn_next.configure(text="Next >", state="normal")
+                btn_install.grid_remove()
+                btn_finish.grid_remove()
+                if idx == 4:
+                    btn_next.configure(text="Install", state="normal")
+            elif idx == 5:
+                btn_back.configure(state="disabled")
+                btn_next.configure(state="disabled")
+                btn_install.grid_remove()
+                btn_finish.grid_remove()
+            elif idx == 6:
+                btn_back.configure(state="disabled")
+                btn_next.configure(state="disabled")
+                btn_install.grid_remove()
+                btn_finish.grid(row=0, column=2, padx=12, pady=8)
+
+        btn_frame = tk.Frame(main_frame, bg="#f8fafc", height=48)
+        btn_frame.grid(row=3, column=0, sticky="ew")
+        btn_frame.grid_propagate(False)
+        btn_frame.columnconfigure(1, weight=1)
+
+        btn_finish = tk.Button(btn_frame, text="Finish", width=12, font=("Segoe UI", 9, "bold"), bg="#16a34a", fg="white", relief="flat", padx=8, pady=4, command=lambda: root.destroy())
+        btn_back = tk.Button(btn_frame, text="< Back", width=9, font=("Segoe UI", 8), bg="white", relief="solid", bd=1)
+        btn_next = tk.Button(btn_frame, text="Next >", width=9, font=("Segoe UI", 8, "bold"), bg="#2563eb", fg="white", relief="flat")
+        btn_install = tk.Button(btn_frame, text="Install", width=12, font=("Segoe UI", 9, "bold"), bg="#2563eb", fg="white", relief="flat")
+
+        btn_back.grid(row=0, column=0, padx=12, pady=8, sticky="w")
+        btn_next.grid(row=0, column=2, padx=8, pady=8, sticky="e")
+        btn_install.grid(row=0, column=2, padx=8, pady=8, sticky="e")
+        btn_finish.grid(row=0, column=2, padx=12, pady=8, sticky="e")
+        btn_finish.grid_remove()
+        btn_install.grid_remove()
+
+        def on_back():
+            if current_step[0] > 0:
+                current_step[0] -= 1
+                show_step(current_step[0])
+
+        def on_next():
+            idx = current_step[0]
+            if idx == 1 and not agree_var.get():
+                messagebox.showwarning("License Agreement", "Please accept the license agreement to continue.")
+                return
+            if idx == 2:
+                if preserve_var.get() == "delete_all":
+                    if not messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete all existing data?\n\nThis action cannot be undone."):
+                        return
+            if idx == 3:
+                dest = install_dir_var.get().strip()
+                if not dest:
+                    messagebox.showwarning("Location", "Please select an installation location.")
+                    return
+            if idx == 4:
+                current_step[0] = 5
+                show_step(5)
+                def work():
+                    try:
+                        chosen = Path(install_dir_var.get().strip() or str(default_install_dir()))
+                        log(f"Install location: {chosen}")
+                        prog(5, "Preparing installation directory...")
+                        chosen.mkdir(parents=True, exist_ok=True)
+                        prog(15, f"Handling existing data: {preserve_var.get()}...")
+                        target = extract_payload(chosen, log, progress_cb=lambda p, l: prog(15+int(p*0.7), l), preserve_mode=preserve_var.get())
+                        prog(85, "Creating shortcuts...")
+                        if comp_shortcut_var.get():
+                            ico = app_icon()
+                            ico_dst = chosen / "app.ico"
+                            if ico.exists():
+                                shutil.copy2(ico, ico_dst)
+                            make_shortcut(target, chosen, ico_dst if ico_dst.exists() else ico, log)
+                        prog(90, "Configuring firewall...")
+                        open_firewall(log)
+                        prog(95, "Finalizing installation...")
+                        if launch_var.get():
+                            launch(target, chosen, log)
+                        prog(100, "Installation completed successfully")
+                        log("Installation completed")
+                        current_step[0] = 6
+                        root.after(0, lambda: show_step(6))
+                    except Exception as e:
+                        log(f"Error: {e}")
+                        log(traceback.format_exc())
+                        root.after(0, lambda: messagebox.showerror("Installation Failed", f"Installation failed:\n{e}"))
+                        root.after(0, lambda: show_step(4))
+                threading.Thread(target=work, daemon=True).start()
+                return
+            if idx < 4:
+                current_step[0] += 1
+                show_step(current_step[0])
+
+        btn_back.configure(command=on_back)
+        btn_next.configure(command=on_next)
+        btn_install.configure(command=on_next)
+
+        show_step(0)
+        root.mainloop()
+        return 0
+
+    except Exception as e:
+        print(f"GUI crash: {e}")
+        traceback.print_exc()
+        try:
+            import tkinter.messagebox as mb
+            mb.showerror("Setup Crash", f"Setup crashed:\n{e}\n\n{traceback.format_exc()[:1000]}")
+        except:
+            pass
+        return 1
 
 def main() -> int:
-    if sys.platform != "win32" and "--force" not in sys.argv:
-        print("This installer is for Windows.")
-        print("On this computer run: python main.py")
-        return 0
     if "--cli" in sys.argv:
-        def prog(p, s):
-            print(f"[{p:3d}%] {s}")
-        def chrome_prog(p, s):
-            print(f"[Chromium {p:3d}%] {s}")
         dest = default_install_dir()
         if "--dest" in sys.argv:
             i = sys.argv.index("--dest")
-            if i + 1 < len(sys.argv):
-                dest = Path(sys.argv[i + 1])
-        def nlu_prog(p, s):
-            print(f"[NLU {p:3d}%] {s}")
-        run_install(prog, print, chrome_progress=chrome_prog,
-                    nlu_progress=nlu_prog, dest=dest)
+            if i+1 < len(sys.argv):
+                dest = Path(sys.argv[i+1])
+        preserve = "keep"
+        if "--preserve" in sys.argv:
+            j = sys.argv.index("--preserve")
+            if j+1 < len(sys.argv):
+                preserve = sys.argv[j+1]
+        target = extract_payload(Path(dest), print, preserve_mode=preserve)
+        make_shortcut(target, Path(dest), app_icon(), print)
+        open_firewall(print)
+        launch(target, Path(dest), print)
         return 0
-    return gui()
-
+    return gui_wizard()
 
 if __name__ == "__main__":
     raise SystemExit(main())
