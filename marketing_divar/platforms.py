@@ -1,32 +1,30 @@
 # -*- coding: utf-8 -*-
-"""سه پلتفرم آگهی روی یک پروفایل Chromium — دیوار / شیپور / رینگ.
+"""دو پلتفرم آگهی روی یک پروفایل Chromium — دیوار / شیپور.
 
 سوییچ روشن/خاموش از تنظیمات می‌آید. لاگین هر سایت تب جدا در همان پروفایل است.
+ حذف شد — پلتفرم وجود ندارد.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-IDS = ("divar", "sheypoor", "ring")
+IDS = ("divar", "sheypoor")
 
 TITLES = {
     "divar": "دیوار",
     "sheypoor": "شیپور",
-    "ring": "رینگ",
 }
 
-# صفحهٔ لاگین / خانه — سه سربرگ داخل یک پروفایل
+# صفحهٔ لاگین / خانه — دو سربرگ داخل یک پروفایل
 LOGIN_TABS: List[Tuple[str, str]] = [
     ("divar", "https://divar.ir/user"),
     ("sheypoor", "https://www.sheypoor.com/session"),
-    ("ring", "https://ring.ir/"),
 ]
 
 CAPTCHA_TABS: List[Tuple[str, str]] = [
     ("divar", "https://divar.ir/"),
     ("sheypoor", "https://www.sheypoor.com/"),
-    ("ring", "https://ring.ir/"),
 ]
 
 
@@ -50,7 +48,7 @@ def lead_token(platform: str, native_id: str) -> str:
 
 def split_token(token: str) -> Tuple[str, str]:
     t = str(token or "")
-    for pid in ("sheypoor", "ring"):
+    for pid in ("sheypoor",):
         pre = pid + ":"
         if t.startswith(pre):
             return pid, t[len(pre):]
@@ -64,8 +62,6 @@ def listing_url(platform: str, native_id: str, slug: str = "") -> str:
         if slug:
             return "https://www.sheypoor.com/v/%s-%s.html" % (slug, nid)
         return "https://www.sheypoor.com/v/%s.html" % nid
-    if pid == "ring":
-        return "https://ring.ir/a/%s" % nid
     if slug:
         return "https://divar.ir/v/%s/%s" % (slug, nid)
     return "https://divar.ir/v/%s" % nid
