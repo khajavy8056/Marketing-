@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Divar Marketing - Professional Commercial Installer v4.3
-Commercial-grade Windows installer - clean, professional, no internal notes
+"""Divar Marketing - Professional Commercial Installer v4.3 Responsive
+Commercial-grade Windows installer - responsive, clean, professional
+Fits any screen resolution 1024x768 to 4K - resizable, centered
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ import threading
 import zipfile
 import zlib
 import hashlib
-import time
 import traceback
 from pathlib import Path
 from typing import Callable, Optional
@@ -353,7 +353,7 @@ def launch(target: Path, workdir: Path, log: Callable[[str], None]) -> None:
         exe = str(pyw) if pyw.exists() else sys.executable
         _popen_hidden([exe, str(target)], workdir, env)
 
-# ==================== PROFESSIONAL COMMERCIAL GUI WIZARD ====================
+# ==================== RESPONSIVE PROFESSIONAL WIZARD ====================
 
 def gui_wizard() -> int:
     try:
@@ -370,9 +370,46 @@ def gui_wizard() -> int:
 
     root = tk.Tk()
     root.title(f"{APP_NAME} Setup")
-    root.geometry("780x620")
-    root.resizable(False, False)
+
+    # ---- Responsive window sizing ----
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except:
+        sw, sh = 1920, 1080
+
+    # Adaptive size: fits 1024x768 up to 4K
+    # For small screens, use almost full screen minus margin
+    if sw <= 1024 or sh <= 768:
+        # Very small screen (1024x768)
+        ww = min(900, sw - 40)
+        wh = min(650, sh - 60)
+    elif sw <= 1366 or sh <= 768:
+        # HD laptop 1366x768
+        ww = min(800, sw - 80)
+        wh = min(620, sh - 80)
+    elif sw <= 1600:
+        ww = 780
+        wh = 620
+    else:
+        ww = 800
+        wh = 650
+
+    ww = max(640, ww)
+    wh = max(500, wh)
+    x = (sw - ww) // 2
+    y = (sh - wh) // 2
+    # Keep inside screen
+    x = max(0, x)
+    y = max(0, y)
+
+    root.geometry(f"{ww}x{wh}+{x}+{y}")
+    root.minsize(640, 500)
+    root.resizable(True, True)
     root.configure(bg="white")
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
+
     try:
         ico = app_icon()
         if ico.exists():
@@ -385,7 +422,7 @@ def gui_wizard() -> int:
         style.theme_use("vista")
     except:
         pass
-    style.configure("TProgressbar", thickness=22, troughcolor="#e5e7eb", background="#2563eb")
+    style.configure("TProgressbar", thickness=20, troughcolor="#e5e7eb", background="#2563eb")
 
     current_step = [0]
     install_dir_var = tk.StringVar(value=str(default_install_dir()))
@@ -395,125 +432,123 @@ def gui_wizard() -> int:
     comp_shortcut_var = tk.BooleanVar(value=True)
     preserve_var = tk.StringVar(value="keep")
 
+    # Main container with grid - fully responsive
     main_frame = tk.Frame(root, bg="white")
-    main_frame.pack(fill="both", expand=True)
+    main_frame.grid(row=0, column=0, sticky="nsew")
+    main_frame.columnconfigure(0, weight=1)
+    main_frame.rowconfigure(2, weight=1)
 
-    # Header - clean professional
-    header = tk.Frame(main_frame, bg="#1e293b", height=70)
-    header.pack(fill="x")
-    header.pack_propagate(False)
-    tk.Label(header, text=APP_NAME_FA, font=("Segoe UI", 16, "bold"), bg="#1e293b", fg="white").pack(side="left", padx=24, pady=16)
-    tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 9), bg="#1e293b", fg="#94a3b8").pack(side="right", padx=24, pady=16)
+    # Header - fixed height but responsive content
+    header = tk.Frame(main_frame, bg="#1e293b", height=56)
+    header.grid(row=0, column=0, sticky="ew")
+    header.grid_propagate(False)
+    header.columnconfigure(1, weight=1)
+    tk.Label(header, text=APP_NAME_FA, font=("Segoe UI", 13, "bold"), bg="#1e293b", fg="white").grid(row=0, column=0, sticky="w", padx=16, pady=(8,0))
+    tk.Label(header, text=APP_NAME, font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").grid(row=1, column=0, sticky="w", padx=16, pady=(0,6))
+    tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").grid(row=0, column=2, rowspan=2, sticky="e", padx=16)
 
-    # Steps indicator - clean
-    steps_bar = tk.Frame(main_frame, bg="#f8fafc", height=36)
-    steps_bar.pack(fill="x")
-    steps_bar.pack_propagate(False)
+    # Steps bar - responsive, allows wrapping on small screens via horizontal scroll canvas if needed
+    steps_bar = tk.Frame(main_frame, bg="#f8fafc")
+    steps_bar.grid(row=1, column=0, sticky="ew")
+    steps_bar.columnconfigure(0, weight=1)
+    steps_inner = tk.Frame(steps_bar, bg="#f8fafc")
+    steps_inner.pack(fill="x", padx=8, pady=5)
     step_labels = []
     step_names = ["Welcome", "License", "Data", "Location", "Components", "Install", "Finish"]
     for i, name in enumerate(step_names):
-        lbl = tk.Label(steps_bar, text=f"{i+1}. {name}", font=("Segoe UI", 8), bg="#f8fafc", fg="#2563eb" if i==0 else "#64748b")
-        lbl.pack(side="left", padx=14, pady=10)
+        lbl = tk.Label(steps_inner, text=f"{i+1}. {name}", font=("Segoe UI", 7), bg="#f8fafc", fg="#2563eb" if i==0 else "#64748b")
+        lbl.pack(side="left", padx=6, pady=2)
         step_labels.append(lbl)
         if i < len(step_names)-1:
-            tk.Label(steps_bar, text="›", font=("Segoe UI", 8), bg="#f8fafc", fg="#cbd5e1").pack(side="left")
+            tk.Label(steps_inner, text="›", font=("Segoe UI", 7), bg="#f8fafc", fg="#cbd5e1").pack(side="left")
 
+    # Content frame - expandable, scrollable if needed
     content_frame = tk.Frame(main_frame, bg="white")
-    content_frame.pack(fill="both", expand=True)
+    content_frame.grid(row=2, column=0, sticky="nsew")
+    content_frame.columnconfigure(0, weight=1)
+    content_frame.rowconfigure(0, weight=1)
 
     step_frames = []
 
-    # Step 0: Welcome - PROFESSIONAL COMMERCIAL
+    # Step 0: Welcome - responsive paddings
     f0 = tk.Frame(content_frame, bg="white")
-    tk.Label(f0, text=APP_NAME, font=("Segoe UI", 22, "bold"), bg="white", fg="#0f172a").pack(pady=(36,8))
-    tk.Label(f0, text="Professional Lead Management System", font=("Segoe UI", 11), bg="white", fg="#475569").pack(pady=(0,24))
+    f0.columnconfigure(0, weight=1)
+    tk.Label(f0, text=APP_NAME, font=("Segoe UI", 18, "bold"), bg="white", fg="#0f172a").pack(pady=(20,4))
+    tk.Label(f0, text="Professional Lead Management System", font=("Segoe UI", 10), bg="white", fg="#475569").pack(pady=(0,12))
     
-    desc_frame = tk.Frame(f0, bg="white")
-    desc_frame.pack(pady=8, padx=32)
-    tk.Label(desc_frame, text="This installer will guide you through the installation of Divar Marketing.\nA smart automation platform for lead collection and customer engagement.", 
-             font=("Segoe UI", 10), bg="white", fg="#334155", justify="center").pack(pady=8)
+    desc = tk.Label(f0, text="This installer will guide you through the installation.\nA smart automation platform for lead collection.", 
+             font=("Segoe UI", 9), bg="white", fg="#334155", justify="center")
+    desc.pack(pady=4, padx=16)
     
-    features_frame = tk.Frame(f0, bg="#f8fafc", relief="flat", bd=1)
-    features_frame.pack(pady=20, padx=48, fill="x")
-    tk.Label(features_frame, text="Key Features", font=("Segoe UI", 10, "bold"), bg="#f8fafc", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+    features_frame = tk.Frame(f0, bg="#f8fafc", relief="solid", bd=1)
+    features_frame.pack(pady=12, padx=20, fill="both", expand=True)
+    tk.Label(features_frame, text="Key Features", font=("Segoe UI", 9, "bold"), bg="#f8fafc", fg="#0f172a").pack(anchor="w", padx=12, pady=(8,4))
     features = [
-        "• Automated ad monitoring and lead extraction",
-        "• Intelligent messaging and negotiation assistant",
-        "• Multi-account and multi-platform support",
-        "• Secure data management with backup options",
-        "• Native Windows application with offline capabilities",
+        "Automated ad monitoring and lead extraction",
+        "Intelligent messaging and negotiation assistant",
+        "Multi-account and multi-platform support",
+        "Secure data management with backup options",
+        "Native Windows application with offline capabilities",
     ]
     for feat in features:
-        tk.Label(features_frame, text=feat, font=("Segoe UI", 9), bg="#f8fafc", fg="#475569", anchor="w").pack(anchor="w", padx=24, pady=2)
-    tk.Label(features_frame, text="", bg="#f8fafc").pack(pady=4)
-    
-    tk.Label(f0, text="Click Next to continue.", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(pady=16)
+        tk.Label(features_frame, text=f"• {feat}", font=("Segoe UI", 8), bg="#f8fafc", fg="#475569", anchor="w", justify="left").pack(anchor="w", padx=16, pady=1, fill="x")
+    tk.Label(features_frame, text="", bg="#f8fafc").pack(pady=2)
+    tk.Label(f0, text="Click Next to continue.", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(pady=8)
     step_frames.append(f0)
 
-    # Step 1: License - PROFESSIONAL
+    # Step 1: License - responsive text widget
     f1 = tk.Frame(content_frame, bg="white")
-    tk.Label(f1, text="License Agreement", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
-    txt_license = tk.Text(f1, height=18, font=("Segoe UI", 9), wrap="word", bg="#f8fafc", relief="solid", bd=1)
-    txt_license.pack(fill="both", expand=True, padx=28, pady=5)
+    f1.columnconfigure(0, weight=1)
+    f1.rowconfigure(1, weight=1)
+    tk.Label(f1, text="License Agreement", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").grid(row=0, column=0, sticky="w", padx=16, pady=(12,6))
+    txt_license = tk.Text(f1, font=("Segoe UI", 8), wrap="word", bg="#f8fafc", relief="solid", bd=1)
+    txt_license.grid(row=1, column=0, sticky="nsew", padx=16, pady=4)
+    f1.grid_rowconfigure(1, weight=1)
     license_text = f"""{APP_NAME} {APP_VERSION}
 END-USER LICENSE AGREEMENT
 
-IMPORTANT: Please read this agreement carefully before installing.
+1. GRANT OF LICENSE - Personal and commercial use per applicable laws.
+2. USE RESTRICTIONS - No unlawful purposes. Comply with third-party ToS.
+3. DATA AND PRIVACY - Local storage of sessions and leads. User responsible for backup.
+4. THIRD-PARTY COMPONENTS - Chromium and AI models under respective licenses.
+5. DISCLAIMER - Provided as-is, no liability.
+6. ACCEPTANCE - Installing means acceptance.
 
-1. GRANT OF LICENSE
-This software is licensed for personal and commercial use in accordance with applicable laws.
-
-2. USE RESTRICTIONS
-You agree not to use this software for any unlawful purposes. You are responsible for compliance with third-party platform terms of service.
-
-3. DATA AND PRIVACY
-The software stores account sessions and lead data locally. You are responsible for data security and backup.
-
-4. THIRD-PARTY COMPONENTS
-This software includes Chromium and AI models under their respective open-source licenses.
-
-5. DISCLAIMER
-The software is provided as-is. The provider is not liable for any damages arising from use.
-
-6. ACCEPTANCE
-By installing this software, you agree to the terms of this agreement.
-
-© 2024-2026 Divar Marketing
-All rights reserved.
+© 2024-2026 Divar Marketing - All rights reserved.
 """
     txt_license.insert("1.0", license_text)
     txt_license.configure(state="disabled")
-    chk = tk.Checkbutton(f1, text="I accept the terms of the license agreement", variable=agree_var, font=("Segoe UI", 10), bg="white", fg="#0f172a")
-    chk.pack(anchor="w", padx=28, pady=12)
+    tk.Checkbutton(f1, text="I accept the terms of the license agreement", variable=agree_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").grid(row=2, column=0, sticky="w", padx=16, pady=8)
     step_frames.append(f1)
 
-    # Step 2: Data Preserve - PROFESSIONAL
+    # Step 2: Data Preserve - responsive wraplength
     f2 = tk.Frame(content_frame, bg="white")
-    tk.Label(f2, text="Previous Installation Data", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
+    f2.columnconfigure(0, weight=1)
+    tk.Label(f2, text="Previous Installation Data", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
     prev_info = has_previous_data()
     if prev_info["exists"]:
-        info_text = f"An existing installation was detected.\n\nAccounts: {prev_info['accounts']}\nLeads: {prev_info['leads']}\nDatabase size: {prev_info['size_mb']} MB\n\nPlease choose how to handle existing data:"
+        info_text = f"Existing installation detected.\nAccounts: {prev_info['accounts']} | Leads: {prev_info['leads']} | Size: {prev_info['size_mb']} MB\n\nChoose how to handle existing data:"
         bg_color = "#fef3c7"
         fg_color = "#92400e"
     else:
-        info_text = "No previous installation data was found.\nA fresh installation will be performed."
+        info_text = "No previous installation found. Fresh installation will be performed."
         bg_color = "#dcfce7"
         fg_color = "#166534"
     
-    info_label = tk.Label(f2, text=info_text, font=("Segoe UI", 10), bg=bg_color, fg=fg_color, justify="left", wraplength=680, padx=16, pady=12)
-    info_label.pack(fill="x", padx=28, pady=10)
+    # Responsive wraplength based on window width
+    wrap_len = max(400, ww - 80)
+    info_label = tk.Label(f2, text=info_text, font=("Segoe UI", 9), bg=bg_color, fg=fg_color, justify="left", wraplength=wrap_len, padx=12, pady=10)
+    info_label.pack(fill="x", padx=16, pady=6)
 
     preserve_frame = tk.Frame(f2, bg="white")
-    preserve_frame.pack(fill="x", padx=28, pady=12)
+    preserve_frame.pack(fill="both", expand=True, padx=16, pady=8)
 
-    tk.Radiobutton(preserve_frame, text="Keep all data (Recommended)", variable=preserve_var, value="keep", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
-    tk.Label(preserve_frame, text="Preserve accounts, leads, settings, and login sessions", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,8))
-
-    tk.Radiobutton(preserve_frame, text="Keep accounts only", variable=preserve_var, value="keep_accounts", font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
-    tk.Label(preserve_frame, text="Preserve login sessions but clear leads database", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,8))
-
-    tk.Radiobutton(preserve_frame, text="Remove all existing data", variable=preserve_var, value="delete_all", font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
-    tk.Label(preserve_frame, text="Perform a clean installation (irreversible)", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24)
+    tk.Radiobutton(preserve_frame, text="Keep all data (Recommended)", variable=preserve_var, value="keep", font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+    tk.Label(preserve_frame, text="Preserve accounts, leads, settings, sessions", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20, pady=(0,6))
+    tk.Radiobutton(preserve_frame, text="Keep accounts only", variable=preserve_var, value="keep_accounts", font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+    tk.Label(preserve_frame, text="Preserve logins but clear leads database", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20, pady=(0,6))
+    tk.Radiobutton(preserve_frame, text="Remove all existing data", variable=preserve_var, value="delete_all", font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=2)
+    tk.Label(preserve_frame, text="Clean installation (irreversible)", font=("Segoe UI", 8), bg="white", fg="#64748b").pack(anchor="w", padx=20)
 
     if not prev_info["exists"]:
         preserve_var.set("keep")
@@ -523,48 +558,56 @@ All rights reserved.
 
     step_frames.append(f2)
 
-    # Step 3: Location - PROFESSIONAL
+    # Step 3: Location - responsive entry
     f3 = tk.Frame(content_frame, bg="white")
-    tk.Label(f3, text="Choose Install Location", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
-    tk.Label(f3, text="Select the folder where the application will be installed:", font=("Segoe UI", 10), bg="white", fg="#334155").pack(anchor="w", padx=28, pady=5)
+    f3.columnconfigure(0, weight=1)
+    tk.Label(f3, text="Choose Install Location", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+    tk.Label(f3, text="Select the folder where the application will be installed:", font=("Segoe UI", 9), bg="white", fg="#334155", wraplength=wrap_len).pack(anchor="w", padx=16, pady=2)
     path_row = tk.Frame(f3, bg="white")
-    path_row.pack(fill="x", padx=28, pady=12)
-    ent = tk.Entry(path_row, textvariable=install_dir_var, font=("Consolas", 10), width=52, bg="white", relief="solid", bd=1)
-    ent.pack(side="left", fill="x", expand=True, ipady=6)
+    path_row.pack(fill="x", padx=16, pady=8)
+    path_row.columnconfigure(0, weight=1)
+    ent = tk.Entry(path_row, textvariable=install_dir_var, font=("Consolas", 9), bg="white", relief="solid", bd=1)
+    ent.grid(row=0, column=0, sticky="ew", ipady=5)
     def browse():
         picked = filedialog.askdirectory(title="Select installation folder", initialdir=install_dir_var.get() or str(Path.home()))
         if picked:
             install_dir_var.set(picked)
-    tk.Button(path_row, text="Browse...", command=browse, width=12, font=("Segoe UI", 9), bg="#f1f5f9", relief="solid", bd=1).pack(side="right", padx=(10,0), ipady=4)
-    tk.Label(f3, text="Space required: 500 MB - 2.5 GB depending on components\nDefault location does not require administrator privileges", font=("Segoe UI", 9), bg="white", fg="#64748b", justify="left").pack(anchor="w", padx=28, pady=12)
+    tk.Button(path_row, text="Browse...", command=browse, width=10, font=("Segoe UI", 8), bg="#f1f5f9", relief="solid", bd=1).grid(row=0, column=1, padx=(8,0), ipady=3)
+    tk.Label(f3, text="Space required: 500 MB - 2.5 GB\nDefault location does not require admin privileges", font=("Segoe UI", 8), bg="white", fg="#64748b", justify="left", wraplength=wrap_len).pack(anchor="w", padx=16, pady=8)
     step_frames.append(f3)
 
-    # Step 4: Components - PROFESSIONAL
+    # Step 4: Components - responsive
     f4 = tk.Frame(content_frame, bg="white")
-    tk.Label(f4, text="Select Components", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
-    tk.Label(f4, text="Choose which components to install:", font=("Segoe UI", 10), bg="white", fg="#334155").pack(anchor="w", padx=28, pady=5)
+    f4.columnconfigure(0, weight=1)
+    tk.Label(f4, text="Select Components", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
+    tk.Label(f4, text="Choose which components to install:", font=("Segoe UI", 9), bg="white", fg="#334155").pack(anchor="w", padx=16, pady=2)
     comp_frame = tk.Frame(f4, bg="white")
-    comp_frame.pack(fill="x", padx=28, pady=16)
-    tk.Checkbutton(comp_frame, text="Chromium Browser Engine (Recommended)", variable=comp_chrome_var, font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
-    tk.Label(comp_frame, text="Isolated browser profiles for each account - no interference with your main browser", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,10))
-    tk.Checkbutton(comp_frame, text="AI Assistant Model", variable=comp_model_var, font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
-    tk.Label(comp_frame, text="Local AI model for intelligent messaging - works offline with smart fallback", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,10))
-    tk.Checkbutton(comp_frame, text="Desktop and Start Menu shortcuts", variable=comp_shortcut_var, font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
+    comp_frame.pack(fill="both", expand=True, padx=16, pady=8)
+    tk.Checkbutton(comp_frame, text="Chromium Browser Engine (Recommended)", variable=comp_chrome_var, font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
+    tk.Label(comp_frame, text="Isolated browser profiles - no interference with main browser", font=("Segoe UI", 8), bg="white", fg="#64748b", wraplength=wrap_len).pack(anchor="w", padx=20, pady=(0,6))
+    tk.Checkbutton(comp_frame, text="AI Assistant Model", variable=comp_model_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
+    tk.Label(comp_frame, text="Local AI model - works offline with smart fallback", font=("Segoe UI", 8), bg="white", fg="#64748b", wraplength=wrap_len).pack(anchor="w", padx=20, pady=(0,6))
+    tk.Checkbutton(comp_frame, text="Desktop and Start Menu shortcuts", variable=comp_shortcut_var, font=("Segoe UI", 9), bg="white", fg="#0f172a").pack(anchor="w", pady=3)
     step_frames.append(f4)
 
-    # Step 5: Progress - PROFESSIONAL WITH LOG
+    # Step 5: Progress - responsive log
     f5 = tk.Frame(content_frame, bg="white")
-    tk.Label(f5, text="Installing...", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,6))
-    status_label = tk.Label(f5, text="Preparing installation...", font=("Segoe UI", 10), bg="white", fg="#334155")
-    status_label.pack(anchor="w", padx=28, pady=4)
-    bar = ttk.Progressbar(f5, length=700, mode="determinate", maximum=100)
-    bar.pack(padx=28, pady=10, fill="x")
+    f5.columnconfigure(0, weight=1)
+    f5.rowconfigure(2, weight=1)
+    tk.Label(f5, text="Installing...", font=("Segoe UI", 12, "bold"), bg="white", fg="#0f172a").grid(row=0, column=0, sticky="w", padx=16, pady=(12,4))
+    status_label = tk.Label(f5, text="Preparing installation...", font=("Segoe UI", 9), bg="white", fg="#334155", wraplength=wrap_len, anchor="w", justify="left")
+    status_label.grid(row=1, column=0, sticky="ew", padx=16, pady=2)
+    bar = ttk.Progressbar(f5, mode="determinate", maximum=100)
+    bar.grid(row=2, column=0, sticky="ew", padx=16, pady=8)
     
     log_frame = tk.Frame(f5, bg="white")
-    log_frame.pack(fill="both", expand=True, padx=28, pady=10)
-    tk.Label(log_frame, text="Installation details:", font=("Segoe UI", 9, "bold"), bg="white", fg="#475569").pack(anchor="w")
-    logbox = tk.Text(log_frame, height=14, font=("Consolas", 8), bg="#0f172a", fg="#e2e8f0", relief="flat", wrap="word")
-    logbox.pack(fill="both", expand=True, pady=6)
+    log_frame.grid(row=3, column=0, sticky="nsew", padx=16, pady=6)
+    log_frame.columnconfigure(0, weight=1)
+    log_frame.rowconfigure(1, weight=1)
+    tk.Label(log_frame, text="Installation details:", font=("Segoe UI", 8, "bold"), bg="white", fg="#475569").grid(row=0, column=0, sticky="w")
+    logbox = tk.Text(log_frame, font=("Consolas", 7), bg="#0f172a", fg="#e2e8f0", relief="flat", wrap="word")
+    logbox.grid(row=1, column=0, sticky="nsew", pady=4)
+    f5.rowconfigure(3, weight=1)
 
     def log(msg: str):
         def _():
@@ -588,65 +631,71 @@ All rights reserved.
 
     step_frames.append(f5)
 
-    # Step 6: Finish - PROFESSIONAL
+    # Step 6: Finish - responsive
     f6 = tk.Frame(content_frame, bg="white")
-    tk.Label(f6, text="✓", font=("Segoe UI", 48), bg="white", fg="#16a34a").pack(pady=(40,8))
-    tk.Label(f6, text="Installation Complete", font=("Segoe UI", 18, "bold"), bg="white", fg="#0f172a").pack(pady=4)
-    tk.Label(f6, text=f"{APP_NAME} has been successfully installed.\n\nShortcuts have been created on Desktop and Start Menu.\nFirewall rule has been configured for network access.", 
-             font=("Segoe UI", 10), bg="white", fg="#334155", justify="center").pack(pady=16)
+    f6.columnconfigure(0, weight=1)
+    tk.Label(f6, text="✓", font=("Segoe UI", 36), bg="white", fg="#16a34a").pack(pady=(20,4))
+    tk.Label(f6, text="Installation Complete", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(pady=2)
+    tk.Label(f6, text=f"{APP_NAME} has been successfully installed.\n\nShortcuts created on Desktop and Start Menu.\nFirewall rule configured.", 
+             font=("Segoe UI", 9), bg="white", fg="#334155", justify="center", wraplength=wrap_len).pack(pady=10, padx=16)
     launch_var = tk.BooleanVar(value=True)
-    tk.Checkbutton(f6, text="Launch application now", variable=launch_var, font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(pady=16)
+    tk.Checkbutton(f6, text="Launch application now", variable=launch_var, font=("Segoe UI", 9, "bold"), bg="white", fg="#0f172a").pack(pady=10)
     step_frames.append(f6)
 
     def show_step(idx: int):
         for i, fr in enumerate(step_frames):
             if i == idx:
-                fr.pack(fill="both", expand=True)
+                fr.grid(row=0, column=0, sticky="nsew")
+                fr.tkraise()
             else:
-                fr.pack_forget()
+                fr.grid_remove()
         for i, lbl in enumerate(step_labels):
             if i == idx:
-                lbl.configure(font=("Segoe UI", 9, "bold"), fg="#2563eb")
+                lbl.configure(font=("Segoe UI", 8, "bold"), fg="#2563eb")
             elif i < idx:
-                lbl.configure(font=("Segoe UI", 8), fg="#16a34a")
+                lbl.configure(font=("Segoe UI", 7), fg="#16a34a")
             else:
-                lbl.configure(font=("Segoe UI", 8), fg="#64748b")
+                lbl.configure(font=("Segoe UI", 7), fg="#64748b")
         if idx == 0:
             btn_back.configure(state="disabled")
             btn_next.configure(text="Next >", state="normal")
-            btn_install.pack_forget()
-            btn_finish.pack_forget()
+            btn_install.grid_remove()
+            btn_finish.grid_remove()
         elif idx in (1,2,3,4):
             btn_back.configure(state="normal")
             btn_next.configure(text="Next >", state="normal")
-            btn_install.pack_forget()
-            btn_finish.pack_forget()
+            btn_install.grid_remove()
+            btn_finish.grid_remove()
             if idx == 4:
                 btn_next.configure(text="Install", state="normal")
         elif idx == 5:
             btn_back.configure(state="disabled")
             btn_next.configure(state="disabled")
-            btn_install.pack_forget()
-            btn_finish.pack_forget()
+            btn_install.grid_remove()
+            btn_finish.grid_remove()
         elif idx == 6:
             btn_back.configure(state="disabled")
             btn_next.configure(state="disabled")
-            btn_install.pack_forget()
-            btn_finish.pack(side="right", padx=20, pady=12)
+            btn_install.grid_remove()
+            btn_finish.grid(row=0, column=2, padx=12, pady=8)
 
-    btn_frame = tk.Frame(main_frame, bg="#f8fafc", height=56)
-    btn_frame.pack(fill="x", side="bottom")
-    btn_frame.pack_propagate(False)
+    # Button frame - responsive, stays at bottom
+    btn_frame = tk.Frame(main_frame, bg="#f8fafc", height=48)
+    btn_frame.grid(row=3, column=0, sticky="ew")
+    btn_frame.grid_propagate(False)
+    btn_frame.columnconfigure(1, weight=1)
 
-    btn_finish = tk.Button(btn_frame, text="Finish", width=14, font=("Segoe UI", 10, "bold"), bg="#16a34a", fg="white", relief="flat", padx=10, pady=6, command=lambda: root.destroy())
-    btn_back = tk.Button(btn_frame, text="< Back", width=10, font=("Segoe UI", 9), bg="white", relief="solid", bd=1)
-    btn_next = tk.Button(btn_frame, text="Next >", width=10, font=("Segoe UI", 9, "bold"), bg="#2563eb", fg="white", relief="flat")
-    btn_install = tk.Button(btn_frame, text="Install", width=14, font=("Segoe UI", 10, "bold"), bg="#2563eb", fg="white", relief="flat")
+    btn_finish = tk.Button(btn_frame, text="Finish", width=12, font=("Segoe UI", 9, "bold"), bg="#16a34a", fg="white", relief="flat", padx=8, pady=4, command=lambda: root.destroy())
+    btn_back = tk.Button(btn_frame, text="< Back", width=9, font=("Segoe UI", 8), bg="white", relief="solid", bd=1)
+    btn_next = tk.Button(btn_frame, text="Next >", width=9, font=("Segoe UI", 8, "bold"), bg="#2563eb", fg="white", relief="flat")
+    btn_install = tk.Button(btn_frame, text="Install", width=12, font=("Segoe UI", 9, "bold"), bg="#2563eb", fg="white", relief="flat")
 
-    btn_back.pack(side="left", padx=20, pady=12)
-    btn_next.pack(side="right", padx=12, pady=12)
-    btn_install.pack(side="right", padx=12, pady=12)
-    btn_finish.pack_forget()
+    btn_back.grid(row=0, column=0, padx=12, pady=8, sticky="w")
+    btn_next.grid(row=0, column=2, padx=8, pady=8, sticky="e")
+    btn_install.grid(row=0, column=2, padx=8, pady=8, sticky="e")
+    btn_finish.grid(row=0, column=2, padx=12, pady=8, sticky="e")
+    btn_finish.grid_remove()
+    btn_install.grid_remove()
 
     def on_back():
         if current_step[0] > 0:

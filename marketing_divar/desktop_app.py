@@ -184,9 +184,35 @@ def _create_native_gui():
 
     root = tk.Tk()
     root.title(APP_TITLE)
-    root.geometry("1100x750")
-    root.minsize(960, 600)
+    # Responsive sizing - fits any screen
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except:
+        sw, sh = 1920, 1080
+
+    if sw <= 1024 or sh <= 768:
+        ww = min(1000, sw - 20)
+        wh = min(650, sh - 40)
+    elif sw <= 1366:
+        ww = min(1050, sw - 40)
+        wh = min(700, sh - 60)
+    elif sw <= 1600:
+        ww = 1100
+        wh = 720
+    else:
+        ww = 1200
+        wh = 780
+    ww = max(720, ww)
+    wh = max(540, wh)
+    x = max(0, (sw - ww)//2)
+    y = max(0, (sh - wh)//2)
+    root.geometry(f"{ww}x{wh}+{x}+{y}")
+    root.minsize(720, 540)
+    root.resizable(True, True)
     root.configure(bg="#f8fafc")
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
     
     try:
         ico = Path(__file__).resolve().parent.parent / "installer" / "app.ico"
