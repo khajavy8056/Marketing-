@@ -697,14 +697,22 @@ class DivarClient:
     # ------------------------------------------------------------ درخواست‌ها --
     @staticmethod
     def _check_block(r: requests.Response) -> None:
+        txt = getattr(r, "text", "") or ""
+        # فقط اگر واقعاً کپچا باشد، بلاک کپچا — وگرنه خطای موقت
         if r.status_code == 429:
-            raise DivarBlockedError("محدودیت نرخ دیوار (429)", 429, r.text)
-        if r.status_code == 403 and looks_like_captcha(r.text):
-            raise DivarBlockedError("چالش کپچا فعال شد (403)", 403, r.text)
+            if looks_like_captcha(txt):
+                raise DivarBlockedError("محدودیت نرخ دیوار (429) + کپچا", 429, txt)
+            # 429 بدون کپچا → cooldown موقت، نه کپچا
+            raise DivarBlockedError("محدودیت نرخ موقت (429) — کمی صبر کنید", 429, txt)
         if r.status_code == 403:
-            raise DivarBlockedError(
-                "دسترسی ممنوع (403) — اگر VPN/پروکسی روشن است خاموش کنید؛ "
-                "دیوار فقط با IP ایران جواب می‌دهد", 403, r.text)
+            if looks_like_captcha(txt):
+                raise DivarBlockedError("چالش کپچا فعال شد (403)", 403, txt)
+            # 403 بدون نشانه کپچا → احتمالاً IP یا سشن، نه پازل انسانی
+            # فقط اگر body کوتاه و مشکوک باشد، کپچا حساب کن
+            if len(txt) < 2000 and any(k in txt.lower() for k in ("captcha", "challenge", "blocked", "forbidden")):
+                raise DivarBlockedError("دسترسی محدود شد (403) — بررسی کنید", 403, txt)
+            # در غیر این صورت، خطای ساده برگردان — مانیتور آن را به عنوان error موقت می‌بیند
+            return
 
     def search(self, query: str, cities: Optional[List[int]] = None,
                page: int = 1, category: Optional[str] = None) -> List[Dict[str, Any]]:

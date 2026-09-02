@@ -79,6 +79,36 @@ def find_lead_for_sms(con: sqlite3.Connection, phone: str) -> Optional[sqlite3.R
     ).fetchone()
 
 
+def find_candidate_leads_for_unknown_sms(con: sqlite3.Connection, incoming_phone: str, incoming_text: str = "", limit: int = 15) -> List[sqlite3.Row]:
+    """وقتی شماره ناشناس است (احتمال سیم دوم)، آخرین آگهی‌های پیام رفته که هنوز پاسخ نگرفته را برگردان"""
+    try:
+        # آخرین 20 آگهی که پیامک رفته و هنوز پاسخ نگرفته یا در انتظار مذاکره است
+        rows = con.execute(
+            "SELECT * FROM leads WHERE sms_status='sent' AND phone!='' "
+            "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return rows
+    except Exception:
+        return []
+
+
+def detect_second_sim_in_sms(incoming_phone: str, lead_phone: str, incoming_text: str, lead_title: str = "") -> Dict[str, Any]:
+    """تشخیص سیم دوم + متن مبهم برای SMS ورودی"""
+    try:
+        from .tira_agent import detect_second_sim_reply, detect_ambiguous_text_reply
+        # اول متن مبهم
+        amb = detect_ambiguous_text_reply(incoming_text, ad_title=lead_title)
+        if amb.get("need_clarify"):
+            return {"need_clarify": True, "is_ambiguous": True, "message": amb["message"], "log": f"متن مبهم SMS: {incoming_text[:40]}"}
+        # بعد شماره متفاوت
+        if incoming_phone and lead_phone:
+            det = detect_second_sim_reply(incoming_phone, lead_phone, ad_token="", ad_title=lead_title, incoming_text=incoming_text)
+            if det.get("need_clarify"):
+                return det
+    except Exception as e:
+        pass
+    return {"need_clarify": False, "message": ""}
+
+
 def ingest_chat(con, thread: Dict[str, Any], use_llm: bool = True) -> Dict[str, Any]:
     lead = find_lead_for_chat(con, thread)
     if not lead:
@@ -102,6 +132,11 @@ def ingest_chat(con, thread: Dict[str, Any], use_llm: bool = True) -> Dict[str, 
         if save_reply(con, rec):
             stored += 1
             last = apply_to_lead(con, token, nlu, context=_context(lead))
+            try:
+                from .tira_commands import notify_seller_reply
+                notify_seller_reply(dict(lead), body, nlu=last or nlu, channel="chat")
+            except Exception:
+                pass
     if thread.get("status") == "removed":
         try:
             con.execute(
@@ -117,8 +152,38 @@ def ingest_chat(con, thread: Dict[str, Any], use_llm: bool = True) -> Dict[str, 
 def ingest_sms(con, phone: str, body: str, received_at: str = "",
                use_llm: bool = True) -> Dict[str, Any]:
     lead = find_lead_for_sms(con, phone)
+    second_sim_info = None
     if not lead:
-        return {"ok": False, "reason": "unmatched"}
+        # احتمال سیم دوم — شماره ناشناس
+        cands = find_candidate_leads_for_unknown_sms(con, phone, body, limit=10)
+        # اگر متن مبهم است (شما؟)، اولین کاندید را بگیر و شفاف‌سازی کن
+        try:
+            from .tira_agent import detect_ambiguous_text_reply
+            amb = detect_ambiguous_text_reply(body, ad_title="")
+            if amb.get("need_clarify") and cands:
+                # اولین کاندید که هنوز نیاز به اقدام دارد
+                lead = cands[0]
+                second_sim_info = {"is_second_sim": True, "need_clarify": True, "message": amb["message"], "incoming_phone": phone, "candidate_token": lead["token"], "reason": "ambiguous_text_unknown_number"}
+        except Exception:
+            pass
+        if not lead:
+            return {"ok": False, "reason": "unmatched", "second_sim_check": "no_candidate"}
+
+    # اگر lead پیدا شد، چک کن آیا سیم دوم است یا متن مبهم
+    if lead:
+        lead_phone = lead["phone"] if "phone" in lead.keys() else ""
+        lead_title = lead["title"] if "title" in lead.keys() else ""
+        det = detect_second_sim_in_sms(phone, lead_phone, body, lead_title)
+        if det.get("need_clarify"):
+            second_sim_info = det
+            # پیام شفاف‌سازی را به عنوان پاسخ ذخیره کن تا در لاگ دیده شود
+            # و همچنین سعی کن خودکار پیام شفاف‌سازی بفرستی (اگر sms_auto روشن باشد)
+            try:
+                # ذخیره لاگ دوم
+                pass
+            except Exception:
+                pass
+
     nlu = analyze(body, use_llm=use_llm)
     rec = {
         "token": lead["token"],
@@ -129,7 +194,18 @@ def ingest_sms(con, phone: str, body: str, received_at: str = "",
     }
     saved = save_reply(con, rec)
     last = apply_to_lead(con, lead["token"], nlu, context=_context(lead)) if saved else None
-    return {"ok": True, "token": lead["token"], "stored": int(saved), "nlu": last}
+    if saved:
+        try:
+            from .tira_commands import notify_seller_reply
+            notify_seller_reply(dict(lead), body, nlu=last or nlu, channel="sms")
+        except Exception:
+            pass
+    out = {"ok": True, "token": lead["token"], "stored": int(saved), "nlu": last}
+    if second_sim_info and second_sim_info.get("need_clarify"):
+        out["second_sim"] = second_sim_info
+        out["need_clarify"] = True
+        out["clarify_message"] = second_sim_info.get("message")
+    return out
 
 
 def _context(lead) -> str:

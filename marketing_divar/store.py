@@ -40,12 +40,15 @@ CREATE TABLE IF NOT EXISTS settings (
 EDITABLE_SETTINGS: Dict[str, Any] = {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
+    "telegram_enabled": True,
     "telegram_api_base": "",      # مثلاً http://127.0.0.1:8081 یا ورکر
     "telegram_proxy": "",         # http://... یا socks5://... اگر api.telegram.org فیلتر است
     "bale_bot_token": "",
     "bale_chat_id": "",
+    "bale_enabled": True,
     "rubika_bot_token": "",
     "rubika_chat_id": "",
+    "rubika_enabled": True,
     "watch_interval_sec": 300,
     "phone_delay_sec": 45,
     "search_delay_sec": 5,
@@ -74,8 +77,7 @@ EDITABLE_SETTINGS: Dict[str, Any] = {
     "chat_auto_hourly_limit": 8,
     "platform_divar": True,
     "platform_sheypoor": True,
-    "platform_ring": True,
-    "hunter_good_pct": 10,
+        "hunter_good_pct": 10,
     "hunter_great_pct": 22,
     "hunter_suspicious_pct": 45,
     "nlu_use_local": True,
@@ -239,7 +241,7 @@ def keywords_add(db_path: str, keyword: str,
             return False
         parts = [title_of(cat)]
         # برند: عبارت جستجو = نام برند؛ دستهٔ والد در search_slug
-        browse = 0 if cat in PHONE_BRANDS or cat in LAPTOP_BRANDS else 1
+        browse = 0 if cat in PHONE_BRANDS or cat in LAPTOP_BRANDS or cat == "vacuum-cleaner" else 1
     added = False
     pmin = int(price_min or 0)
     pmax = int(price_max or 0)
@@ -402,7 +404,7 @@ def effective_config(db_path: str, base_cfg: Dict[str, Any]) -> Dict[str, Any]:
               "sms_line_number", "sms_auto_on_new", "sms_daily_limit",
               "adaptive_until_captcha",
               "chat_auto_on_new", "chat_auto_daily_limit", "chat_auto_delay_sec",
-              "platform_divar", "platform_sheypoor", "platform_ring",
+              "platform_divar", "platform_sheypoor",
               "sms_inbox_on", "nlu_use_local",
               "hunter_good_pct", "hunter_great_pct", "hunter_suspicious_pct",
               "sms_use_pattern", "sms_pattern_bodyid", "sms_pattern_args",

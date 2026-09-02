@@ -169,9 +169,21 @@ def _parse_llm_json(blob: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
-    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد."""
+def analyze(text: str, use_llm: bool = True, **kwargs) -> Dict[str, Any]:
+    """قاعده همیشه. مدل محلی فقط اگر اطمینان < 0.75 و فایل مدل موجود باشد.
+
+    kwargs (keyword/category/platform) برای سازگاری با nlu_engine و تست‌ها
+    نادیده گرفته می‌شود مگر برای غنی‌سازی حافظه.
+    """
     base = analyze_rules(text)
+    kw = str(kwargs.get("keyword") or "")
+    cat = str(kwargs.get("category") or "")
+    if kw or cat:
+        try:
+            from .nlu_memory import remember_keyword
+            remember_keyword(kw, cat)
+        except Exception:
+            pass
     if base["confidence"] >= 0.75 or not use_llm:
         return base
     try:
@@ -194,9 +206,9 @@ def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
 
 
 def analyze_for_platform(text: str, platform: str = "divar",
-                         use_llm: bool = True) -> Dict[str, Any]:
-    """همان تحلیل برای دیوار/شیپور/رینگ — زبان پاسخ فارسی است."""
-    out = analyze(text, use_llm=use_llm)
+                         use_llm: bool = True, **kwargs) -> Dict[str, Any]:
+    """همان تحلیل برای دیوار/شیپور — زبان پاسخ فارسی است."""
+    out = analyze(text, use_llm=use_llm, **kwargs)
     out["platform"] = str(platform or "divar")
     return out
 

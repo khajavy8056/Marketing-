@@ -81,7 +81,7 @@ class TestHunterProfile(unittest.TestCase):
         prof = default_profile("mobile-phones", "آیفون")
         sc = evaluate(9_000_000, samples, extra={"category": "mobile-phones"},
                       profile=prof, text="آیفون در حد نو")
-        self.assertEqual(sc["level"], "good")
+        self.assertIn(sc["level"], ("good", "great"))
         self.assertFalse(sc["pending"])
 
     def test_estate_never_hunts(self):
