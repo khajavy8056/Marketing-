@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS replies (
     acted INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_replies_token ON replies(token);
+CREATE TABLE IF NOT EXISTS ip_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day TEXT,
+    ip TEXT,
+    first_seen_at TEXT,
+    changed_at TEXT
+);
 CREATE TABLE IF NOT EXISTS quota_accounts (
     day TEXT,
     account TEXT,
@@ -157,6 +164,68 @@ def bump_quota(con: sqlite3.Connection, field: str, by: int = 1) -> int:
                       (by, day))
     con.commit()
     return quota_today(con)[field]
+
+def _ensure_ip_history(con):
+    con.execute("""CREATE TABLE IF NOT EXISTS ip_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day TEXT,
+        ip TEXT,
+        first_seen_at TEXT,
+        changed_at TEXT
+    )""")
+    con.commit()
+
+def get_last_ip(con):
+    """آخرین IP ثبت شده را برمی‌گرداند."""
+    _ensure_ip_history(con)
+    row = con.execute("SELECT ip FROM ip_history ORDER BY id DESC LIMIT 1").fetchone()
+    return row["ip"] if row else None
+
+def get_ip_history(con, limit=20):
+    _ensure_ip_history(con)
+    return con.execute("SELECT * FROM ip_history ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+def set_ip_and_check_reset(con, new_ip: str):
+    """اگر IP عوض شده باشد، شمارنده‌های امروز را صفر می‌کند و تاریخچه ثبت می‌کند.
+    Returns dict: {changed: bool, old_ip, new_ip}
+    """
+    _ensure_ip_history(con)
+    # Ensure quota tables have columns
+    _ensure_quota_sms(con)
+    _ensure_quota_chats(con)
+    last_ip = get_last_ip(con)
+    day = __import__('time').strftime("%Y-%m-%d")
+    now_str = now()
+    changed = False
+    old_ip = last_ip
+    if last_ip is None:
+        # اولین ثبت
+        con.execute("INSERT INTO ip_history (day, ip, first_seen_at, changed_at) VALUES (?,?,?,?)",
+                    (day, new_ip, now_str, now_str))
+        con.commit()
+        return {"changed": False, "old_ip": None, "new_ip": new_ip, "first_time": True}
+    if last_ip != new_ip:
+        changed = True
+        # ثبت IP جدید
+        con.execute("INSERT INTO ip_history (day, ip, first_seen_at, changed_at) VALUES (?,?,?,?)",
+                    (day, new_ip, now_str, now_str))
+        # ریست شمارنده‌های امروز — چون IP عوض شده محدودیت دیوار/شیپور ریست شده
+        con.execute("UPDATE quota SET phones=0, searches=0, sms=0, chats=0 WHERE day=?", (day,))
+        con.execute("DELETE FROM quota_accounts WHERE day=?", (day,))
+        con.commit()
+        return {"changed": True, "old_ip": old_ip, "new_ip": new_ip, "reset": True}
+    return {"changed": False, "old_ip": old_ip, "new_ip": new_ip}
+
+def reset_today_quota(con, reason: str = ""):
+    """دستی ریست شمارنده امروز."""
+    _ensure_quota_sms(con)
+    _ensure_quota_chats(con)
+    day = __import__('time').strftime("%Y-%m-%d")
+    con.execute("UPDATE quota SET phones=0, searches=0, sms=0, chats=0 WHERE day=?", (day,))
+    con.execute("DELETE FROM quota_accounts WHERE day=?", (day,))
+    con.commit()
+    return quota_today(con)
+
 
 
 _LEAD_MIGRATIONS = (

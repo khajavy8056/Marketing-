@@ -195,7 +195,7 @@ def analyze(text: str, use_llm: bool = True) -> Dict[str, Any]:
 
 def analyze_for_platform(text: str, platform: str = "divar",
                          use_llm: bool = True) -> Dict[str, Any]:
-    """همان تحلیل برای دیوار/شیپور/رینگ — زبان پاسخ فارسی است."""
+    """همان تحلیل برای دیوار/شیپور — زبان پاسخ فارسی است."""
     out = analyze(text, use_llm=use_llm)
     out["platform"] = str(platform or "divar")
     return out

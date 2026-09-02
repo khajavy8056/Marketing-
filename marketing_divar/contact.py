@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """شماره تماس هر پلتفرم از مسیر همان سایت.
 
-دیوار: API لاگین‌شده. شیپور و رینگ: کلیک «نمایش شماره» در همان پروفایل Chromium.
+دیوار: API لاگین‌شده. شیپور و : کلیک «نمایش شماره» در همان پروفایل Chromium.
 اگر شماره باشد پیامک؛ اگر صریحاً فقط‌چت باشد چت.
 """
 
@@ -54,18 +54,39 @@ def classify_listing_html(html: str, platform: str = "divar") -> Dict[str, Any]:
 def _js_reveal(platform: str) -> str:
     labels = {
         "sheypoor": ["نمایش شماره", "تماس", "شماره تماس", "تماس بگیرید",
-                     "مشاهده شماره", "Call"],
-        "ring": ["نمایش شماره", "تماس", "شماره", "تماس بگیرید", "Call"],
+                     "مشاهده شماره", "نمایش اطلاعات تماس", "Call", "اطلاعات تماس"],
         "divar": ["نمایش شماره", "شماره تماس", "تماس", "اطلاعات تماس"],
     }.get(platform, ["نمایش شماره", "تماس", "شماره تماس"])
     import json
     return """(async () => {
       const labels = %s;
-      const nodes = Array.from(document.querySelectorAll('button,a,[role=button],span'));
-      let btn = nodes.find(el => labels.some(t => (el.innerText||'').trim().includes(t)));
-      if (btn) { btn.click(); await new Promise(r => setTimeout(r, 1100)); }
+      const all = Array.from(document.querySelectorAll('button,a,[role=button],span,div'));
+      let btn = all.find(el => {
+        const txt = (el.innerText||'').trim();
+        if (!txt || txt.length>60) return false;
+        return labels.some(t => txt.includes(t));
+      });
+      if (!btn) {
+        // fallback: هر دکمه‌ای که رنگ اصلی دارد و شامل شماره است
+        btn = all.find(el => (el.innerText||'').includes('09') ? false : false);
+      }
+      if (btn) {
+        try { btn.scrollIntoView({block:'center'}); } catch(e){}
+        await new Promise(r => setTimeout(r, 400));
+        btn.click();
+        await new Promise(r => setTimeout(r, 1400));
+        // دومین کلیک اگر نیاز بود (شیپور گاهی دو مرحله‌ای است)
+        const again = Array.from(document.querySelectorAll('button,a')).find(el => {
+          const txt = (el.innerText||'').trim();
+          return txt.length<30 && labels.some(t => txt.includes(t));
+        });
+        if (again && again!==btn) { again.click(); await new Promise(r => setTimeout(r, 1000)); }
+      }
+      // اسکرول کمی تا محتوای شماره لود شود
+      window.scrollBy(0, 200);
+      await new Promise(r => setTimeout(r, 600));
       const t = ((document.body && document.body.innerText) || '') + ' ' + document.title;
-      return {text: t.slice(0, 8000), href: location.href, title: document.title||''};
+      return {text: t.slice(0, 12000), href: location.href, title: document.title||''};
     })()""" % json.dumps(labels, ensure_ascii=False)
 
 
