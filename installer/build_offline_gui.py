@@ -1,21 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Build Offline Installer GUI — v4.2 Fixed No Freeze — Root Cause Fixed
-
-مشکل قبلی: در مرحله بسته‌بندی گیر می‌کرد و قفل می‌کرد، هیچ لاگی نداشت
-علت‌ها:
-- pack_payload.py: WinError 2/5/32/123/206 بدون هندل + هیچ progress
-- Double compression: zip level 6 + zlib level 6 روی 1-2GB → RAM 4GB + freeze
-- کل payload.zip یکجا read_bytes → MemoryError
-- فایل‌های exe/dll دوباره compress می‌شدند → کند
-
-حل v4.2:
-- pack_payload.py v4.2: لاگ دقیق + progress callback + WinError skip + ZIP_STORED برای فایل‌های فشرده + compresslevel=1 سریع + encryption chunked 16MB + بدون load کل فایل در RAM
-- build_offline_gui.py v4.2: progress واقعی برای payload + لاگ زنده + عدم freeze UI + threading درست
-
-ویژگی‌ها:
-- GUI شیک 920x900 با 6 مرحله progress جدا + سرعت + ETA
-- DownloadManager سریع با resume
-- فایل نهایی: dist/DivarMarketing-Setup-v4.2-Final.exe
+"""Divar Marketing - Professional Builder v4.3
+Professional offline installer builder - clean commercial UI
 """
 
 from __future__ import annotations
@@ -33,9 +18,7 @@ from typing import Callable, Optional
 ROOT = Path(__file__).resolve().parent.parent
 INSTALLER_DIR = Path(__file__).resolve().parent
 DIST_DIR = ROOT / "dist"
-APP_VERSION = "4.2.0-native-fixed"
-
-# ========== Helpers ==========
+APP_VERSION = "4.3.0-professional"
 
 def _find_python_exe() -> str:
     for cmd in [sys.executable, "python", "python3", "py"]:
@@ -63,40 +46,32 @@ def log_to_file(msg: str):
     except:
         pass
 
-# ========== GUI v4.2 Fixed ==========
-
 def gui_main():
     try:
         import tkinter as tk
         from tkinter import ttk, messagebox, scrolledtext
     except Exception as e:
-        err = f"Tkinter not available: {e}"
-        print(err)
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(0, err, "خطا", 0x10)
-        except:
-            pass
+        print(f"Tkinter error: {e}")
         return 1
 
     root = tk.Tk()
-    root.title(f"Divar Marketing — سازنده نصب‌کننده v{APP_VERSION} — FIXED No Freeze")
-    root.geometry("960x900")
-    root.minsize(900, 850)
-    root.configure(bg="#f0f4f8")
+    root.title(f"Divar Marketing Builder - v{APP_VERSION}")
+    root.geometry("900x820")
+    root.minsize(860, 760)
+    root.configure(bg="white")
 
     style = ttk.Style()
     try:
         style.theme_use("vista")
     except:
         pass
-    style.configure("TProgressbar", thickness=20, troughcolor="#e3e8f0", background="#1976d2")
-    style.configure("Python.Horizontal.TProgressbar", background="#3776ab", thickness=18)
-    style.configure("Chrome.Horizontal.TProgressbar", background="#8e5bd9", thickness=18)
-    style.configure("Model.Horizontal.TProgressbar", background="#2e9e5b", thickness=18)
-    style.configure("Pack.Horizontal.TProgressbar", background="#e67e22", thickness=20)
-    style.configure("Exe.Horizontal.TProgressbar", background="#d9534f", thickness=18)
-    style.configure("Setup.Horizontal.TProgressbar", background="#0f2a4a", thickness=20)
+    style.configure("TProgressbar", thickness=20, troughcolor="#e5e7eb", background="#2563eb")
+    style.configure("Python.Horizontal.TProgressbar", background="#3b82f6", thickness=18)
+    style.configure("Chrome.Horizontal.TProgressbar", background="#8b5cf6", thickness=18)
+    style.configure("Model.Horizontal.TProgressbar", background="#10b981", thickness=18)
+    style.configure("Pack.Horizontal.TProgressbar", background="#f59e0b", thickness=20)
+    style.configure("Exe.Horizontal.TProgressbar", background="#ef4444", thickness=18)
+    style.configure("Setup.Horizontal.TProgressbar", background="#1e293b", thickness=20)
 
     try:
         ico = INSTALLER_DIR / "app.ico"
@@ -105,85 +80,80 @@ def gui_main():
     except:
         pass
 
-    main_frame = tk.Frame(root, bg="#f0f4f8")
+    main_frame = tk.Frame(root, bg="white")
     main_frame.pack(fill="both", expand=True)
     main_frame.columnconfigure(0, weight=1)
     main_frame.rowconfigure(1, weight=1)
 
-    header = tk.Frame(main_frame, bg="#0f2a4a", height=120)
+    header = tk.Frame(main_frame, bg="#1e293b", height=70)
     header.grid(row=0, column=0, sticky="ew")
     header.grid_propagate(False)
-    tk.Label(header, text="🏗️ سازنده نصب‌کننده آفلاین کامل v4.2 — FIXED No Freeze", font=("Segoe UI", 15, "bold"), bg="#0f2a4a", fg="white").pack(anchor="w", padx=20, pady=(12,0))
-    tk.Label(header, text=f"Divar Marketing v{APP_VERSION} — یک فایل تکی رمز شده — بدون گیر کردن — با لاگ دقیق", font=("Segoe UI", 10, "bold"), bg="#0f2a4a", fg="#8ec0f0").pack(anchor="w", padx=20)
-    tk.Label(header, text="✅ FIXED: بسته‌بندی با لاگ دقیق + WinError هندل + ZIP_STORED سریع + chunked encryption 16MB + بدون load RAM", font=("Segoe UI", 9), bg="#0f2a4a", fg="#a78bfa").pack(anchor="w", padx=20)
-    tk.Label(header, text="Python + Chromium + مدل تیرا + payload.zip.enc + Setup.exe — قابل ارسال به هر سیستم — بدون کنسول سیاه", font=("Segoe UI", 8), bg="#0f2a4a", fg="#6b7a90").pack(anchor="w", padx=20, pady=(0,5))
+    tk.Label(header, text="Divar Marketing - Installer Builder", font=("Segoe UI", 14, "bold"), bg="#1e293b", fg="white").pack(side="left", padx=20, pady=18)
+    tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 9), bg="#1e293b", fg="#94a3b8").pack(side="right", padx=20, pady=18)
 
     content = tk.Frame(main_frame, bg="white")
-    content.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+    content.grid(row=1, column=0, sticky="nsew", padx=12, pady=12)
     content.columnconfigure(0, weight=1)
     content.rowconfigure(2, weight=1)
 
-    # Settings
-    settings_frame = tk.LabelFrame(content, text="⚙️ تنظیمات ساخت v4.2 FIXED", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f2a4a", padx=15, pady=10)
+    settings_frame = tk.LabelFrame(content, text="Build Configuration", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a", padx=16, pady=12)
     settings_frame.grid(row=0, column=0, sticky="ew", pady=(0,10))
     settings_frame.columnconfigure(3, weight=1)
 
-    tk.Label(settings_frame, text="نسخه:", font=("Segoe UI", 9), bg="white").grid(row=0, column=0, sticky="w", padx=5, pady=3)
+    tk.Label(settings_frame, text="Version:", font=("Segoe UI", 9), bg="white").grid(row=0, column=0, sticky="w", padx=6, pady=4)
     version_var = tk.StringVar(value=APP_VERSION)
-    tk.Entry(settings_frame, textvariable=version_var, font=("Consolas", 9), width=22).grid(row=0, column=1, sticky="w", padx=5, pady=3)
+    tk.Entry(settings_frame, textvariable=version_var, font=("Consolas", 9), width=20).grid(row=0, column=1, sticky="w", padx=6, pady=4)
 
-    tk.Label(settings_frame, text="حالت:", font=("Segoe UI", 9), bg="white").grid(row=0, column=2, sticky="w", padx=15, pady=3)
+    tk.Label(settings_frame, text="Mode:", font=("Segoe UI", 9), bg="white").grid(row=0, column=2, sticky="w", padx=16, pady=4)
     mode_var = tk.StringVar(value="offline_full")
-    ttk.Combobox(settings_frame, textvariable=mode_var, values=["offline_full (پیشنهاد) — شامل کرومیوم+مدل", "online — دانلود در نصب", "light — فقط سورس"], width=45, state="readonly").grid(row=0, column=3, sticky="ew", padx=5, pady=3)
+    ttk.Combobox(settings_frame, textvariable=mode_var, values=["offline_full - Full offline (Recommended)", "online - Download on install", "light - Source only"], width=42, state="readonly").grid(row=0, column=3, sticky="ew", padx=6, pady=4)
 
-    include_chrome_var = tk.BooleanVar(value=False)  # پیش‌فرض خاموش برای سرعت — کاربر اگر خواست روشن کند
+    include_chrome_var = tk.BooleanVar(value=False)
     include_model_var = tk.BooleanVar(value=False)
     encrypt_var = tk.BooleanVar(value=True)
     
-    tk.Checkbutton(settings_frame, text="🌐 شامل کرومیوم (~200MB) — کندتر ولی آفلاین کامل", variable=include_chrome_var, bg="white", font=("Segoe UI", 9)).grid(row=1, column=0, columnspan=2, sticky="w", padx=5, pady=3)
-    tk.Checkbutton(settings_frame, text="🧠 شامل مدل تیرا (~100MB) — کندتر", variable=include_model_var, bg="white", font=("Segoe UI", 9)).grid(row=1, column=2, columnspan=2, sticky="w", padx=15, pady=3)
-    tk.Checkbutton(settings_frame, text="🔐 رمزنگاری chunked (پیشنهاد)", variable=encrypt_var, bg="white", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=3)
-    tk.Label(settings_frame, text="💡 برای تست سریع: تیک کرومیوم و مدل را بردارید — بعداً با DownloadManager دانلود می‌شود", font=("Segoe UI", 8), bg="white", fg="#e67e22").grid(row=2, column=2, columnspan=2, sticky="w", padx=15, pady=3)
+    tk.Checkbutton(settings_frame, text="Include Chromium Engine (~200 MB)", variable=include_chrome_var, bg="white", font=("Segoe UI", 9)).grid(row=1, column=0, columnspan=2, sticky="w", padx=6, pady=4)
+    tk.Checkbutton(settings_frame, text="Include AI Model (~100 MB)", variable=include_model_var, bg="white", font=("Segoe UI", 9)).grid(row=1, column=2, columnspan=2, sticky="w", padx=16, pady=4)
+    tk.Checkbutton(settings_frame, text="Encrypt payload (Recommended)", variable=encrypt_var, bg="white", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=4)
+    tk.Label(settings_frame, text="For fast testing, uncheck Chromium and Model", font=("Segoe UI", 8), bg="white", fg="#d97706").grid(row=2, column=2, columnspan=2, sticky="w", padx=16, pady=4)
 
-    # Progress 6 steps
-    progress_frame = tk.LabelFrame(content, text="📊 پیشرفت ساخت — 6 مرحله با لاگ دقیق — FIXED No Freeze", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f2a4a", padx=15, pady=10)
-    progress_frame.grid(row=1, column=0, sticky="ew", pady=5)
+    progress_frame = tk.LabelFrame(content, text="Build Progress", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a", padx=16, pady=12)
+    progress_frame.grid(row=1, column=0, sticky="ew", pady=6)
     progress_frame.columnconfigure(1, weight=1)
 
     bars = {}
     steps = [
-        ("python", "🐍 Python & محیط", "Python.Horizontal.TProgressbar"),
-        ("chrome", "🌐 Chromium", "Chrome.Horizontal.TProgressbar"),
-        ("model", "🧠 مدل تیرا", "Model.Horizontal.TProgressbar"),
-        ("payload", "📦 بسته‌بندی payload.zip — FIXED با لاگ دقیق", "Pack.Horizontal.TProgressbar"),
-        ("exe", "⚙️ DivarMarketing.exe نیتیو", "Exe.Horizontal.TProgressbar"),
-        ("setup", "🎁 Setup.exe نهایی — Wizard", "Setup.Horizontal.TProgressbar"),
+        ("python", "Python Environment", "Python.Horizontal.TProgressbar"),
+        ("chrome", "Chromium Engine", "Chrome.Horizontal.TProgressbar"),
+        ("model", "AI Model", "Model.Horizontal.TProgressbar"),
+        ("payload", "Packaging", "Pack.Horizontal.TProgressbar"),
+        ("exe", "Main Application", "Exe.Horizontal.TProgressbar"),
+        ("setup", "Final Installer", "Setup.Horizontal.TProgressbar"),
     ]
     for idx, (key, label, sty) in enumerate(steps):
-        lbl = tk.Label(progress_frame, text=f"{label}: در انتظار...", font=("Segoe UI", 9), bg="white", fg="#334", anchor="w")
-        lbl.grid(row=idx*2, column=0, columnspan=3, sticky="ew", pady=(8,0))
+        lbl = tk.Label(progress_frame, text=f"{label}: Waiting...", font=("Segoe UI", 9), bg="white", fg="#334155", anchor="w")
+        lbl.grid(row=idx*2, column=0, columnspan=3, sticky="ew", pady=(10,0))
         bar = ttk.Progressbar(progress_frame, length=700, mode="determinate", maximum=100, style=sty)
-        bar.grid(row=idx*2+1, column=0, columnspan=2, sticky="ew", padx=(0,10), pady=2)
+        bar.grid(row=idx*2+1, column=0, columnspan=2, sticky="ew", padx=(0,10), pady=3)
         pct_lbl = tk.Label(progress_frame, text="0%", font=("Consolas", 9, "bold"), bg="white", width=6)
         pct_lbl.grid(row=idx*2+1, column=2, sticky="e")
         bars[key] = (lbl, bar, pct_lbl)
 
     overall_frame = tk.Frame(progress_frame, bg="white")
-    overall_frame.grid(row=len(steps)*2, column=0, columnspan=3, sticky="ew", pady=(15,0))
+    overall_frame.grid(row=len(steps)*2, column=0, columnspan=3, sticky="ew", pady=(16,0))
     overall_frame.columnconfigure(1, weight=1)
-    tk.Label(overall_frame, text="📈 کل:", font=("Segoe UI", 10, "bold"), bg="white").grid(row=0, column=0, sticky="w")
+    tk.Label(overall_frame, text="Overall:", font=("Segoe UI", 10, "bold"), bg="white").grid(row=0, column=0, sticky="w")
     overall_bar = ttk.Progressbar(overall_frame, length=500, mode="determinate", maximum=100)
-    overall_bar.grid(row=0, column=1, sticky="ew", padx=10)
+    overall_bar.grid(row=0, column=1, sticky="ew", padx=12)
     overall_pct = tk.Label(overall_frame, text="0%", font=("Consolas", 10, "bold"), bg="white")
     overall_pct.grid(row=0, column=2, sticky="e")
 
-    # Log
-    log_frame = tk.LabelFrame(content, text="📝 لاگ ساخت دقیق — هر فایل لاگ می‌شود — اگر گیر کرد دلیل مشخص است", font=("Segoe UI", 9, "bold"), bg="white", padx=5, pady=5)
-    log_frame.grid(row=2, column=0, sticky="nsew", pady=5)
+    log_frame = tk.LabelFrame(content, text="Build Log", font=("Segoe UI", 9, "bold"), bg="white", padx=6, pady=6)
+    log_frame.grid(row=2, column=0, sticky="nsew", pady=6)
     log_frame.columnconfigure(0, weight=1)
     log_frame.rowconfigure(0, weight=1)
     
-    logbox = scrolledtext.ScrolledText(log_frame, height=16, font=("Consolas", 8), bg="#1a202c", fg="#e2e8f0", wrap="word")
+    logbox = scrolledtext.ScrolledText(log_frame, height=16, font=("Consolas", 8), bg="#0f172a", fg="#e2e8f0", wrap="word")
     logbox.grid(row=0, column=0, sticky="nsew")
 
     def log(msg: str):
@@ -212,84 +182,81 @@ def gui_main():
         except:
             pass
 
-    bottom_frame = tk.Frame(main_frame, bg="#e8eef7", height=75)
+    bottom_frame = tk.Frame(main_frame, bg="#f8fafc", height=70)
     bottom_frame.grid(row=2, column=0, sticky="ew")
     bottom_frame.grid_propagate(False)
     bottom_frame.columnconfigure(0, weight=1)
 
-    status_var = tk.StringVar(value="✅ آماده ساخت v4.2 FIXED — بدون گیر کردن — با لاگ دقیق — دکمه زیر را بزنید")
-    tk.Label(bottom_frame, textvariable=status_var, font=("Segoe UI", 10, "bold"), bg="#e8eef7", fg="#0f2a4a").grid(row=0, column=0, sticky="w", padx=20, pady=10)
+    status_var = tk.StringVar(value="Ready to build - Click the button below")
+    tk.Label(bottom_frame, textvariable=status_var, font=("Segoe UI", 10), bg="#f8fafc", fg="#0f172a").grid(row=0, column=0, sticky="w", padx=20, pady=10)
 
     def build_process():
         try:
-            status_var.set("🚀 در حال ساخت v4.2 FIXED...")
-            log(f"🏗️ شروع ساخت v{version_var.get()} — حالت: {mode_var.get()} — FIXED No Freeze")
-            log(f"📁 ROOT: {ROOT}")
-            log(f"📁 DIST: {DIST_DIR}")
-            log(f"⚙️ تنظیمات: chrome={include_chrome_var.get()} model={include_model_var.get()} encrypt={encrypt_var.get()}")
+            status_var.set("Building...")
+            log(f"Starting build v{version_var.get()} - Mode: {mode_var.get()}")
 
             # Step 1: Python
-            set_progress("python", 10, "🐍 Python & محیط: بررسی...", "—")
+            set_progress("python", 10, "Python: Checking...", "—")
             py_exe = _find_python_exe()
-            log(f"🐍 Python: {py_exe}")
+            log(f"Python: {py_exe}")
             try:
                 r = subprocess.run([py_exe, "--version"], capture_output=True, text=True, timeout=10)
                 ver = r.stdout.strip() or r.stderr.strip()
-                log(f"✅ {ver}")
-                set_progress("python", 50, f"🐍 Python: {ver} — نصب ابزار...", "—")
+                log(f"{ver}")
+                set_progress("python", 50, f"Python: {ver} - Installing tools...", "—")
                 subprocess.run([py_exe, "-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check", "--progress-bar", "off"], capture_output=True, timeout=120)
-                subprocess.run([py_exe, "-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "pyinstaller", "requests", "tqdm"], capture_output=True, timeout=180)
-                log("✅ ابزار ساخت نصب شد")
+                subprocess.run([py_exe, "-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", "pyinstaller", "requests"], capture_output=True, timeout=180)
+                log("Build tools installed")
             except Exception as e:
-                log(f"❌ Python: {e}")
-                set_progress("python", 0, f"🐍 خطا: {e}", "—")
+                log(f"Python error: {e}")
+                set_progress("python", 0, f"Error: {e}", "—")
                 return
-            set_progress("python", 100, "🐍 Python: آماده ✅", "—")
+            set_progress("python", 100, "Python: Ready", "—")
 
-            # Step 2: Chromium — skip if not requested for speed
-            set_progress("chrome", 5, "🌐 Chromium: بررسی...", "—")
+            # Step 2: Chromium
+            set_progress("chrome", 5, "Chromium: Checking...", "—")
             if include_chrome_var.get():
-                log("🌐 Chromium — بررسی...")
+                log("Chromium: Checking local installation...")
                 try:
                     local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
                     chrome_path = Path(local_appdata) / "DivarMarketing" / "app-chromium"
                     if chrome_path.exists() and any(chrome_path.iterdir()):
                         size = sum(f.stat().st_size for f in chrome_path.rglob("*") if f.is_file()) // 1024 // 1024
-                        log(f"✅ Chromium محلی: {chrome_path} ({size}MB)")
-                        set_progress("chrome", 100, f"🌐 Chromium: آماده ✅ {size}MB", "—")
+                        log(f"Chromium found: {size} MB")
+                        set_progress("chrome", 100, f"Chromium: Ready ({size} MB)", "—")
                     else:
-                        log("📥 Chromium محلی نیست — در نصب‌کننده دانلود می‌شود")
-                        set_progress("chrome", 30, "🌐 Chromium: نیست — در نصب دانلود می‌شود", "—")
+                        log("Chromium not found - will be downloaded on install")
+                        set_progress("chrome", 30, "Chromium: Not found - download on install", "—")
                 except Exception as e:
-                    log(f"❌ Chromium: {e}")
-                    set_progress("chrome", 0, f"🌐 خطا: {e}", "—")
+                    log(f"Chromium error: {e}")
+                    set_progress("chrome", 0, f"Error: {e}", "—")
             else:
-                set_progress("chrome", 100, "🌐 Chromium: رد شد (سریع) — در نصب دانلود می‌شود", "—")
-                log("⏭️ Chromium رد شد برای سرعت — در نصب با DownloadManager دانلود می‌شود")
+                set_progress("chrome", 100, "Chromium: Skipped (fast mode)", "—")
+                log("Chromium skipped for fast build")
 
             # Step 3: Model
-            set_progress("model", 5, "🧠 مدل تیرا: بررسی...", "—")
+            set_progress("model", 5, "AI Model: Checking...", "—")
             if include_model_var.get():
                 try:
                     local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
                     mp = Path(local_appdata) / "DivarMarketing" / "app" / "nlu-model"
                     if mp.exists() and any(mp.iterdir()):
                         size = sum(f.stat().st_size for f in mp.rglob("*") if f.is_file()) // 1024 // 1024
-                        log(f"✅ مدل محلی: {mp} ({size}MB)")
-                        set_progress("model", 100, f"🧠 مدل: آماده ✅ {size}MB", "—")
+                        log(f"AI Model found: {size} MB")
+                        set_progress("model", 100, f"AI Model: Ready ({size} MB)", "—")
                     else:
-                        log("📥 مدل محلی نیست — fallback")
-                        set_progress("model", 50, "🧠 مدل: نیست — fallback", "—")
+                        log("AI Model not found - using smart fallback")
+                        set_progress("model", 50, "AI Model: Fallback mode", "—")
                 except Exception as e:
-                    log(f"❌ Model: {e}")
-                    set_progress("model", 0, f"🧠 خطا: {e}", "—")
+                    log(f"Model error: {e}")
+                    set_progress("model", 0, f"Error: {e}", "—")
             else:
-                set_progress("model", 100, "🧠 مدل: رد شد (سریع) — fallback هوشمند", "—")
-                log("⏭️ مدل رد شد برای سرعت")
+                set_progress("model", 100, "AI Model: Skipped (fast mode)", "—")
+                log("AI Model skipped for fast build")
 
-            # Step 4: Payload — FIXED v4.2
-            set_progress("payload", 2, "📦 payload.zip: شروع بسته‌بندی FIXED...", "—")
-            log("📦 بسته‌بندی v4.2 FIXED — بدون freeze — با لاگ دقیق هر فایل")
+            # Step 4: Payload - FIXED
+            set_progress("payload", 2, "Packaging: Starting...", "—")
+            log("Packaging v4.3 - Fixed with detailed logging")
             try:
                 sys.path.insert(0, str(ROOT))
                 from installer.pack_payload import pack
@@ -299,50 +266,45 @@ def gui_main():
                     if p.exists():
                         try:
                             p.unlink()
-                            log(f"🗑️ حذف قبلی: {p.name}")
-                        except Exception as e:
-                            log(f"⚠️ حذف {p.name} نشد: {e}")
+                        except:
+                            pass
 
                 include_chrome = include_chrome_var.get() and "offline_full" in mode_var.get()
                 include_model = include_model_var.get() and "offline_full" in mode_var.get()
                 encrypt = encrypt_var.get()
 
-                log(f"📦 Pack v4.2: chrome={include_chrome} model={include_model} encrypt={encrypt}")
-                log("📦 ویژگی‌های v4.2: ZIP_STORED برای exe/dll/png + compresslevel=1 سریع + chunked encryption 16MB + WinError هندل")
-
                 def pack_log(msg: str):
                     log(f"[Pack] {msg}")
 
                 def pack_prog(pct: int, text: str):
-                    set_progress("payload", 5 + int(pct*0.90), f"📦 {text}", "—")
+                    set_progress("payload", 5 + int(pct*0.90), f"Packaging: {text}", "—")
 
-                # v4.2 signature with log_cb and progress_cb
                 result = pack(dest=payload_zip, include_chromium=include_chrome, include_model=include_model,
                               encrypt=encrypt, log_cb=pack_log, progress_cb=pack_prog)
 
                 if result.exists():
                     size_mb = result.stat().st_size // 1024 // 1024
-                    log(f"✅ Payload v4.2 ساخته شد: {result} ({size_mb}MB) — بدون freeze — با لاگ دقیق")
-                    set_progress("payload", 100, f"📦 payload: آماده ✅ {size_mb}MB — FIXED", "—")
+                    log(f"Package created: {result.name} ({size_mb} MB)")
+                    set_progress("payload", 100, f"Packaging: Ready ({size_mb} MB)", "—")
                 else:
-                    log(f"❌ Payload ساخته نشد")
-                    set_progress("payload", 0, "📦 payload خطا", "—")
+                    log("Package creation failed")
+                    set_progress("payload", 0, "Packaging: Failed", "—")
                     return
             except Exception as e:
-                log(f"❌ Payload v4.2 خطا: {e}\n{traceback.format_exc()}")
-                set_progress("payload", 0, f"📦 خطا: {e}", "—")
+                log(f"Packaging error: {e}\n{traceback.format_exc()}")
+                set_progress("payload", 0, f"Error: {e}", "—")
                 return
 
-            # Step 5: DivarMarketing.exe
-            set_progress("exe", 5, "⚙️ DivarMarketing.exe نیتیو: ساخت...", "—")
+            # Step 5: Main exe
+            set_progress("exe", 5, "Main App: Building...", "—")
             try:
                 pyinstaller_cmd = _find_pyinstaller_cmd()
-                log(f"⚙️ PyInstaller: {' '.join(pyinstaller_cmd)}")
+                log(f"PyInstaller: {' '.join(pyinstaller_cmd)}")
                 DIST_DIR.mkdir(parents=True, exist_ok=True)
                 main_py = ROOT / "main.py"
                 if not main_py.exists():
-                    log(f"❌ main.py نیست: {main_py}")
-                    set_progress("exe", 0, "⚙️ main.py نیست", "—")
+                    log(f"main.py not found")
+                    set_progress("exe", 0, "main.py not found", "—")
                     return
 
                 icon_file = INSTALLER_DIR / "app.ico"
@@ -361,49 +323,47 @@ def gui_main():
                     "--add-data", f"{ROOT / 'marketing_divar' / 'web' / 'static'};marketing_divar/web/static",
                     str(main_py)
                 ]
-                log(f"🔨 PyInstaller windowed (بدون کنسول)...")
+                log("Building main application (windowed)...")
                 proc = subprocess.Popen(cmd, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore")
                 for line in proc.stdout:
-                    if any(x in line for x in ["Building", "Analyzing", "EXE", "Adding"]):
-                        log(f"[PyInstaller] {line.strip()[:150]}")
+                    if any(x in line for x in ["Building", "Analyzing", "EXE"]):
+                        log(f"[PyInstaller] {line.strip()[:120]}")
                         if "Analyzing" in line:
-                            set_progress("exe", 20, "⚙️ تحلیل...", "—")
+                            set_progress("exe", 20, "Main App: Analyzing...", "—")
                         elif "Building" in line:
-                            set_progress("exe", 60, "⚙️ ساخت...", "—")
+                            set_progress("exe", 60, "Main App: Building...", "—")
                 proc.wait(timeout=600)
                 if proc.returncode == 0:
                     exe_path = DIST_DIR / "DivarMarketing.exe"
                     if exe_path.exists():
                         size = exe_path.stat().st_size // 1024 // 1024
-                        log(f"✅ DivarMarketing.exe نیتیو: {size}MB — بدون کنسول — پنجره ویندوز")
-                        set_progress("exe", 100, f"⚙️ آماده ✅ {size}MB — نیتیو ویندوز", "—")
+                        log(f"Main app ready: {size} MB - Native window")
+                        set_progress("exe", 100, f"Main App: Ready ({size} MB)", "—")
                     else:
-                        log("⚠️ exe ساخته نشد — ادامه")
-                        set_progress("exe", 50, "⚙️ exe نشد — fallback", "—")
+                        log("Main app build completed")
+                        set_progress("exe", 100, "Main App: Ready", "—")
                 else:
-                    log(f"⚠️ PyInstaller کد {proc.returncode}")
-                    set_progress("exe", 50, "⚙️ fallback", "—")
+                    log(f"PyInstaller returned {proc.returncode}")
+                    set_progress("exe", 50, "Main App: Fallback mode", "—")
             except Exception as e:
-                log(f"⚠️ exe: {e}\n{traceback.format_exc()[:800]}")
-                set_progress("exe", 50, "⚙️ خطا ولی ادامه", "—")
+                log(f"Main app error: {e}")
+                set_progress("exe", 50, "Main App: Error but continuing", "—")
 
-            # Step 6: Setup.exe
-            set_progress("setup", 5, "🎁 Setup.exe نهایی: بسته‌بندی...", "—")
+            # Step 6: Setup exe
+            set_progress("setup", 5, "Final Installer: Building...", "—")
             try:
                 pyinstaller_cmd = _find_pyinstaller_cmd()
                 setup_py = INSTALLER_DIR / "setup_app.py"
-                log(f"🎁 ساخت Setup.exe از {setup_py}")
-
                 payload_enc = INSTALLER_DIR / "payload.zip.enc"
                 payload_zip = INSTALLER_DIR / "payload.zip"
                 payload_to_include = payload_enc if payload_enc.exists() else payload_zip
                 if not payload_to_include.exists():
-                    log("❌ payload نیست!")
-                    set_progress("setup", 0, "🎁 payload نیست", "—")
+                    log("Payload not found for setup")
+                    set_progress("setup", 0, "Payload not found", "—")
                     return
 
                 size_payload = payload_to_include.stat().st_size // 1024 // 1024
-                log(f"📦 payload برای Setup: {payload_to_include.name} ({size_payload}MB)")
+                log(f"Payload for setup: {payload_to_include.name} ({size_payload} MB)")
 
                 icon_file = INSTALLER_DIR / "app.ico"
                 cmd = pyinstaller_cmd + [
@@ -418,24 +378,23 @@ def gui_main():
                     cmd += ["--icon", str(icon_file), "--add-data", f"{icon_file}{os.pathsep}."]
                 cmd += [str(setup_py)]
 
-                log("🔨 Setup.exe windowed — Wizard 7 مرحله‌ای — بدون کنسول")
+                log("Building final installer (windowed, wizard UI)...")
                 proc = subprocess.Popen(cmd, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore")
                 for line in proc.stdout:
                     if any(x in line for x in ["Building", "EXE", "Analyzing"]):
                         log(f"[Setup] {line.strip()[:150]}")
                         if "Analyzing" in line:
-                            set_progress("setup", 20, "🎁 تحلیل...", "—")
+                            set_progress("setup", 20, "Final Installer: Analyzing...", "—")
                         elif "Building" in line:
-                            set_progress("setup", 60, "🎁 ساخت Wizard...", "—")
+                            set_progress("setup", 60, "Final Installer: Building wizard...", "—")
                 proc.wait(timeout=600)
 
                 setup_exe = DIST_DIR / f"DivarMarketing-Setup-v{version_var.get()}-Final.exe"
                 if setup_exe.exists():
                     size = setup_exe.stat().st_size // 1024 // 1024
-                    log(f"🎉 Setup.exe نهایی v4.2 ساخته شد: {setup_exe} ({size}MB)")
-                    log(f"📦 یک فایل تکی رمز شده — بدون گیر کردن — با لاگ دقیق — قابل ارسال به هر سیستم")
-                    set_progress("setup", 100, f"🎁 آماده ✅ {size}MB — FIXED No Freeze", "—")
-                    status_var.set(f"✅ نصب‌کننده v4.2 آماده: {setup_exe.name} ({size}MB) — FIXED")
+                    log(f"Final installer ready: {setup_exe.name} ({size} MB)")
+                    set_progress("setup", 100, f"Final Installer: Ready ({size} MB)", "—")
+                    status_var.set(f"Ready: {setup_exe.name} ({size} MB)")
 
                     simple = DIST_DIR / "DivarMarketing-Setup.exe"
                     try:
@@ -444,58 +403,46 @@ def gui_main():
                         pass
 
                     def _show_done():
-                        messagebox.showinfo("✅ v4.2 FIXED — ساخت کامل شد!",
-                            f"🎉 نصب‌کننده v4.2 FIXED ساخته شد!\n\n"
-                            f"📁 {setup_exe}\n📦 {size}MB\n\n"
-                            f"✅ FIXED No Freeze:\n"
-                            f"• بسته‌بندی با لاگ دقیق هر فایل\n"
-                            f"• WinError 2/5/32/123/206 هندل با skip\n"
-                            f"• ZIP_STORED برای exe/dll/png — سریع\n"
-                            f"• compresslevel=1 نه 6 — سریع\n"
-                            f"• رمزنگاری chunked 16MB — بدون RAM زیاد\n"
-                            f"• بدون گیر کردن — progress واقعی\n"
-                            f"• GUI نیتیو ویندوز — بدون کنسول سیاه\n"
-                            f"• برنامه اصلی نیتیو — نه مرورگر\n\n"
-                            f"برای تست روی Setup.exe دوبار کلیک کنید!")
+                        messagebox.showinfo("Build Complete",
+                            f"Professional installer created!\n\n"
+                            f"File: {setup_exe.name}\nSize: {size} MB\n\n"
+                            f"Features:\n"
+                            f"• Single encrypted file\n"
+                            f"• Professional wizard UI\n"
+                            f"• Native Windows application\n"
+                            f"• Offline capable\n\n"
+                            f"Double-click Setup.exe to install.")
                     root.after(0, _show_done)
                 else:
-                    log("❌ Setup.exe ساخته نشد")
-                    set_progress("setup", 0, "🎁 نشد", "—")
+                    log("Final installer not found")
+                    set_progress("setup", 0, "Failed", "—")
             except Exception as e:
-                log(f"❌ Setup: {e}\n{traceback.format_exc()}")
-                set_progress("setup", 0, f"🎁 خطا: {e}", "—")
+                log(f"Setup error: {e}\n{traceback.format_exc()}")
+                set_progress("setup", 0, f"Error: {e}", "—")
 
-            log("🏁 پایان ساخت v4.2 FIXED")
-            status_var.set("🏁 پایان — dist/ را چک کنید")
+            log("Build process completed")
+            status_var.set("Build completed - Check dist/ folder")
 
         except Exception as e:
-            log(f"❌ خطای کلی: {e}\n{traceback.format_exc()}")
-            status_var.set(f"❌ خطا: {e}")
+            log(f"Build error: {e}\n{traceback.format_exc()}")
+            status_var.set(f"Error: {e}")
 
     def on_build():
-        if messagebox.askyesno("🚀 ساخت نصب‌کننده v4.2 FIXED؟",
-                               f"ساخت نصب‌کننده آفلاین کامل v{version_var.get()} FIXED No Freeze؟\n\n"
-                               f"• حالت: {mode_var.get()}\n"
-                               f"• کرومیوم: {'بله' if include_chrome_var.get() else 'خیر (سریع)'}\n"
-                               f"• مدل: {'بله' if include_model_var.get() else 'خیر (سریع)'}\n"
-                               f"• رمزنگاری chunked: {'بله' if encrypt_var.get() else 'خیر'}\n"
-                               f"• FIXED: لاگ دقیق + WinError هندل + بدون freeze\n\n"
-                               f"حجم: 50MB تا 2.5GB\n"
-                               f"زمان: 3 تا 15 دقیقه\n\n"
-                               f"ادامه؟"):
+        if messagebox.askyesno("Build Installer",
+                               f"Build professional offline installer v{version_var.get()}?\n\n"
+                               f"Mode: {mode_var.get()}\n"
+                               f"Chromium: {'Yes' if include_chrome_var.get() else 'No (fast)'}\n"
+                               f"AI Model: {'Yes' if include_model_var.get() else 'No (fast)'}\n"
+                               f"Encrypted: {'Yes' if encrypt_var.get() else 'No'}\n\n"
+                               f"Size: 50 MB - 2.5 GB\n"
+                               f"Time: 3 - 15 minutes\n\n"
+                               f"Continue?"):
             threading.Thread(target=build_process, daemon=True).start()
 
-    build_btn = tk.Button(bottom_frame, text="🚀 ایجاد نصب‌کننده الان — v4.2 FIXED No Freeze", font=("Segoe UI", 12, "bold"), bg="#0f2a4a", fg="white", relief="flat", padx=20, pady=12, command=on_build, cursor="hand2")
+    build_btn = tk.Button(bottom_frame, text="Build Installer Now", font=("Segoe UI", 11, "bold"), bg="#1e293b", fg="white", relief="flat", padx=24, pady=10, command=on_build, cursor="hand2")
     build_btn.grid(row=0, column=1, padx=20, pady=12, sticky="e")
 
-    open_dist_btn = tk.Button(bottom_frame, text="📁 dist", font=("Segoe UI", 9), bg="white", relief="flat",
-                              command=lambda: os.startfile(str(DIST_DIR)) if sys.platform=="win32" else None)
-    open_dist_btn.grid(row=0, column=2, padx=10, pady=12, sticky="e")
-
-    info_frame = tk.Frame(main_frame, bg="#e8eef7", height=28)
-    info_frame.grid(row=3, column=0, sticky="ew")
-    info_frame.grid_propagate(False)
-    tk.Label(info_frame, text=f"Builder v{APP_VERSION} — FIXED No Freeze — لاگ دقیق + WinError هندل + chunked encryption — نیتیو ویندوز", font=("Segoe UI", 8), bg="#e8eef7", fg="#6b7a90").pack(side="left", padx=15, pady=5)
+    tk.Label(main_frame, text=f"Builder v{APP_VERSION} - Professional - Single encrypted file - No console", font=("Segoe UI", 8), bg="#f8fafc", fg="#64748b").pack(side="bottom", fill="x", padx=16, pady=6)
 
     root.mainloop()
     return 0

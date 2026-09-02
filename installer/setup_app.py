@@ -1,13 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Divar Marketing - Native Windows Installer v4.1 - Fixed
-- Single encrypted file Setup.exe with payload.zip.enc
-- Includes Tira model + Chromium + libs (offline 1-2GB)
-- Chic wizard: Welcome -> License -> Data Preserve -> Location -> Components -> Progress -> Finish
-- Next/Back/Browse/Install/Finish like Office/Adobe - no black console - only GUI native
-- Data preservation alarm
-- Encryption SHA256 XOR + zlib
-- DownloadManager with resume + speed + ETA
-- Main app is native Windows window (desktop_app.py) - NOT browser
+"""Divar Marketing - Professional Commercial Installer v4.3
+Commercial-grade Windows installer - clean, professional, no internal notes
 """
 
 from __future__ import annotations
@@ -28,10 +21,10 @@ from typing import Callable, Optional
 APP_ID = "DivarMarketing"
 APP_NAME = "Divar Marketing"
 APP_NAME_FA = "مارکتینگ دیوار"
-APP_VERSION = "4.2.0-native-fixed"
+APP_VERSION = "4.3.0-professional"
 PORT = 8642
 CREATE_NO_WINDOW = 0x08000000
-ENCRYPTION_KEY = b"DivarMarketing-2024-Secure-Key-Tira-v4.2-Native-Fixed-NoFreeze"
+ENCRYPTION_KEY = b"DivarMarketing-2024-Secure-Key-Tira-v4.3-Professional"
 
 def _meipass() -> Path:
     if getattr(sys, "frozen", False):
@@ -53,33 +46,23 @@ def payload_paths() -> list[Path]:
         mp / "payload.zip",
         Path(__file__).resolve().parent / "payload.zip.enc",
         Path(__file__).resolve().parent / "payload.zip",
-        Path(__file__).resolve().parent.parent / "installer" / "payload.zip.enc",
-        Path(__file__).resolve().parent.parent / "installer" / "payload.zip",
     ]
 
 def app_icon() -> Path:
-    for p in (_meipass() / "app.ico", Path(__file__).resolve().parent / "app.ico", Path(__file__).resolve().parent.parent / "installer" / "app.ico"):
+    for p in (_meipass() / "app.ico", Path(__file__).resolve().parent / "app.ico"):
         if p.exists():
             return p
     return Path()
 
 def decrypt_data(data: bytes, key: bytes = ENCRYPTION_KEY) -> bytes:
-    """رمزگشایی — سازگار با هر دو فرمت قدیمی و جدید chunked v4.2"""
     try:
         key_hash = hashlib.sha256(key).digest()
-        # تشخیص فرمت جدید chunked: اول 8 بایت سایز کل
-        # اگر فرمت جدید باشد، باید chunked بخوانیم
         if len(data) > 12:
             try:
-                # تست فرمت جدید: 8 بایت سایز + 4 بایت لن چانک
                 total_size = int.from_bytes(data[:8], 'big')
                 chunk_len = int.from_bytes(data[8:12], 'big')
-                # اگر منطقی بود (total_size معقول و chunk_len معقول)
                 if 0 < total_size < 10*1024*1024*1024 and 0 < chunk_len < 50*1024*1024 and len(data) > 12 + chunk_len:
-                    # فرمت جدید chunked
                     out = bytearray()
-                    offset = 0
-                    # Skip header 8 bytes
                     offset = 8
                     while offset < len(data):
                         if offset + 4 > len(data):
@@ -90,7 +73,6 @@ def decrypt_data(data: bytes, key: bytes = ENCRYPTION_KEY) -> bytes:
                             break
                         xored = data[offset:offset+clen]
                         offset += clen
-                        # XOR back
                         compressed = bytes(b ^ key_hash[i % len(key_hash)] for i, b in enumerate(xored))
                         try:
                             chunk = zlib.decompress(compressed)
@@ -100,48 +82,37 @@ def decrypt_data(data: bytes, key: bytes = ENCRYPTION_KEY) -> bytes:
                         if len(out) >= total_size:
                             break
                     return bytes(out)
-            except Exception:
-                pass  # Fallback to old format
-        
-        # فرمت قدیمی: کل دیتا XOR + zlib
+            except:
+                pass
         xored = bytes(b ^ key_hash[i % len(key_hash)] for i, b in enumerate(data))
         try:
             return zlib.decompress(xored)
         except:
             return xored
-    except Exception:
+    except:
         return data
 
 def decrypt_file_chunked(src_path: Path, dest_path: Path, key: bytes = ENCRYPTION_KEY) -> Path:
-    """رمزگشایی chunked از فایل — v4.2"""
     try:
         key_hash = hashlib.sha256(key).digest()
         with open(src_path, 'rb') as fin:
-            # Check if old format or new
             header = fin.read(12)
             if len(header) < 12:
-                # Old format fallback
                 fin.seek(0)
                 data = fin.read()
                 dec = decrypt_data(data, key)
                 dest_path.write_bytes(dec)
                 return dest_path
-            
             total_size = int.from_bytes(header[:8], 'big')
             first_chunk_len = int.from_bytes(header[8:12], 'big')
-            
-            # Validate new format
             if not (0 < total_size < 10*1024*1024*1024 and 0 < first_chunk_len < 50*1024*1024):
-                # Old format
                 fin.seek(0)
                 data = fin.read()
                 dec = decrypt_data(data, key)
                 dest_path.write_bytes(dec)
                 return dest_path
-            
-            # New format — chunked
             fin.seek(0)
-            fin.read(8)  # Skip total_size already read
+            fin.read(8)
             with open(dest_path, 'wb') as fout:
                 while True:
                     len_bytes = fin.read(4)
@@ -160,8 +131,7 @@ def decrypt_file_chunked(src_path: Path, dest_path: Path, key: bytes = ENCRYPTIO
                         chunk = compressed
                     fout.write(chunk)
         return dest_path
-    except Exception as e:
-        # Fallback: try old method
+    except Exception:
         try:
             data = src_path.read_bytes()
             dec = decrypt_data(data, key)
@@ -197,9 +167,9 @@ def has_previous_data() -> dict:
                 cur = con.execute("SELECT COUNT(*) FROM leads")
                 info["leads"] = cur.fetchone()[0]
                 con.close()
-            except Exception:
+            except:
                 pass
-    except Exception:
+    except:
         pass
     return info
 
@@ -209,7 +179,6 @@ def create_layout(dest: Path, log: Callable[[str], None]) -> None:
     persist = data_dir()
     for name in ("accounts", "logs", "app-chromium", "nlu-model", "data"):
         (persist / name).mkdir(parents=True, exist_ok=True)
-    log(f"✓ پوشه‌ها آماده: {dest}")
 
 def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optional[Callable[[int, str], None]] = None, preserve_mode: str = "keep") -> Path:
     dest.mkdir(parents=True, exist_ok=True)
@@ -217,19 +186,14 @@ def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optiona
     
     prev = has_previous_data()
     if prev["exists"] and preserve_mode != "delete_all":
-        log(f"📦 اطلاعات قبلی یافت شد: {prev['accounts']} اکانت، {prev['leads']} سرنخ، {prev['size_mb']} MB")
-        if preserve_mode == "keep":
-            log("✓ تمام اطلاعات قبلی حفظ می‌شود")
-        elif preserve_mode == "keep_accounts":
-            log("✓ فقط اکانت‌ها حفظ می‌شود")
+        if preserve_mode == "keep_accounts":
             try:
                 for db_path in [data_dir() / "app" / "data" / "divar_leads.db", data_dir() / "data" / "divar_leads.db"]:
                     if db_path.exists():
                         db_path.unlink()
             except Exception as e:
-                log(f"⚠️ حذف دیتابیس: {e}")
+                log(f"Database cleanup: {e}")
     elif prev["exists"] and preserve_mode == "delete_all":
-        log("🗑️ حذف کامل اطلاعات قبلی...")
         try:
             for p in [data_dir() / "data", data_dir() / "logs"]:
                 if p.exists():
@@ -238,13 +202,11 @@ def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optiona
             if acc.exists():
                 shutil.rmtree(acc, ignore_errors=True)
         except Exception as e:
-            log(f"⚠️ حذف: {e}")
+            log(f"Cleanup: {e}")
     
     if not zpath:
         root = Path(__file__).resolve().parent.parent
-        log(f"⚠️ payload پیدا نشد — کپی از سورس: {root}")
         names = ("main.py", "requirements.txt", "marketing_divar", "installer")
-        total = len(names)
         for idx, name in enumerate(names):
             src = root / name
             dst = dest / name
@@ -257,12 +219,10 @@ def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optiona
             else:
                 shutil.copy2(src, dst)
             if progress_cb:
-                progress_cb(int((idx+1)/total*70), f"کپی {name}...")
+                progress_cb(int((idx+1)/len(names)*70), f"Copying {name}...")
     else:
-        log(f"📦 payload: {zpath} ({zpath.stat().st_size // 1024 // 1024} MB)")
         if progress_cb:
-            progress_cb(5, "رمزگشایی فایل نصب...")
-        # Check if encrypted
+            progress_cb(5, "Decrypting installer...")
         try:
             with open(zpath, 'rb') as f:
                 head = f.read(2)
@@ -272,39 +232,30 @@ def extract_payload(dest: Path, log: Callable[[str], None], progress_cb: Optiona
         
         tmp_zip = dest.parent / "_payload_tmp.zip"
         if is_encrypted:
-            log("🔐 رمزگشایی payload رمزنگاری شده (chunked v4.2)...")
             if progress_cb:
-                progress_cb(10, "رمزگشایی chunked...")
+                progress_cb(10, "Decrypting...")
             try:
-                # Use chunked decryption to avoid RAM overload
                 decrypt_file_chunked(zpath, tmp_zip)
-                log(f"✓ رمزگشایی chunked کامل: {tmp_zip.stat().st_size//1024//1024} MB")
-            except Exception as e:
-                log(f"⚠️ رمزگشایی chunked خطا: {e} — تلاش با روش قدیمی...")
+            except Exception:
                 try:
                     data = zpath.read_bytes()
                     data = decrypt_data(data)
                     tmp_zip.write_bytes(data)
-                    log(f"✓ رمزگشایی قدیمی: {len(data)//1024//1024} MB")
                 except Exception as e2:
-                    log(f"❌ رمزگشایی ناموفق: {e2}")
                     raise
         else:
-            # Not encrypted — just copy
-            log(f"📦 payload خام (بدون رمز): کپی...")
             shutil.copy2(zpath, tmp_zip)
         if progress_cb:
-            progress_cb(20, "استخراج فایل‌ها...")
+            progress_cb(20, "Extracting files...")
         with zipfile.ZipFile(tmp_zip, "r") as zf:
             members = zf.infolist()
             total = len(members)
             for idx, member in enumerate(members):
                 zf.extract(member, dest)
-                if progress_cb and idx % 20 == 0:
+                if progress_cb and idx % 30 == 0:
                     pct = 20 + int((idx/total)*60)
-                    progress_cb(pct, f"استخراج {idx}/{total}...")
+                    progress_cb(pct, f"Extracting {idx}/{total}...")
         tmp_zip.unlink(missing_ok=True)
-        log(f"✓ {total} فایل استخراج شد")
     
     create_layout(dest, log)
     exe = dest / f"{APP_ID}.exe"
@@ -325,7 +276,7 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log: Callable[[str], N
         import win32com.client
         shell = win32com.client.Dispatch("WScript.Shell")
         use_com = True
-    except Exception:
+    except:
         use_com = False
         shell = None
     pyw = Path(sys.executable).with_name("pythonw.exe")
@@ -348,14 +299,12 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log: Callable[[str], N
                         sc.TargetPath = sys.executable
                         sc.Arguments = f'"{target}"'
                 sc.WorkingDirectory = str(workdir)
-                sc.Description = f"{APP_NAME} {APP_VERSION} Native"
+                sc.Description = f"{APP_NAME} {APP_VERSION}"
                 sc.WindowStyle = 1
                 if ico and ico.exists():
                     sc.IconLocation = str(ico)
                 sc.Save()
-                log(f"✓ میانبر: {lnk}")
             else:
-                # PowerShell fallback
                 icon = str(ico) if ico and ico.exists() else ""
                 if target.suffix.lower() == ".exe":
                     tgt, args = str(target), ""
@@ -369,20 +318,17 @@ def make_shortcut(target: Path, workdir: Path, ico: Path, log: Callable[[str], N
                     ps_cmd += f'$s.IconLocation="{icon}";'
                 ps_cmd += "$s.Save()"
                 subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], check=False, capture_output=True)
-                log(f"✓ میانبر: {lnk}")
         except Exception as e:
-            log(f"⚠️ میانبر نشد: {e}")
+            log(f"Shortcut: {e}")
 
 def open_firewall(log: Callable[[str], None]) -> None:
     cmd = ["netsh", "advfirewall", "firewall", "add", "rule", f"name={APP_NAME}", "dir=in", "action=allow", "protocol=TCP", f"localport={PORT}"]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-        if r.returncode == 0:
-            log(f"✓ فایروال: پورت {PORT} باز شد")
-        else:
-            log("⚠️ فایروال: با Administrator اجرا کن")
+        if r.returncode != 0:
+            log("Firewall: Run as Administrator for network access")
     except Exception as e:
-        log(f"⚠️ فایروال: {e}")
+        log(f"Firewall: {e}")
 
 def _popen_hidden(args, cwd, env) -> None:
     kwargs = {"cwd": str(cwd), "env": env}
@@ -395,7 +341,6 @@ def _popen_hidden(args, cwd, env) -> None:
     subprocess.Popen(args, **kwargs)
 
 def launch(target: Path, workdir: Path, log: Callable[[str], None]) -> None:
-    log(f"🚀 اجرای {APP_NAME} نیتیو ویندوز...")
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     chrome = str(data_dir() / "app-chromium")
@@ -407,32 +352,32 @@ def launch(target: Path, workdir: Path, log: Callable[[str], None]) -> None:
         pyw = Path(sys.executable).with_name("pythonw.exe")
         exe = str(pyw) if pyw.exists() else sys.executable
         _popen_hidden([exe, str(target)], workdir, env)
-    log(f"✓ برنامه نیتیو اجرا شد — پنجره ویندوز استاندارد")
+
+# ==================== PROFESSIONAL COMMERCIAL GUI WIZARD ====================
 
 def gui_wizard() -> int:
     try:
         import tkinter as tk
         from tkinter import filedialog, ttk, messagebox
     except Exception as e:
-        err = f"GUI نیاز به Tkinter دارد: {e}"
-        print(err)
+        print(f"GUI error: {e}")
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(0, err, f"{APP_NAME} Setup", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, f"GUI error: {e}", f"{APP_NAME} Setup", 0x10)
         except:
             pass
         return 2
 
     root = tk.Tk()
-    root.title(f"{APP_NAME} Setup - {APP_VERSION} - Native Windows")
-    root.geometry("860x780")
+    root.title(f"{APP_NAME} Setup")
+    root.geometry("780x620")
     root.resizable(False, False)
-    root.configure(bg="#f0f4f8")
+    root.configure(bg="white")
     try:
         ico = app_icon()
         if ico.exists():
             root.iconbitmap(default=str(ico))
-    except Exception:
+    except:
         pass
 
     style = ttk.Style()
@@ -440,9 +385,7 @@ def gui_wizard() -> int:
         style.theme_use("vista")
     except:
         pass
-    style.configure("TProgressbar", thickness=20, troughcolor="#e3e8f0", background="#1976d2")
-    style.configure("Chrome.Horizontal.TProgressbar", background="#8e5bd9", thickness=18)
-    style.configure("Model.Horizontal.TProgressbar", background="#2e9e5b", thickness=18)
+    style.configure("TProgressbar", thickness=22, troughcolor="#e5e7eb", background="#2563eb")
 
     current_step = [0]
     install_dir_var = tk.StringVar(value=str(default_install_dir()))
@@ -452,103 +395,125 @@ def gui_wizard() -> int:
     comp_shortcut_var = tk.BooleanVar(value=True)
     preserve_var = tk.StringVar(value="keep")
 
-    main_frame = tk.Frame(root, bg="#f0f4f8")
+    main_frame = tk.Frame(root, bg="white")
     main_frame.pack(fill="both", expand=True)
 
-    header = tk.Frame(main_frame, bg="#0f2a4a", height=95)
+    # Header - clean professional
+    header = tk.Frame(main_frame, bg="#1e293b", height=70)
     header.pack(fill="x")
     header.pack_propagate(False)
-    left_hdr = tk.Frame(header, bg="#0f2a4a")
-    left_hdr.pack(side="left", padx=20, pady=12, fill="y")
-    tk.Label(left_hdr, text=f"🧠 {APP_NAME_FA}", font=("Segoe UI", 16, "bold"), bg="#0f2a4a", fg="white").pack(anchor="w")
-    tk.Label(left_hdr, text=f"{APP_NAME} - تیرا v{APP_VERSION} - نیتیو ویندوز", font=("Segoe UI", 9, "bold"), bg="#0f2a4a", fg="#8ec0f0").pack(anchor="w")
-    tk.Label(left_hdr, text="پنجره استاندارد ویندوز مثل Office - بدون کنسول سیاه", font=("Segoe UI", 8), bg="#0f2a4a", fg="#a78bfa").pack(anchor="w")
-    right_hdr = tk.Frame(header, bg="#0f2a4a")
-    right_hdr.pack(side="right", padx=20, pady=12)
-    tk.Label(right_hdr, text=f"v{APP_VERSION}", font=("Segoe UI", 10, "bold"), bg="#0f2a4a", fg="#a78bfa").pack(anchor="e")
-    tk.Label(right_hdr, text="Native Windows Setup", font=("Segoe UI", 8, "bold"), bg="#0f2a4a", fg="#38bdf8").pack(anchor="e")
+    tk.Label(header, text=APP_NAME_FA, font=("Segoe UI", 16, "bold"), bg="#1e293b", fg="white").pack(side="left", padx=24, pady=16)
+    tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 9), bg="#1e293b", fg="#94a3b8").pack(side="right", padx=24, pady=16)
 
-    steps_bar = tk.Frame(main_frame, bg="#e8eef7", height=42)
+    # Steps indicator - clean
+    steps_bar = tk.Frame(main_frame, bg="#f8fafc", height=36)
     steps_bar.pack(fill="x")
     steps_bar.pack_propagate(False)
     step_labels = []
-    step_names = ["خوش‌آمدید", "مجوز", "اطلاعات قبلی", "محل نصب", "اجزاء", "نصب", "پایان"]
+    step_names = ["Welcome", "License", "Data", "Location", "Components", "Install", "Finish"]
     for i, name in enumerate(step_names):
-        lbl = tk.Label(steps_bar, text=f"{i+1}. {name}", font=("Segoe UI", 8, "bold" if i==0 else "normal"), bg="#e8eef7", fg="#1976d2" if i==0 else "#6b7a90")
-        lbl.pack(side="left", padx=10, pady=10)
+        lbl = tk.Label(steps_bar, text=f"{i+1}. {name}", font=("Segoe UI", 8), bg="#f8fafc", fg="#2563eb" if i==0 else "#64748b")
+        lbl.pack(side="left", padx=14, pady=10)
         step_labels.append(lbl)
         if i < len(step_names)-1:
-            tk.Label(steps_bar, text="→", font=("Segoe UI", 8), bg="#e8eef7", fg="#a0aec0").pack(side="left")
+            tk.Label(steps_bar, text="›", font=("Segoe UI", 8), bg="#f8fafc", fg="#cbd5e1").pack(side="left")
 
-    content_frame = tk.Frame(main_frame, bg="white", relief="flat", bd=0)
-    content_frame.pack(fill="both", expand=True, padx=0, pady=0)
+    content_frame = tk.Frame(main_frame, bg="white")
+    content_frame.pack(fill="both", expand=True)
 
     step_frames = []
 
-    # Step 0: Welcome
+    # Step 0: Welcome - PROFESSIONAL COMMERCIAL
     f0 = tk.Frame(content_frame, bg="white")
-    tk.Label(f0, text="🪟", font=("Segoe UI", 52), bg="white").pack(pady=(25,5))
-    tk.Label(f0, text="به نصب‌کننده نیتیو ویندوز خوش آمدید", font=("Segoe UI", 18, "bold"), bg="white", fg="#0f2a4a").pack(pady=5)
-    tk.Label(f0, text=f"{APP_NAME} {APP_VERSION}\nنسخه نهایی نیتیو ویندوز - پنجره استاندارد (نه مرورگر)\nتیرا v4.1: جاروبرقی، یخچال، لباسشویی، پراید، موبایل، سری 13 14 15\nدیوار + شیپور + شکارچی + ملی‌پیامک کامل + روبیکا + DownloadManager", font=("Segoe UI", 11), bg="white", fg="#334", justify="center").pack(pady=8)
-    feat_frame = tk.Frame(f0, bg="white")
-    feat_frame.pack(pady=12)
+    tk.Label(f0, text=APP_NAME, font=("Segoe UI", 22, "bold"), bg="white", fg="#0f172a").pack(pady=(36,8))
+    tk.Label(f0, text="Professional Lead Management System", font=("Segoe UI", 11), bg="white", fg="#475569").pack(pady=(0,24))
+    
+    desc_frame = tk.Frame(f0, bg="white")
+    desc_frame.pack(pady=8, padx=32)
+    tk.Label(desc_frame, text="This installer will guide you through the installation of Divar Marketing.\nA smart automation platform for lead collection and customer engagement.", 
+             font=("Segoe UI", 10), bg="white", fg="#334155", justify="center").pack(pady=8)
+    
+    features_frame = tk.Frame(f0, bg="#f8fafc", relief="flat", bd=1)
+    features_frame.pack(pady=20, padx=48, fill="x")
+    tk.Label(features_frame, text="Key Features", font=("Segoe UI", 10, "bold"), bg="#f8fafc", fg="#0f172a").pack(anchor="w", padx=16, pady=(12,6))
     features = [
-        "🪟 برنامه اصلی: پنجره نیتیو ویندوز استاندارد - نه مرورگر! (داشبورد/تیرا/دانلودها/تنظیمات)",
-        "📦 یک فایل تکی رمزنگاری شده - بدون نیاز به اینترنت (1-2GB) - بدون نمایش کد",
-        "🌐 کرومیوم اختصاصی + مدل تیرا داخل فایل نصب - DownloadManager سریع با resume",
-        "🧠 تیرا v4.1: جاروبرقی بوش، یخچال، پراید، سری 13 14 15، هرچی موبایل bulk",
-        "💬 متن پیامک رو بذار، متن چت، راهنمای ملی‌پیامک کامل (Send/Pattern/Delivery/Inbox)",
-        "🤖 ربات‌های بله/روبیکا/تلگرام -> تیرا - دستورات از ربات‌ها",
-        "📱 هرچی موبایل: پیام خودکار + استخراج شماره‌ها + اطلاع روبیکا",
-        "🛡️ IP ریست خودکار + سودآوری هزار پارامتری + بدون کنسول سیاه",
+        "• Automated ad monitoring and lead extraction",
+        "• Intelligent messaging and negotiation assistant",
+        "• Multi-account and multi-platform support",
+        "• Secure data management with backup options",
+        "• Native Windows application with offline capabilities",
     ]
     for feat in features:
-        tk.Label(feat_frame, text=feat, font=("Segoe UI", 9), bg="white", fg="#2d3748", anchor="w", wraplength=720, justify="left").pack(anchor="w", pady=2, padx=15)
-    tk.Label(f0, text="برای ادامه Next را بزنید - نصب استاندارد ویندوز مثل Office - بدون کنسول", font=("Segoe UI", 10, "bold"), bg="white", fg="#1976d2").pack(pady=12)
+        tk.Label(features_frame, text=feat, font=("Segoe UI", 9), bg="#f8fafc", fg="#475569", anchor="w").pack(anchor="w", padx=24, pady=2)
+    tk.Label(features_frame, text="", bg="#f8fafc").pack(pady=4)
+    
+    tk.Label(f0, text="Click Next to continue.", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(pady=16)
     step_frames.append(f0)
 
-    # Step 1: License
+    # Step 1: License - PROFESSIONAL
     f1 = tk.Frame(content_frame, bg="white")
-    tk.Label(f1, text="📜 توافق‌نامه مجوز - نیتیو ویندوز", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f2a4a").pack(anchor="w", padx=25, pady=(20,10))
-    txt_license = tk.Text(f1, height=16, font=("Segoe UI", 9), wrap="word", bg="#f7fafc", relief="flat", bd=1)
-    txt_license.pack(fill="both", expand=True, padx=25, pady=5)
-    license_text = f"""{APP_NAME} {APP_VERSION} - توافق‌نامه مجوز نهایی نیتیو ویندوز v4.1
+    tk.Label(f1, text="License Agreement", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
+    txt_license = tk.Text(f1, height=18, font=("Segoe UI", 9), wrap="word", bg="#f8fafc", relief="solid", bd=1)
+    txt_license.pack(fill="both", expand=True, padx=28, pady=5)
+    license_text = f"""{APP_NAME} {APP_VERSION}
+END-USER LICENSE AGREEMENT
 
-1. این نرم‌افزار برای استفاده شخصی و تجاری مجاز است - پنجره نیتیو ویندوز استاندارد.
-2. شما متعهد می‌شوید از این نرم‌افزار برای اهداف غیرقانونی استفاده نکنید.
-3. مسئولیت استفاده از شماره‌های استخراج شده بر عهده کاربر است.
-4. این نرم‌افزار شامل کرومیوم اختصاصی و مدل هوش مصنوعی تیرا است.
-5. IP ریست خودکار: هنگام تغییر IP، سهمیه صفر می‌شود.
-6. سودآوری هزار پارامتری: باتری، رجیستر، خش، کارتن، تعمیر، گارانتی.
-7. برنامه اصلی نیتیو ویندوز است - نه مرورگر.
-8. با نصب، شما با شرایط استفاده موافقت می‌کنید.
+IMPORTANT: Please read this agreement carefully before installing.
 
-© 2024-2026 Divar Marketing - Tira Agent v4.1 Native Final
+1. GRANT OF LICENSE
+This software is licensed for personal and commercial use in accordance with applicable laws.
+
+2. USE RESTRICTIONS
+You agree not to use this software for any unlawful purposes. You are responsible for compliance with third-party platform terms of service.
+
+3. DATA AND PRIVACY
+The software stores account sessions and lead data locally. You are responsible for data security and backup.
+
+4. THIRD-PARTY COMPONENTS
+This software includes Chromium and AI models under their respective open-source licenses.
+
+5. DISCLAIMER
+The software is provided as-is. The provider is not liable for any damages arising from use.
+
+6. ACCEPTANCE
+By installing this software, you agree to the terms of this agreement.
+
+© 2024-2026 Divar Marketing
+All rights reserved.
 """
     txt_license.insert("1.0", license_text)
     txt_license.configure(state="disabled")
-    chk = tk.Checkbutton(f1, text="✅ شرایط را خواندم و موافقم - ادامه نصب نیتیو ویندوز", variable=agree_var, font=("Segoe UI", 11, "bold"), bg="white", fg="#0f2a4a")
-    chk.pack(anchor="w", padx=25, pady=12)
+    chk = tk.Checkbutton(f1, text="I accept the terms of the license agreement", variable=agree_var, font=("Segoe UI", 10), bg="white", fg="#0f172a")
+    chk.pack(anchor="w", padx=28, pady=12)
     step_frames.append(f1)
 
-    # Step 2: Data Preserve
+    # Step 2: Data Preserve - PROFESSIONAL
     f2 = tk.Frame(content_frame, bg="white")
-    tk.Label(f2, text="💾 اطلاعات نسخه قبلی - حفظ یا حذف؟", font=("Segoe UI", 14, "bold"), bg="white", fg="#d9534f").pack(anchor="w", padx=25, pady=(20,10))
+    tk.Label(f2, text="Previous Installation Data", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
     prev_info = has_previous_data()
     if prev_info["exists"]:
-        info_text = f"⚠️ نسخه قبلی یافت شد!\n\n📊 {prev_info['accounts']} اکانت لاگین شده\n📋 {prev_info['leads']} سرنخ ذخیره شده\n💾 حجم دیتابیس: {prev_info['size_mb']} MB\n\nلطفاً انتخاب کنید:"
+        info_text = f"An existing installation was detected.\n\nAccounts: {prev_info['accounts']}\nLeads: {prev_info['leads']}\nDatabase size: {prev_info['size_mb']} MB\n\nPlease choose how to handle existing data:"
+        bg_color = "#fef3c7"
+        fg_color = "#92400e"
     else:
-        info_text = "✅ نسخه قبلی یافت نشد - نصب تمیز انجام می‌شود."
-    tk.Label(f2, text=info_text, font=("Segoe UI", 11), bg="#fff8ea" if prev_info["exists"] else "#e8f6ee", fg="#7a5a12" if prev_info["exists"] else "#1a7a3c", justify="left", wraplength=700).pack(fill="x", padx=25, pady=10)
+        info_text = "No previous installation data was found.\nA fresh installation will be performed."
+        bg_color = "#dcfce7"
+        fg_color = "#166534"
+    
+    info_label = tk.Label(f2, text=info_text, font=("Segoe UI", 10), bg=bg_color, fg=fg_color, justify="left", wraplength=680, padx=16, pady=12)
+    info_label.pack(fill="x", padx=28, pady=10)
 
     preserve_frame = tk.Frame(f2, bg="white")
-    preserve_frame.pack(fill="x", padx=25, pady=15)
+    preserve_frame.pack(fill="x", padx=28, pady=12)
 
-    tk.Radiobutton(preserve_frame, text="✅ حفظ کامل - تمام اکانت‌ها، سرنخ‌ها، تنظیمات، لاگین‌ها بماند (پیشنهاد)", variable=preserve_var, value="keep", font=("Segoe UI", 11, "bold"), bg="white", fg="#2e9e5b").pack(anchor="w", pady=5)
-    tk.Label(preserve_frame, text="    اکانت‌ها، کلمات کلیدی، قالب پیام‌ها، تاریخچه - همه می‌ماند", font=("Segoe UI", 9), bg="white", fg="#6b7a90").pack(anchor="w", padx=30)
+    tk.Radiobutton(preserve_frame, text="Keep all data (Recommended)", variable=preserve_var, value="keep", font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
+    tk.Label(preserve_frame, text="Preserve accounts, leads, settings, and login sessions", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,8))
 
-    tk.Radiobutton(preserve_frame, text="⚠️ حفظ فقط اکانت‌ها - سرنخ‌ها پاک شود، اکانت‌ها بماند", variable=preserve_var, value="keep_accounts", font=("Segoe UI", 10), bg="white", fg="#e8a13c").pack(anchor="w", pady=8)
-    tk.Radiobutton(preserve_frame, text="🗑️ حذف کامل - همه چیز پاک شود و نصب تمیز", variable=preserve_var, value="delete_all", font=("Segoe UI", 10), bg="white", fg="#d9534f").pack(anchor="w", pady=8)
+    tk.Radiobutton(preserve_frame, text="Keep accounts only", variable=preserve_var, value="keep_accounts", font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
+    tk.Label(preserve_frame, text="Preserve login sessions but clear leads database", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,8))
+
+    tk.Radiobutton(preserve_frame, text="Remove all existing data", variable=preserve_var, value="delete_all", font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=4)
+    tk.Label(preserve_frame, text="Perform a clean installation (irreversible)", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24)
 
     if not prev_info["exists"]:
         preserve_var.set("keep")
@@ -556,73 +521,61 @@ def gui_wizard() -> int:
             if isinstance(child, tk.Radiobutton):
                 child.configure(state="disabled")
 
-    tk.Label(f2, text="💡 پیشنهاد: گزینه اول (حفظ کامل) - اکانت‌های لاگین شده از بین نرود", font=("Segoe UI", 9, "italic"), bg="white", fg="#1976d2").pack(anchor="w", padx=25, pady=10)
     step_frames.append(f2)
 
-    # Step 3: Location
+    # Step 3: Location - PROFESSIONAL
     f3 = tk.Frame(content_frame, bg="white")
-    tk.Label(f3, text="📁 محل نصب را انتخاب کنید - نیتیو ویندوز", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f2a4a").pack(anchor="w", padx=25, pady=(20,10))
-    tk.Label(f3, text="برنامه در این پوشه نصب می‌شود. Browse برای تغییر:", font=("Segoe UI", 10), bg="white", fg="#334").pack(anchor="w", padx=25, pady=5)
+    tk.Label(f3, text="Choose Install Location", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
+    tk.Label(f3, text="Select the folder where the application will be installed:", font=("Segoe UI", 10), bg="white", fg="#334155").pack(anchor="w", padx=28, pady=5)
     path_row = tk.Frame(f3, bg="white")
-    path_row.pack(fill="x", padx=25, pady=12)
-    ent = tk.Entry(path_row, textvariable=install_dir_var, font=("Consolas", 10), width=60, bg="#f7fafc", relief="flat", bd=1)
+    path_row.pack(fill="x", padx=28, pady=12)
+    ent = tk.Entry(path_row, textvariable=install_dir_var, font=("Consolas", 10), width=52, bg="white", relief="solid", bd=1)
     ent.pack(side="left", fill="x", expand=True, ipady=6)
     def browse():
-        picked = filedialog.askdirectory(title="پوشه نصب را انتخاب کنید", initialdir=install_dir_var.get() or str(Path.home()))
+        picked = filedialog.askdirectory(title="Select installation folder", initialdir=install_dir_var.get() or str(Path.home()))
         if picked:
             install_dir_var.set(picked)
-    tk.Button(path_row, text="Browse...", command=browse, width=12, font=("Segoe UI", 10, "bold"), bg="#e2e8f0", relief="flat").pack(side="right", padx=(10,0), ipady=4)
-    tk.Label(f3, text="💾 فضای مورد نیاز: ~500MB تا 2.5GB\n📍 پیشنهاد: %LOCALAPPDATA%\\DivarMarketing - بدون نیاز به Admin\n🪟 برنامه اصلی: پنجره نیتیو ویندوز - نه مرورگر", font=("Segoe UI", 9), bg="white", fg="#6b7a90", justify="left").pack(anchor="w", padx=25, pady=10)
+    tk.Button(path_row, text="Browse...", command=browse, width=12, font=("Segoe UI", 9), bg="#f1f5f9", relief="solid", bd=1).pack(side="right", padx=(10,0), ipady=4)
+    tk.Label(f3, text="Space required: 500 MB - 2.5 GB depending on components\nDefault location does not require administrator privileges", font=("Segoe UI", 9), bg="white", fg="#64748b", justify="left").pack(anchor="w", padx=28, pady=12)
     step_frames.append(f3)
 
-    # Step 4: Components
+    # Step 4: Components - PROFESSIONAL
     f4 = tk.Frame(content_frame, bg="white")
-    tk.Label(f4, text="🧩 انتخاب اجزاء نصب - نیتیو ویندوز", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f2a4a").pack(anchor="w", padx=25, pady=(20,10))
+    tk.Label(f4, text="Select Components", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,10))
+    tk.Label(f4, text="Choose which components to install:", font=("Segoe UI", 10), bg="white", fg="#334155").pack(anchor="w", padx=28, pady=5)
     comp_frame = tk.Frame(f4, bg="white")
-    comp_frame.pack(fill="x", padx=25, pady=15)
-    tk.Checkbutton(comp_frame, text="🌐 کرومیوم اختصاصی (مرورگر جدا ~200MB) - پیشنهاد ✅", variable=comp_chrome_var, font=("Segoe UI", 11, "bold"), bg="white", fg="#0f2a4a").pack(anchor="w", pady=6)
-    tk.Label(comp_frame, text="     مرورگر جدا برای هر اکانت - با DownloadManager سریع", font=("Segoe UI", 9), bg="white", fg="#6b7a90").pack(anchor="w", padx=30)
-    tk.Checkbutton(comp_frame, text="🧠 مدل تیرا (Qwen GGUF ~100MB) - مذاکره هوشمند", variable=comp_model_var, font=("Segoe UI", 11), bg="white").pack(anchor="w", pady=10)
-    tk.Checkbutton(comp_frame, text="🔗 میانبر دسکتاپ و استارت منو - نیتیو ویندوز", variable=comp_shortcut_var, font=("Segoe UI", 10), bg="white").pack(anchor="w", pady=10)
-    tk.Label(f4, text="💡 اگر تیک کرومیوم را بردارید، در اولین اجرا با DownloadManager سریع دانلود می‌شود\n💡 برنامه اصلی: پنجره نیتیو ویندوز با 4 تب - نه مرورگر", font=("Segoe UI", 9), bg="#f0f4f8", fg="#4a5568", justify="left").pack(fill="x", padx=25, pady=15)
+    comp_frame.pack(fill="x", padx=28, pady=16)
+    tk.Checkbutton(comp_frame, text="Chromium Browser Engine (Recommended)", variable=comp_chrome_var, font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
+    tk.Label(comp_frame, text="Isolated browser profiles for each account - no interference with your main browser", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,10))
+    tk.Checkbutton(comp_frame, text="AI Assistant Model", variable=comp_model_var, font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
+    tk.Label(comp_frame, text="Local AI model for intelligent messaging - works offline with smart fallback", font=("Segoe UI", 9), bg="white", fg="#64748b").pack(anchor="w", padx=24, pady=(0,10))
+    tk.Checkbutton(comp_frame, text="Desktop and Start Menu shortcuts", variable=comp_shortcut_var, font=("Segoe UI", 10), bg="white", fg="#0f172a").pack(anchor="w", pady=6)
     step_frames.append(f4)
 
-    # Step 5: Progress
+    # Step 5: Progress - PROFESSIONAL WITH LOG
     f5 = tk.Frame(content_frame, bg="white")
-    tk.Label(f5, text="⏳ در حال نصب نیتیو ویندوز - لطفاً صبر کنید...", font=("Segoe UI", 14, "bold"), bg="white", fg="#1976d2").pack(anchor="w", padx=25, pady=(20,5))
-    status_label = tk.Label(f5, text="آماده نصب نیتیو...", font=("Segoe UI", 11, "bold"), bg="white", fg="#0f2a4a")
-    status_label.pack(anchor="w", padx=25, pady=5)
+    tk.Label(f5, text="Installing...", font=("Segoe UI", 14, "bold"), bg="white", fg="#0f172a").pack(anchor="w", padx=28, pady=(20,6))
+    status_label = tk.Label(f5, text="Preparing installation...", font=("Segoe UI", 10), bg="white", fg="#334155")
+    status_label.pack(anchor="w", padx=28, pady=4)
     bar = ttk.Progressbar(f5, length=700, mode="determinate", maximum=100)
-    bar.pack(padx=25, pady=8, fill="x")
-    chrome_frame = tk.Frame(f5, bg="white")
-    chrome_frame.pack(fill="x", padx=25, pady=4)
-    chrome_label = tk.Label(chrome_frame, text="🌐 Chromium: در انتظار... - DownloadManager", font=("Segoe UI", 10), bg="white", fg="#4a5568", anchor="w")
-    chrome_label.pack(fill="x")
-    chrome_bar = ttk.Progressbar(chrome_frame, length=700, mode="determinate", maximum=100, style="Chrome.Horizontal.TProgressbar")
-    chrome_bar.pack(fill="x", pady=2)
-    model_frame = tk.Frame(f5, bg="white")
-    model_frame.pack(fill="x", padx=25, pady=4)
-    model_label = tk.Label(model_frame, text="🧠 مدل تیرا: در انتظار... - DownloadManager", font=("Segoe UI", 10), bg="white", fg="#4a5568", anchor="w")
-    model_label.pack(fill="x")
-    model_bar = ttk.Progressbar(model_frame, length=700, mode="determinate", maximum=100, style="Model.Horizontal.TProgressbar")
-    model_bar.pack(fill="x", pady=2)
+    bar.pack(padx=28, pady=10, fill="x")
+    
     log_frame = tk.Frame(f5, bg="white")
-    log_frame.pack(fill="both", expand=True, padx=25, pady=10)
-    tk.Label(log_frame, text="📝 جزئیات نصب نیتیو + DownloadManager:", font=("Segoe UI", 9, "bold"), bg="white", fg="#4a5568").pack(anchor="w")
-    logbox = tk.Text(log_frame, height=12, font=("Consolas", 8), bg="#1a202c", fg="#e2e8f0", relief="flat", wrap="word")
-    logbox.pack(fill="both", expand=True, pady=5)
+    log_frame.pack(fill="both", expand=True, padx=28, pady=10)
+    tk.Label(log_frame, text="Installation details:", font=("Segoe UI", 9, "bold"), bg="white", fg="#475569").pack(anchor="w")
+    logbox = tk.Text(log_frame, height=14, font=("Consolas", 8), bg="#0f172a", fg="#e2e8f0", relief="flat", wrap="word")
+    logbox.pack(fill="both", expand=True, pady=6)
 
     def log(msg: str):
         def _():
             logbox.configure(state="normal")
-            logbox.insert("end", f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+            logbox.insert("end", f"{msg}\n")
             logbox.see("end")
             logbox.configure(state="disabled")
         try:
             root.after(0, _)
         except:
             pass
-        print(msg)
 
     def prog(pct: int, label: str):
         def _():
@@ -633,34 +586,16 @@ def gui_wizard() -> int:
         except:
             pass
 
-    def chrome_prog(pct: int, label: str):
-        def _():
-            chrome_bar["value"] = pct
-            chrome_label.configure(text=label)
-        try:
-            root.after(0, _)
-        except:
-            pass
-
-    def model_prog(pct: int, label: str):
-        def _():
-            model_bar["value"] = pct
-            model_label.configure(text=label)
-        try:
-            root.after(0, _)
-        except:
-            pass
-
     step_frames.append(f5)
 
-    # Step 6: Finish
+    # Step 6: Finish - PROFESSIONAL
     f6 = tk.Frame(content_frame, bg="white")
-    tk.Label(f6, text="✅", font=("Segoe UI", 64), bg="white").pack(pady=(30,5))
-    tk.Label(f6, text="نصب نیتیو ویندوز کامل شد!", font=("Segoe UI", 20, "bold"), bg="white", fg="#2e9e5b").pack(pady=5)
-    tk.Label(f6, text=f"{APP_NAME} نیتیو ویندوز با موفقیت نصب شد!\n\n🪟 برنامه اصلی: پنجره استاندارد ویندوز (نه مرورگر)\n📊 4 تب: داشبورد/تیرا/دانلودها/تنظیمات\n\n🌐 سرور: http://127.0.0.1:{PORT}\n📱 گوشی همین Wi-Fi: http://<IP>:{PORT}", font=("Segoe UI", 12), bg="white", fg="#1a202c", justify="center").pack(pady=12)
-    tk.Label(f6, text="🔗 میانبر روی دسکتاپ و استارت منو ساخته شد\n🛡️ فایروال باز شد\n🪟 بدون کنسول سیاه - پنجره نیتیو ویندوز", font=("Segoe UI", 10), bg="#e8f6ee", fg="#1a7a3c", justify="center").pack(pady=8, fill="x", padx=40)
+    tk.Label(f6, text="✓", font=("Segoe UI", 48), bg="white", fg="#16a34a").pack(pady=(40,8))
+    tk.Label(f6, text="Installation Complete", font=("Segoe UI", 18, "bold"), bg="white", fg="#0f172a").pack(pady=4)
+    tk.Label(f6, text=f"{APP_NAME} has been successfully installed.\n\nShortcuts have been created on Desktop and Start Menu.\nFirewall rule has been configured for network access.", 
+             font=("Segoe UI", 10), bg="white", fg="#334155", justify="center").pack(pady=16)
     launch_var = tk.BooleanVar(value=True)
-    tk.Checkbutton(f6, text="🚀 اجرای برنامه نیتیو بعد از بستن نصب‌کننده (پیشنهاد)", variable=launch_var, font=("Segoe UI", 11, "bold"), bg="white", fg="#0f2a4a").pack(pady=15)
+    tk.Checkbutton(f6, text="Launch application now", variable=launch_var, font=("Segoe UI", 10, "bold"), bg="white", fg="#0f172a").pack(pady=16)
     step_frames.append(f6)
 
     def show_step(idx: int):
@@ -671,11 +606,11 @@ def gui_wizard() -> int:
                 fr.pack_forget()
         for i, lbl in enumerate(step_labels):
             if i == idx:
-                lbl.configure(font=("Segoe UI", 9, "bold"), fg="#ffffff", bg="#1976d2")
+                lbl.configure(font=("Segoe UI", 9, "bold"), fg="#2563eb")
             elif i < idx:
-                lbl.configure(font=("Segoe UI", 8), fg="#2e9e5b", bg="#e8f6ee")
+                lbl.configure(font=("Segoe UI", 8), fg="#16a34a")
             else:
-                lbl.configure(font=("Segoe UI", 8), fg="#6b7a90", bg="#e8eef7")
+                lbl.configure(font=("Segoe UI", 8), fg="#64748b")
         if idx == 0:
             btn_back.configure(state="disabled")
             btn_next.configure(text="Next >", state="normal")
@@ -687,7 +622,7 @@ def gui_wizard() -> int:
             btn_install.pack_forget()
             btn_finish.pack_forget()
             if idx == 4:
-                btn_next.configure(text="Install - نصب نیتیو", state="normal")
+                btn_next.configure(text="Install", state="normal")
         elif idx == 5:
             btn_back.configure(state="disabled")
             btn_next.configure(state="disabled")
@@ -697,20 +632,20 @@ def gui_wizard() -> int:
             btn_back.configure(state="disabled")
             btn_next.configure(state="disabled")
             btn_install.pack_forget()
-            btn_finish.pack(side="right", padx=20, pady=15)
+            btn_finish.pack(side="right", padx=20, pady=12)
 
-    btn_frame = tk.Frame(main_frame, bg="#e8eef7", height=65)
+    btn_frame = tk.Frame(main_frame, bg="#f8fafc", height=56)
     btn_frame.pack(fill="x", side="bottom")
     btn_frame.pack_propagate(False)
 
-    btn_finish = tk.Button(btn_frame, text="✅ Finish - اتمام نیتیو", width=20, font=("Segoe UI", 11, "bold"), bg="#2e9e5b", fg="white", relief="flat", padx=10, pady=8, command=lambda: root.destroy())
-    btn_back = tk.Button(btn_frame, text="< Back", width=12, font=("Segoe UI", 10), bg="white", relief="flat", bd=1)
-    btn_next = tk.Button(btn_frame, text="Next >", width=12, font=("Segoe UI", 10, "bold"), bg="#1976d2", fg="white", relief="flat")
-    btn_install = tk.Button(btn_frame, text="🚀 Install - نصب نیتیو ویندوز", width=24, font=("Segoe UI", 11, "bold"), bg="#1976d2", fg="white", relief="flat")
+    btn_finish = tk.Button(btn_frame, text="Finish", width=14, font=("Segoe UI", 10, "bold"), bg="#16a34a", fg="white", relief="flat", padx=10, pady=6, command=lambda: root.destroy())
+    btn_back = tk.Button(btn_frame, text="< Back", width=10, font=("Segoe UI", 9), bg="white", relief="solid", bd=1)
+    btn_next = tk.Button(btn_frame, text="Next >", width=10, font=("Segoe UI", 9, "bold"), bg="#2563eb", fg="white", relief="flat")
+    btn_install = tk.Button(btn_frame, text="Install", width=14, font=("Segoe UI", 10, "bold"), bg="#2563eb", fg="white", relief="flat")
 
     btn_back.pack(side="left", padx=20, pady=12)
-    btn_next.pack(side="right", padx=10, pady=12)
-    btn_install.pack(side="right", padx=10, pady=12)
+    btn_next.pack(side="right", padx=12, pady=12)
+    btn_install.pack(side="right", padx=12, pady=12)
     btn_finish.pack_forget()
 
     def on_back():
@@ -721,16 +656,16 @@ def gui_wizard() -> int:
     def on_next():
         idx = current_step[0]
         if idx == 1 and not agree_var.get():
-            messagebox.showwarning("توافق‌نامه", "⚠️ لطفاً تیک موافقت را بزنید")
+            messagebox.showwarning("License Agreement", "Please accept the license agreement to continue.")
             return
         if idx == 2:
             if preserve_var.get() == "delete_all":
-                if not messagebox.askyesno("⚠️ هشدار حذف کامل", "آیا مطمئن هستید می‌خواهید تمام اطلاعات قبلی پاک شود؟\n\nاین عمل غیرقابل بازگشت است!"):
+                if not messagebox.askyesno("Confirm Deletion", "Are you sure you want to delete all existing data?\n\nThis action cannot be undone."):
                     return
         if idx == 3:
             dest = install_dir_var.get().strip()
             if not dest:
-                messagebox.showwarning("مسیر", "📁 محل نصب را انتخاب کنید")
+                messagebox.showwarning("Location", "Please select an installation location.")
                 return
         if idx == 4:
             current_step[0] = 5
@@ -738,40 +673,31 @@ def gui_wizard() -> int:
             def work():
                 try:
                     chosen = Path(install_dir_var.get().strip() or str(default_install_dir()))
-                    log(f"📁 محل نصب نیتیو: {chosen}")
-                    prog(5, "آماده‌سازی پوشه نیتیو...")
+                    log(f"Install location: {chosen}")
+                    prog(5, "Preparing installation directory...")
                     chosen.mkdir(parents=True, exist_ok=True)
-                    prog(15, f"مدیریت اطلاعات قبلی: {preserve_var.get()}...")
-                    target = extract_payload(chosen, log, progress_cb=lambda p, l: prog(15+int(p*0.6), l), preserve_mode=preserve_var.get())
-                    prog(75, "میانبرهای نیتیو ویندوز...")
+                    prog(15, f"Handling existing data: {preserve_var.get()}...")
+                    target = extract_payload(chosen, log, progress_cb=lambda p, l: prog(15+int(p*0.7), l), preserve_mode=preserve_var.get())
+                    prog(85, "Creating shortcuts...")
                     if comp_shortcut_var.get():
                         ico = app_icon()
                         ico_dst = chosen / "app.ico"
                         if ico.exists():
                             shutil.copy2(ico, ico_dst)
                         make_shortcut(target, chosen, ico_dst if ico_dst.exists() else ico, log)
-                    prog(85, "فایروال...")
+                    prog(90, "Configuring firewall...")
                     open_firewall(log)
-                    prog(92, "بررسی اجزاء نیتیو + DownloadManager...")
-                    if comp_chrome_var.get():
-                        chrome_prog(100, "🌐 Chromium آماده ✅ - داخل فایل نصب بود")
-                    else:
-                        chrome_prog(0, "🌐 Chromium رد شد - بعداً با DownloadManager دانلود می‌شود")
-                    if comp_model_var.get():
-                        model_prog(100, "🧠 مدل تیرا آماده ✅ - داخل فایل نصب بود")
-                    else:
-                        model_prog(0, "🧠 مدل رد شد - fallback هوشمند + DownloadManager")
-                    prog(95, "اجرای برنامه نیتیو ویندوز...")
+                    prog(95, "Finalizing installation...")
                     if launch_var.get():
                         launch(target, chosen, log)
-                    prog(100, "نصب نیتیو کامل شد ✅ - بدون کنسول - پنجره ویندوز")
-                    log("🎉 نصب نیتیو کامل شد - پنجره استاندارد ویندوز - آماده استفاده!")
+                    prog(100, "Installation completed successfully")
+                    log("Installation completed")
                     current_step[0] = 6
                     root.after(0, lambda: show_step(6))
                 except Exception as e:
-                    log(f"❌ خطا: {e}")
+                    log(f"Error: {e}")
                     log(traceback.format_exc())
-                    root.after(0, lambda: messagebox.showerror("خطا", f"❌ نصب ناموفق:\n{e}"))
+                    root.after(0, lambda: messagebox.showerror("Installation Failed", f"Installation failed:\n{e}"))
                     root.after(0, lambda: show_step(4))
             threading.Thread(target=work, daemon=True).start()
             return
@@ -799,7 +725,6 @@ def main() -> int:
             j = sys.argv.index("--preserve")
             if j+1 < len(sys.argv):
                 preserve = sys.argv[j+1]
-        print(f"Install dir: {dest}, preserve: {preserve} - CLI mode")
         target = extract_payload(Path(dest), print, preserve_mode=preserve)
         make_shortcut(target, Path(dest), app_icon(), print)
         open_firewall(print)

@@ -393,68 +393,60 @@ def is_negative(t: str) -> bool:
 
 # ------------------------------------------------------ پیام‌های خودمونی باحال
 GREETINGS = [
-    f"سلام رفیقِ گل 😍 چه انرژی خفنی! من {AI_NAME} هستم، {AI_SUBTITLE} تو! قراره با هم بترکونیم بازارو 🚀",
-    f"ای جان! 😎 اومدی که یه سود مشتی ببریم؟ من {AI_NAME} ام، دستیار شکار حرفه‌ای! بگو چی تو ذهنته داداش! 🎯",
-    f"درود به مرامِت 🌹 خوش اومدی! من {AI_NAME} ام — شکارچی باهوشت! امروز قراره با هم یه شکار حسابی بزنیم، آماده‌ای؟",
-    f"سلام سلام! 👋 دمت گرم اومدی! من {AI_NAME} ام، همون که قیمت خوب شکار می‌کنه! بگو ببینم امروز دنبال چی هستیم؟",
-    f"به به! رفیقِ خودم اومد 😍 من {AI_NAME} ام، عاشق شکار سود! بگو چی می‌خوای بخری که قیمت خوب گیر بیاریم؟",
+    f"سلام! من {AI_NAME} هستم، {AI_SUBTITLE} شما. آماده‌ام تا تنظیمات شکار حرفه‌ای را برایتان آماده کنم.",
+    f"خوش آمدید! من {AI_NAME} هستم، دستیار هوشمند شکار. بفرمایید به دنبال چه محصولاتی هستید؟",
+    f"سلام و عرض ادب. من {AI_NAME} هستم — دستیار حرفه‌ای شما برای تنظیم شکار خودکار.",
 ]
 
 ASK_PRODUCTS = [
-    "خب رفیق، اول بگو دقیقاً دنبال چه دستگاهایی هستی؟ مثلاً بگو «آیفون 12 13 14 15» یا هرچی تو ذهنته، همینجوری خودمونی بنویس 👇",
-    "باشه، بریم سر اصل مطلب 😎 چه مدلایی مد نظرته؟ آیفون؟ سامسونگ؟ لپ‌تاپ؟ هرچی هست راحت بگو، من می‌فهمم!",
-    "یه لیست بده بهم عشقم! مثلا بگو «آیفون X 12 13» یا «پراید 131 تمیز». هرچی می‌خوای شکار کنم همینجا بنویس 🔥",
+    "لطفاً بفرمایید دقیقاً به دنبال چه محصولاتی هستید؟ مثلاً «آیفون 12 13 14 15» یا هر محصول دیگری که مد نظر دارید را بنویسید.",
+    "برای شروع، لیست محصولات مورد نظر را وارد کنید. مثلاً آیفون، سامسونگ، لپ‌تاپ یا هر کالای دیگری.",
+    "محصولات مورد نظر خود را مشخص کنید تا تنظیمات شکار را برای شما آماده کنم.",
 ]
 
 ASK_SELL_PRICE = [
-    "ایول! {model} انتخاب خفنیه 🔥 ببین داداش، به شرط سالم و تمیز، الان تو بازار چقدر می‌تونی بفروشیش؟ مثلا 40 میلیون؟ یه عدد بده 💰",
-    "دمت گرم! {model} رو گرفتم ✅ حالا بهم بگو اگه سالم باشه، خودت حدودا چقدر می‌فروشیش؟ مثلا بگو 25 میلیون",
-    "{model} 😍 عالیه! قیمت فروشِ سالمش چقدره به نظرت؟ مثلا تو دیوار چقدر میره؟ یه عدد بگو تا حساب کنم",
-    "خب {model} رو داریم! حالا قیمتِ فروشِ تمیزش چنده؟ مثلا بگو 30 میلیون میره",
+    "{model} ثبت شد. لطفاً قیمت فروش سالم این محصول در بازار را مشخص کنید. مثلاً 40 میلیون",
+    "{model} دریافت شد. قیمت فروش تمیز این محصول چقدر است؟",
+    "{model} - قیمت فروش سالم آن در بازار چقدر است؟",
 ]
 
 ASK_PROFIT = [
-    "حالا سوال طلایی! 💡 رو {model} چقدر می‌خوای سود کنی؟ مثلا بگو 3 میلیون، یا بگو 10 درصد؟ هرجور راحتی بگو 🎯",
-    "سودش چقدر باشه حال می‌کنی؟ 😎 رو {model} مثلا 2 تا 5 میلیون؟ یا مثلا 15% ؟ بگو تا تنظیم کنم",
-    "باشه، {model} فروشش ~{sell}، حالا چقدر سود برات خوبه؟ مثلا بگو 4 میلیون بمونه برام",
-    "خفن! حالا بگو رو {model} چند سود کنیم که به‌صرفه باشه؟ مثلا 3 میلیون؟",
+    "میزان سود مورد نظر برای {model} چقدر است؟ مثلاً 3 میلیون یا 10 درصد",
+    "سود مطلوب شما برای {model} چه مقدار است؟",
+    "{model} - فروش ~{sell} - سود مورد نظر شما چقدر باشد؟",
 ]
 
 ASK_QUANTITY = [
-    "چند تا {model} می‌خوای؟ مثلا بگو 2 تا، یا هرچی قیمت خوب بود بگیرم؟ 🔢",
-    "تعدادش چطور داداش؟ هر مدل چند تا می‌خوای شکار کنم؟ مثلا بگو هر کدوم 5 تا",
-    "بگو ببینم، کلا چند تا می‌خوای بخری؟ مثلا ماهی 3 تا؟ یا هرچی گیر اومد؟",
-    "هر مدل چند تا بگیریم؟ مثلا بگو «هر مدل 5 تا» یا «کلا 10 تا»",
+    "تعداد مورد نظر برای {model} چقدر است؟ مثلاً 2 عدد",
+    "هر مدل چند عدد می‌خواهید تهیه کنید؟",
+    "تعداد کل مورد نظر را مشخص کنید.",
 ]
 
 ASK_CONDITIONS = [
-    "شرایطش چطور باشه عشقم؟ مثلا میگی فقط تمیز و بدون تعمیر؟ یا باتری بالای 85؟ هر شرطی داری بگو تا فقط همونارو بیارم 🧹✨",
-    "چه شرایطی برات مهمه؟ بدون خط و خش؟ بدون تعمیر؟ باتری بالا؟ بگو تا فیلتر کنم",
-    "دستگاه چجوری باشه می‌پسندی؟ مثلا تمیز، بدون تعمیر، باتری خوب؟ هرچی مد نظرته بگو",
-    "شرایط خاصی داری؟ مثلا میگی پلمپ باشه یا کارکرده تمیز هم اوکیه؟",
+    "شرایط مورد نظر برای دستگاه چیست؟ مثلاً تمیز، بدون تعمیر، باتری بالای 85 درصد",
+    "چه شرایطی برای دستگاه مد نظر دارید؟",
+    "لطفاً شرایط کیفی مورد نظر را مشخص کنید.",
 ]
 
 CONFIRM_TEMPLATES = [
-    "خب بذار ببینم درست فهمیدم رفیق 👇\n",
-    "دمت گرم! این چیزیه که من گرفتم، چک کن ببین درسته؟ 👇\n",
-    "ایول! ببین این خلاصه‌شه، درسته؟ 👇\n",
+    "خلاصه تنظیمات:\n",
+    "لطفاً بررسی کنید:\n",
+    "تنظیمات به شرح زیر است:\n",
 ]
 
 FINAL_OK = [
-    f"ترکوندی رفیق! 🚀 من {AI_NAME} تنظیماتت رو آماده کردم! الان دکمه «⭐ ست کردن تنظیمات {AI_NAME}» رو بزن تا خودکار همه چی ست بشه. از این به بعد با همین سود و قیمت برات می‌گرده، هم دیوار هم شیپور! 🔥",
-    f"حله داداش! ✅ {AI_NAME} همه چی رو گرفت، تنظیمات حرفه‌ای‌ت آماده‌ست! فقط دکمه پایین رو بزن تا ست بشه. اگه چیزی جا مونده بگو تا اضافه کنم 🙏",
-    f"عالی شد 😍 بزن بریم! من {AI_NAME} ام، دکمه ست کردن رو بزن تا شکار شروع شه. منم همین بغل می‌مونم اگه چیزی خواستی بگی!",
+    f"تنظیمات آماده است! لطفاً دکمه «اعمال تنظیمات {AI_NAME}» را بزنید تا تنظیمات اعمال شود.",
+    f"{AI_NAME} تنظیمات را آماده کرده است. برای اعمال، دکمه پایین را انتخاب کنید.",
 ]
 
 SMALL_TALK_REPLIES = [
-    "قربونت داداش 😎 من اینجام که بترکونیم! بریم ادامه بدیم؟",
-    "دمت گرم انرژی میدی! 🔥 خب برگردیم به شکار؟",
-    "ایول به مرامت! حالا بگو بریم چی کار کنیم؟",
+    "ممنون، ادامه می‌دهیم.",
+    "بسیار خوب، بریم مرحله بعد.",
 ]
 
 CONFUSED_REPLIES = [
-    "ببین رفیق، ساده‌ست 😊 فقط بگو مثلا «آیفون 12 13» یا یه عدد مثل «20 میلیون». من خودم بقیه‌شو می‌فهمم!",
-    "نگران نباش! هرچی تو ذهنته همینجوری بنویس، من می‌فهمم. مثلا بگو «20 میلیون میفروشم» یا «3 میلیون سود»",
+    "مثلاً بنویسید «آیفون 12 13» یا «20 میلیون» - سیستم متوجه می‌شود.",
+    "لطفاً به صورت ساده بنویسید، مثلاً «20 میلیون فروش» یا «3 میلیون سود»",
 ]
 
 
@@ -633,7 +625,7 @@ def generate_ai_message(step: str, context: Dict[str, Any]) -> str:
         return "\n".join(lines)
     if step == "done":
         return _pick(FINAL_OK)
-    return "بگو ببینم، دنبال چه دستگاهایی هستی؟ مثلا آیفون 12 13 14 15؟ 😎"
+    return "لطفاً محصولات مورد نظر را مشخص کنید، مثلاً آیفون 12 13 14 15"
 
 
 class HunterAIWizard:
@@ -701,7 +693,7 @@ class HunterAIWizard:
         user_text = (user_text or "").strip()
         if not user_text:
             return {
-                "reply": "یه چیزی بنویس تا بفهمم چی می‌خوای 😊 مثلا بگو «آیفون 12 13»",
+                "reply": "لطفاً محصولات مورد نظر را مشخص کنید، مثلاً «آیفون 12 13»",
                 "messages": list(self.state["messages"]),
                 "state": self.get_state(),
                 "ready": False,
@@ -769,7 +761,7 @@ class HunterAIWizard:
                 self.state["step"] = "ask_sell_price"
                 self.state["current_idx"] = 0
                 cur = self._current_product()
-                reply = f"به به! {len(prods)} تا مدل گرفتم: {', '.join([p['model'] for p in prods])} 😍\n\n" + generate_ai_message(
+                reply = f"تعداد {len(prods)} مدل شناسایی شد: {', '.join([p['model'] for p in prods])} \n\n" + generate_ai_message(
                     "ask_sell_price", {"model": cur["model"] if cur else "این دستگاه", "last_user": user_text}
                 )
                 return _finalize(reply, ready=False)
@@ -786,7 +778,7 @@ class HunterAIWizard:
                 if added:
                     self.state["step"] = "ask_sell_price"
                     cur = self._current_product()
-                    reply = f"عالیه! اضافه کردم: {', '.join(added)} ✅\n\n" + generate_ai_message(
+                    reply = f"اضافه شد: {', '.join(added)} \n\n" + generate_ai_message(
                         "ask_sell_price", {"model": cur["model"] if cur else "دستگاه", "last_user": user_text}
                     )
                     return _finalize(reply, ready=False)
@@ -837,7 +829,7 @@ class HunterAIWizard:
                                 self.state["current_idx"] += 1
                                 self.state["step"] = "ask_sell_price"
                                 nxt = self._current_product()
-                                reply = f"ایول! {cur['model']} فروش {price_cands[0][0]//1_000_000}م سود {price_cands[1][0]//1_000_000}م ثبت شد ✅ حالا بریم سراغ {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                                reply = f"{cur['model']} - فروش {price_cands[0][0]//1_000_000}م سود - ثبت شد. حالا {price_cands[1][0]//1_000_000}م ثبت شد. حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                                 return _finalize(reply, ready=False)
                             else:
                                 self.state["step"] = "ask_quantity" if not self.state.get("quantity") or self.state["quantity"] == 1 else "ask_conditions"
@@ -854,7 +846,7 @@ class HunterAIWizard:
                             self.state["current_idx"] += 1
                             self.state["step"] = "ask_sell_price"
                             nxt = self._current_product()
-                            reply = f"دمت گرم! {cur['model']} فروش {cur['sell_price']//1_000_000}م سود {percent_cands[0][0]}% ثبت شد ✅ حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                            reply = f"{cur['model']} - فروش {cur['sell_price']//1_000_000}م سود - ثبت شد. حالا {percent_cands[0][0]}% ثبت شد ✅ حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                             return _finalize(reply, ready=False)
                         else:
                             self.state["step"] = "ask_profit" if not cur.get("profit") else ("ask_quantity" if not self.state.get("quantity") or self.state["quantity"]==1 else "ask_conditions")
@@ -891,7 +883,7 @@ class HunterAIWizard:
                                 return _finalize(reply, ready=False)
                         except:
                             pass
-                    reply = f"قیمت {cur['model']} رو دقیق متوجه نشدم داداش 😅 مثلا بگو «20 میلیون» یا «25m». چقدر می‌تونی سالم بفروشیش؟"
+                    reply = f"قیمت {cur['model']} مشخص نشد. لطفاً قیمت فروش سالم را مشخص کنید، مثلاً «20 میلیون»"
                     return _finalize(reply, ready=False)
 
         if step == "ask_profit":
@@ -914,7 +906,7 @@ class HunterAIWizard:
                         self.state["current_idx"] += 1
                         self.state["step"] = "ask_sell_price"
                         nxt = self._current_product()
-                        reply = f"عالیه! {cur['model']} سود {pct}% ثبت شد ✅ حالا بریم {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                        reply = f"{cur['model']} - سود {pct}% ثبت شد. حالا {nxt['model']}\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                         return _finalize(reply, ready=False)
                     else:
                         self.state["step"] = "ask_quantity"
@@ -939,7 +931,7 @@ class HunterAIWizard:
                         self.state["current_idx"] += 1
                         self.state["step"] = "ask_sell_price"
                         nxt = self._current_product()
-                        reply = f"ایول! {cur['model']} سود {profit_val//1_000_000}م ثبت شد ✅ حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                        reply = f"{cur['model']} - سود {profit_val//1_000_000}م ثبت شد. حالا {nxt['model']}\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                         return _finalize(reply, ready=False)
                     else:
                         self.state["step"] = "ask_quantity"
@@ -961,7 +953,7 @@ class HunterAIWizard:
                                 self.state["current_idx"] += 1
                                 self.state["step"] = "ask_sell_price"
                                 nxt = self._current_product()
-                                reply = f"سود {v}% برای {cur['model']} ثبت شد ✅ حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                                reply = f"سود {v}% برای {cur['model']} ثبت شد. حالا {nxt['model']}\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                                 return _finalize(reply, ready=False)
                             else:
                                 self.state["step"] = "ask_quantity"
@@ -975,7 +967,7 @@ class HunterAIWizard:
                                 self.state["current_idx"] += 1
                                 self.state["step"] = "ask_sell_price"
                                 nxt = self._current_product()
-                                reply = f"سود {v}م برای {cur['model']} ثبت شد ✅ حالا {nxt['model']}...\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
+                                reply = f"سود {v}م برای {cur['model']} ثبت شد. حالا {nxt['model']}\n\n" + generate_ai_message("ask_sell_price", {"model": nxt["model"]})
                                 return _finalize(reply, ready=False)
                             else:
                                 self.state["step"] = "ask_quantity"
@@ -984,7 +976,7 @@ class HunterAIWizard:
                     except:
                         pass
 
-                reply = f"سود {cur['model']} رو دقیق نگرفتم عشقم 😅 مثلا بگو «3 میلیون» یا «10 درصد». چقدر سود می‌خوای؟"
+                reply = f"سود {cur['model']} مشخص نشد. مثلاً «3 میلیون» یا «10 درصد»"
                 return _finalize(reply, ready=False)
 
         if step == "ask_quantity":
@@ -994,7 +986,7 @@ class HunterAIWizard:
                 for p in self.state["products"]:
                     p["quantity"] = q
                 self.state["step"] = "ask_conditions"
-                reply = f"تعداد {q} تا ثبت شد ✅\n\n" + generate_ai_message("ask_conditions", {})
+                reply = f"تعداد {q} تا ثبت شد \n\n" + generate_ai_message("ask_conditions", {})
                 return _finalize(reply, ready=False)
             else:
                 m = re.search(r"\b(\d{1,3})\b", user_text)
@@ -1006,7 +998,7 @@ class HunterAIWizard:
                             for p in self.state["products"]:
                                 p["quantity"] = v
                             self.state["step"] = "ask_conditions"
-                            reply = f"تعداد {v} تا گرفتم ✅\n\n" + generate_ai_message("ask_conditions", {})
+                            reply = f"تعداد {v} تا گرفتم \n\n" + generate_ai_message("ask_conditions", {})
                             return _finalize(reply, ready=False)
                     except:
                         pass
@@ -1014,9 +1006,9 @@ class HunterAIWizard:
                 if any(w in normalize(user_text) for w in ["هرچی", "مهم نیست", "فرقی نداره", "نامحدود"]):
                     self.state["quantity"] = 1
                     self.state["step"] = "ask_conditions"
-                    reply = "باشه هرچی گیر اومد می‌گیریم 😎\n\n" + generate_ai_message("ask_conditions", {})
+                    reply = "تعداد نامحدود ثبت شد.\n\n" + generate_ai_message("ask_conditions", {})
                     return _finalize(reply, ready=False)
-                reply = "تعداد رو دقیق نگرفتم داداش 😅 مثلا بگو «5 تا» یا «هر مدل 3 تا». چند تا می‌خوای؟"
+                reply = "تعداد مشخص نشد. مثلاً «5 عدد» یا «هر مدل 3 عدد»"
                 return _finalize(reply, ready=False)
 
         if step == "ask_conditions":
@@ -1085,7 +1077,7 @@ class HunterAIWizard:
                 cfg = self.build_config()
                 return _finalize(reply, ready=True, extra={"config": cfg})
             if is_negative(user_text):
-                reply = "باشه صبر می‌کنم، چی رو اصلاح کنم؟ مدل؟ قیمت؟ سود؟ تعداد؟ بگو تا درست کنم 👇"
+                reply = "لطفاً مشخص کنید چه موردی نیاز به اصلاح دارد: مدل، قیمت، سود یا تعداد؟"
                 return _finalize(reply, ready=False)
             # تلاش برای اصلاح
             new_prods = extract_products_from_text(user_text)
@@ -1097,7 +1089,7 @@ class HunterAIWizard:
                         self.state["products"].append(p)
                         added.append(p["model"])
                 if added:
-                    reply = f"اضافه کردم: {', '.join(added)} ✅ حالا باید قیمت فروش و سودشون رو هم بگی\n\n" + generate_ai_message(
+                    reply = f"اضافه شد: {', '.join(added)} - لطفاً قیمت فروش و سود را نیز مشخص کنید\n\n" + generate_ai_message(
                         "confirm",
                         {
                             "products": self.state["products"],
@@ -1111,7 +1103,7 @@ class HunterAIWizard:
                         if not p.get("sell_price"):
                             self.state["current_idx"] = idx
                             self.state["step"] = "ask_sell_price"
-                            reply = f"اضافه کردم {', '.join(added)} ✅ حالا قیمت فروش {p['model']} چنده؟\n\n" + generate_ai_message("ask_sell_price", {"model": p["model"]})
+                            reply = f"اضافه شد {', '.join(added)} - قیمت فروش {p['model']} چقدر است؟\n\n" + generate_ai_message("ask_sell_price", {"model": p["model"]})
                             return _finalize(reply, ready=False)
                     return _finalize(reply, ready=False)
             q = extract_quantity(user_text)
@@ -1119,7 +1111,7 @@ class HunterAIWizard:
                 self.state["quantity"] = q
                 for p in self.state["products"]:
                     p["quantity"] = q
-                reply = f"تعداد رو کردم {q} تا 👍\n\n" + generate_ai_message(
+                reply = f"تعداد به {q} تغییر یافت.\n\n" + generate_ai_message(
                     "confirm",
                     {
                         "products": self.state["products"],
@@ -1131,7 +1123,7 @@ class HunterAIWizard:
             conds = extract_conditions(user_text)
             if conds:
                 self.state["conditions"] = conds
-                reply = "شرایط اصلاح شد 👍\n\n" + generate_ai_message(
+                reply = "شرایط اصلاح شد.\n\n" + generate_ai_message(
                     "confirm",
                     {
                         "products": self.state["products"],
@@ -1159,7 +1151,7 @@ class HunterAIWizard:
                         cur["profit_percent"] = pct_cands[0][0]
                         if cur.get("sell_price"):
                             cur["profit"] = int(cur["sell_price"] * pct_cands[0][0] / 100)
-                    reply = "اوکی، اصلاح شد 👍\n\n" + generate_ai_message(
+                    reply = "اصلاح انجام شد.\n\n" + generate_ai_message(
                         "confirm",
                         {
                             "products": self.state["products"],
@@ -1188,7 +1180,7 @@ class HunterAIWizard:
             reply = generate_ai_message("done", {"products": self.state["products"]})
             return _finalize(reply, ready=True, extra={"config": cfg})
 
-        reply = "بگو ببینم، دنبال چه دستگاهایی هستی؟ مثلا آیفون 12 13 14 15؟ 😎"
+        reply = "لطفاً محصولات مورد نظر را مشخص کنید، مثلاً آیفون 12 13 14 15"
         return _finalize(reply, ready=False)
 
     def build_config(self) -> Dict[str, Any]:
